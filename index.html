@@ -747,7 +747,7 @@ async function adicionar(){
     if(anexoBase64) t.anexo = anexoBase64;
     cancelarEdicao();
   }else if(parcelas > 1 && tipo === 'gasto'){
-    const valorParcela = Math.round((valorTotal/parcelas)*100)/100;
+    const valorParcela = valorTotal;
     const grupo = uid();
     for(let i=0;i<parcelas;i++){
       transacoes.unshift({
