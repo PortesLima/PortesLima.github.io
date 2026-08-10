@@ -869,7 +869,12 @@ function addValorMeta(id){
   if(isNaN(v) || v<=0) return;
   const m = metas.find(x=>x.id===id);
   m.valorAtual = Math.min(m.valorAlvo, m.valorAtual + v);
+  transacoes.unshift({
+    id: uid(), tipo:'gasto', desc: `Meta: ${m.nome}`, valor: v, categoria:'Outros',
+    conta: contas[0], data: hojeISO(), fixo:false, status:'pago', metaId: m.id
+  });
   salvarMetas();
+  salvarTx();
   render();
 }
 function removerMeta(id){
