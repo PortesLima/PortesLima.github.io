@@ -1541,6 +1541,16 @@ function toggleMenuBackup(){
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
+function apagarTodosGastos(){
+  const qtdAntes = transacoes.length;
+  const qtdGastos = transacoes.filter(t=>t.tipo==='gasto').length;
+  if(!confirm(`Isso vai apagar ${qtdGastos} lançamento(s) de gasto e manter só as receitas. Não pode ser desfeito. Continuar?`)) return;
+  transacoes = transacoes.filter(t=>t.tipo!=='gasto');
+  salvarTx();
+  render();
+  alert(`Pronto. ${qtdAntes - transacoes.length} lançamento(s) de gasto removido(s).`);
+}
+
 // ---- Link somente leitura ----
 function gerarLinkSomenteLeitura(){
   const url = new URL(window.location.href);
