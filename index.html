@@ -439,15 +439,16 @@ let moedaAtual = 'BRL';
 let snapshotAnterior = null;
 let readonlyMode = false;
 
-const CATEGORIAS = ['Moradia','Alimentação','Transporte','Lazer','Saúde','Educação','Assinaturas','Outros'];
+const CATEGORIAS = ['Moradia','Condomínio','Alimentação','Transporte','Lazer','Saúde','Educação','Assinaturas','Empréstimos','Financiamentos','Doação','Outros'];
 const CORES = {
-  Moradia:'#4d9eff', Alimentação:'#22c98a', Transporte:'#ffb84d', Lazer:'#a78bfa',
-  Saúde:'#ff5c5c', Educação:'#38bdf8', Assinaturas:'#f472b6', Outros:'#8b93a3', Receita:'#22c98a'
+  Moradia:'#4d9eff', Condomínio:'#7c9cff', Alimentação:'#22c98a', Transporte:'#ffb84d', Lazer:'#a78bfa',
+  Saúde:'#ff5c5c', Educação:'#38bdf8', Assinaturas:'#f472b6', Empréstimos:'#e0b23c',
+  Financiamentos:'#c2703d', Doação:'#5fd4c4', Outros:'#8b93a3', Receita:'#22c98a'
 };
 
 let transacoes = [];
 let orcamentos = {};
-let contas = ['Conta corrente','Cartão de crédito','Dinheiro'];
+let contas = ['Conta corrente','Cartão de crédito','Dinheiro','Outros'];
 let metas = [];
 let recorrentes = [];
 let mesAtual = '';
@@ -540,6 +541,7 @@ async function driveSincronizarInicial(){
       transacoes = dados.transacoes || [];
       orcamentos = dados.orcamentos || {};
       contas = dados.contas && dados.contas.length ? dados.contas : contas;
+      if(!contas.includes('Outros')) contas.push('Outros');
       metas = dados.metas || [];
       recorrentes = dados.recorrentes || [];
       if(dados.tema) aplicarTema(dados.tema);
@@ -644,7 +646,8 @@ function popularSelectsEstaticos(){
 async function carregar(){
   transacoes = await getJSON(STORAGE_TX, []);
   orcamentos = await getJSON(STORAGE_ORC, {});
-  contas = await getJSON(STORAGE_CONTAS, ['Conta corrente','Cartão de crédito','Dinheiro']);
+  contas = await getJSON(STORAGE_CONTAS, ['Conta corrente','Cartão de crédito','Dinheiro','Outros']);
+  if(!contas.includes('Outros')){ contas.push('Outros'); await setJSON(STORAGE_CONTAS, contas); }
   metas = await getJSON(STORAGE_METAS, []);
   recorrentes = await getJSON(STORAGE_REC, []);
   moedaAtual = await getJSON(STORAGE_MOEDA, 'BRL');
