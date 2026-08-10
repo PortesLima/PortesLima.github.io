@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Bolso Certo</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 72'%3E%3Ccircle cx='36' cy='36' r='34' fill='%23e6f1fb' stroke='%234d9eff' stroke-width='3'/%3E%3Cpath d='M22 40c0-9 6-16 14-16s14 7 14 16' stroke='%234d9eff' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='36' cy='24' r='4.5' fill='%234d9eff'/%3E%3Crect x='19' y='40' width='34' height='15' rx='4' fill='%234d9eff'/%3E%3Ctext x='36' y='51' text-anchor='middle' font-size='12' font-weight='700' fill='white' font-family='Arial'%3ER%24%3C/text%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -454,6 +457,20 @@ let recorrentes = [];
 let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar;
+
+const APP_VERSION = '2026-08-10.2';
+(function garantirVersaoAtual(){
+  try{
+    if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
+      sessionStorage.setItem('bolsoCertoVersao', APP_VERSION);
+      const params = new URLSearchParams(location.search);
+      if(!params.has('v')){
+        params.set('v', Date.now());
+        location.replace(location.pathname + '?' + params.toString());
+      }
+    }
+  }catch(e){}
+})();
 
 const CLIENT_ID = '413352313626-5t1nnc98oo3k700tgogpnqg4vu77mhne.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
