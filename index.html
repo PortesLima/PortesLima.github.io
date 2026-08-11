@@ -155,6 +155,7 @@
   .meta-track{height:8px; background:var(--border); border-radius:4px; overflow:hidden; margin-bottom:6px;}
   .meta-fill{height:100%; background:var(--blue);}
   .meta-sub{font-size:11.5px; color:var(--muted); display:flex; justify-content:space-between; align-items:center;}
+  .meta-economia{font-size:11.5px; color:var(--blue); margin-top:6px; padding-top:6px; border-top:1px dashed var(--border);}
 
   .rec-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:12.5px;}
   .rec-row:last-child{border-bottom:none;}
@@ -349,6 +350,19 @@
       </div>
     </div>
   </div>
+
+  <div class="card" style="margin-top:14px;">
+    <h2>Simulador de economia</h2>
+    <div class="row">
+      <input type="number" id="simValorMensal" placeholder="Valor guardado por mês (R$)" step="10">
+      <input type="number" id="simMeses" placeholder="Por quantos meses" step="1" min="1">
+      <button onclick="calcularSimulador()">Calcular</button>
+    </div>
+    <div id="simResultado" class="meta-economia" style="display:none; margin-top:10px;"></div>
+    <div class="chart-wrap" style="height:220px; margin-top:10px; display:none;" id="simChartWrap">
+      <canvas id="chartSimulador"></canvas>
+    </div>
+  </div>
   </div>
 
   <div id="secOrcamento" style="display:none;">
@@ -457,7 +471,7 @@ let metas = [];
 let recorrentes = [];
 let mesAtual = '';
 let editandoId = null;
-let chartCat, chartMes, chartSaldo, chartFixoVar;
+let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador;
 
 const APP_VERSION = '2026-08-10.2';
 (function garantirVersaoAtual(){
@@ -1270,11 +1284,25 @@ function renderOrcamentos(porCat){
   }).join('');
 }
 
+function mesesAte(dataISO){
+  const hoje = new Date(hojeISO());
+  const alvo = new Date(dataISO);
+  return (alvo.getFullYear()-hoje.getFullYear())*12 + (alvo.getMonth()-hoje.getMonth());
+}
 function renderMetas(){
   const el = document.getElementById('metas');
   if(metas.length===0){ el.innerHTML = '<div class="empty">Nenhuma meta criada ainda.</div>'; return; }
   el.innerHTML = metas.map(m=>{
     const pct = Math.min(100, Math.round((m.valorAtual/m.valorAlvo)*100));
+    const falta = Math.max(0, m.valorAlvo - m.valorAtual);
+    let economiaTxt = '';
+    if(falta > 0 && m.prazo){
+      const meses = mesesAte(m.prazo);
+      if(meses > 0) economiaTxt = `<div class="meta-economia">Economize ${fmt(falta/meses)}/mês para chegar lá até ${m.prazo.split('-').reverse().join('/')}</div>`;
+      else economiaTxt = `<div class="meta-economia" style="color:var(--red)">Prazo já passou ou é este mês — faltam ${fmt(falta)}</div>`;
+    }else if(falta === 0){
+      economiaTxt = `<div class="meta-economia" style="color:var(--green)">Meta alcançada! 🎉</div>`;
+    }
     return `<div class="meta-card">
       <div class="meta-top"><b>${m.nome}</b><span>${pct}%</span></div>
       <div class="meta-track"><div class="meta-fill" style="width:${pct}%"></div></div>
@@ -1282,8 +1310,48 @@ function renderMetas(){
         <span>${fmt(m.valorAtual)} de ${fmt(m.valorAlvo)}${m.prazo ? ' · até '+m.prazo.split('-').reverse().join('/') : ''}</span>
         <span><button class="iconbtn" style="color:var(--blue)" onclick="addValorMeta(${m.id})">+ add</button><button class="iconbtn del" onclick="removerMeta(${m.id})">&times;</button></span>
       </div>
+      ${economiaTxt}
     </div>`;
   }).join('');
+}
+
+function calcularSimulador(){
+  const valorMensal = parseFloat(document.getElementById('simValorMensal').value);
+  const meses = parseInt(document.getElementById('simMeses').value);
+  const resEl = document.getElementById('simResultado');
+  const wrapEl = document.getElementById('simChartWrap');
+  if(isNaN(valorMensal) || valorMensal<=0 || isNaN(meses) || meses<=0){
+    alert('Preencha um valor mensal e um número de meses válidos.');
+    return;
+  }
+  const total = valorMensal * meses;
+  const anos = Math.floor(meses/12);
+  const mesesRestantes = meses%12;
+  let prazoTxt = '';
+  if(anos>0) prazoTxt += `${anos} ano${anos>1?'s':''}`;
+  if(mesesRestantes>0) prazoTxt += `${anos>0?' e ':''}${mesesRestantes} mês(es)`;
+  if(!prazoTxt) prazoTxt = `${meses} mês(es)`;
+  resEl.style.display = 'block';
+  resEl.innerHTML = `Guardando <b style="color:var(--text)">${fmt(valorMensal)}</b> por mês durante ${prazoTxt}, você acumula <b style="color:var(--green)">${fmt(total)}</b>.`;
+
+  const labels = [];
+  const pontos = [];
+  for(let i=1;i<=meses;i++){ labels.push(`${i}m`); pontos.push(valorMensal*i); }
+
+  const ctx = document.getElementById('chartSimulador');
+  wrapEl.style.display = 'block';
+  if(chartSimulador) chartSimulador.destroy();
+  const tc = getThemeColors();
+  chartSimulador = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Acumulado', data:pontos, borderColor:'#22c98a', backgroundColor:'rgba(34,201,138,.15)', fill:true, tension:.25, pointRadius:0 }
+    ]},
+    options:{ maintainAspectRatio:false,
+      scales:{ x:{ ticks:{color:tc.tick, font:{size:9}, maxTicksLimit:8}, grid:{display:false} }, y:{ ticks:{color:tc.tick, font:{size:10}}, grid:{color:tc.grid} } },
+      plugins:{ legend:{display:false} }
+    }
+  });
 }
 
 function renderRecorrentes(){
