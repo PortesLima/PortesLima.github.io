@@ -191,6 +191,15 @@
     </div>
   </div>
 
+  <div id="modalEvolucaoMeta" class="modal-bg" style="display:none;">
+    <div class="modal-box" style="max-width:520px;">
+      <h2 id="tituloEvolucaoMeta">Evolução da meta</h2>
+      <div class="chart-wrap" style="height:240px;"><canvas id="chartEvolucaoMeta"></canvas></div>
+      <div id="evolucaoMetaVazio" class="empty" style="display:none;">Ainda não há valores adicionados a esta meta.</div>
+      <button class="secondary" onclick="fecharModalEvolucaoMeta()" style="width:100%; margin-top:12px;">Fechar</button>
+    </div>
+  </div>
+
   <div id="modalContas" class="modal-bg" style="display:none;">
     <div class="modal-box" style="max-width:520px;">
       <h2>Gerenciar contas e cartões</h2>
@@ -203,8 +212,8 @@
           <label class="chk"><input type="checkbox" id="novaContaCartao" onchange="toggleCamposCartao()"> É cartão de crédito</label>
         </div>
         <div class="row" id="camposCartaoNovo" style="display:none;">
-          <input type="number" id="novaContaFechamento" placeholder="Dia do fechamento" min="1" max="31">
-          <input type="number" id="novaContaVencimento" placeholder="Dia do vencimento" min="1" max="31">
+          <input type="number" inputmode="numeric" id="novaContaFechamento" placeholder="Dia do fechamento" min="1" max="31">
+          <input type="number" inputmode="numeric" id="novaContaVencimento" placeholder="Dia do vencimento" min="1" max="31">
         </div>
         <div class="row">
           <button onclick="adicionarConta()">Adicionar conta</button>
@@ -266,6 +275,7 @@
     <h2>Backup dos dados</h2>
     <div class="row">
       <button class="secondary" onclick="exportarBackupJSON()">Baixar backup completo (.json)</button>
+      <button class="secondary" onclick="exportarComprovantes()">Baixar comprovantes anexados</button>
       <label class="chk" style="flex:1;">Importar backup: <input type="file" id="arquivoBackup" accept="application/json" style="flex:1;" onchange="importarBackupJSON(this.files[0])"></label>
     </div>
     <div style="font-size:11.5px; color:var(--muted); margin-top:6px;">O backup inclui todos os lançamentos, orçamentos, metas e fixos. Importar substitui os dados atuais deste dispositivo.</div>
@@ -436,6 +446,7 @@
     </div>
     <div class="row">
       <label class="chk">Parcelas: <input type="number" id="parcelas" min="1" max="48" value="1" style="width:60px; flex:none;"></label>
+      <input type="text" id="tag" placeholder="Tag (opcional, ex: Mercado, Uber)" style="flex:1;">
       <label class="chk" style="flex:1;">Comprovante: <input type="file" id="anexo" accept="image/*" style="flex:1;"></label>
     </div>
     <div class="row">
@@ -529,7 +540,7 @@ let metas = [];
 let recorrentes = [];
 let mesAtual = '';
 let editandoId = null;
-let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador;
+let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta;
 
 const APP_VERSION = '2026-08-10.3';
 (function garantirVersaoAtual(){
@@ -607,6 +618,7 @@ function atualizarStatusGoogle(status){
   const btn = document.getElementById('btnGoogle');
   const sync = document.getElementById('ultimaSync');
   if(status==='conectando') btn.textContent = '⏳ Sincronizando...';
+  else if(status==='pendente') btn.textContent = '🟡 Alterações pendentes...';
   else if(status==='ok'){
     btn.textContent = '🟢 Sincronizado com Drive';
     const agora = new Date();
@@ -696,6 +708,7 @@ async function driveSincronizarInicial(){
 }
 function driveAgendarSync(){
   if(!accessToken) return;
+  atualizarStatusGoogle('pendente');
   clearTimeout(syncTimer);
   syncTimer = setTimeout(driveSalvarAgora, 1200);
 }
@@ -908,8 +921,8 @@ function renderListaContas(){
         <button class="iconbtn del" onclick="removerConta('${nome.replace(/'/g,"\\'")}')" title="Remover">&times;</button>
       </div>
       ${ehCartao ? `<div class="row" style="margin-top:8px;">
-        <label class="chk">Fecha dia <input type="number" min="1" max="31" value="${det.diaFechamento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${nome.replace(/'/g,"\\'")}','diaFechamento',this.value)"></label>
-        <label class="chk">Vence dia <input type="number" min="1" max="31" value="${det.diaVencimento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${nome.replace(/'/g,"\\'")}','diaVencimento',this.value)"></label>
+        <label class="chk">Fecha dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaFechamento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${nome.replace(/'/g,"\\'")}','diaFechamento',this.value)"></label>
+        <label class="chk">Vence dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaVencimento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${nome.replace(/'/g,"\\'")}','diaVencimento',this.value)"></label>
       </div>` : ''}
     </div>`;
   }).join('');
@@ -957,6 +970,7 @@ async function adicionar(){
   const fixo = document.getElementById('fixoChk').checked;
   const parcelas = Math.max(1, parseInt(document.getElementById('parcelas').value) || 1);
   const arquivoAnexo = document.getElementById('anexo').files[0];
+  const tag = document.getElementById('tag').value.trim();
 
   if(!desc || isNaN(valorTotal) || valorTotal <= 0){ alert('Preencha a descrição e um valor válido.'); return; }
 
@@ -971,7 +985,7 @@ async function adicionar(){
 
   if(editandoId){
     const t = transacoes.find(x=>x.id===editandoId);
-    Object.assign(t, {tipo, desc, valor:valorTotal, categoria, conta, data:dataISO, fixo, status});
+    Object.assign(t, {tipo, desc, valor:valorTotal, categoria, conta, data:dataISO, fixo, status, tag: tag||null});
     if(anexoBase64) t.anexo = anexoBase64;
     cancelarEdicao();
   }else if(parcelas > 1 && tipo === 'gasto'){
@@ -981,17 +995,18 @@ async function adicionar(){
       transacoes.unshift({
         id: uid()+i, tipo, desc: `${desc} (${i+1}/${parcelas})`, valor: valorParcela, categoria, conta,
         data: addMeses(dataISO, i), fixo:false, grupoParcela: grupo, status: i===0 ? status : 'pendente',
-        anexo: anexoBase64
+        anexo: anexoBase64, tag: tag||null
       });
     }
   }else{
-    transacoes.unshift({ id: uid(), tipo, desc, valor:valorTotal, categoria, conta, data: dataISO, fixo, status, anexo: anexoBase64 });
+    transacoes.unshift({ id: uid(), tipo, desc, valor:valorTotal, categoria, conta, data: dataISO, fixo, status, anexo: anexoBase64, tag: tag||null });
   }
 
   document.getElementById('descricao').value = '';
   document.getElementById('valor').value = '';
   document.getElementById('fixoChk').checked = false;
   document.getElementById('parcelas').value = 1;
+  document.getElementById('tag').value = '';
   document.getElementById('anexo').value = '';
   document.getElementById('status').value = 'pago';
   document.getElementById('dataInput').value = dataISO;
@@ -1015,6 +1030,7 @@ function editar(id){
   document.getElementById('dataInput').value = t.data;
   document.getElementById('status').value = t.status || 'pago';
   document.getElementById('fixoChk').checked = !!t.fixo;
+  document.getElementById('tag').value = t.tag || '';
   document.getElementById('formTituloLancamento').textContent = 'Editando lançamento';
   document.getElementById('btnAdicionar').textContent = 'Salvar edição';
   document.getElementById('btnCancelarEdicao').style.display = 'inline-block';
@@ -1028,6 +1044,7 @@ function cancelarEdicao(){
   document.getElementById('descricao').value = '';
   document.getElementById('valor').value = '';
   document.getElementById('fixoChk').checked = false;
+  document.getElementById('tag').value = '';
   atualizarDataPadrao(true);
 }
 function atualizarDataPadrao(forcar){
@@ -1215,9 +1232,9 @@ function removerRecorrente(id){
 }
 
 function exportarCSV(){
-  const linhas = [['Data','Tipo','Descrição','Categoria','Conta','Status','Valor','Fixo']];
+  const linhas = [['Data','Tipo','Descrição','Categoria','Conta','Status','Valor','Fixo','Tag']];
   transacoes.slice().sort((a,b)=>a.data.localeCompare(b.data)).forEach(t=>{
-    linhas.push([t.data, t.tipo, t.desc, t.categoria, t.conta||'', statusEfetivo(t), t.valor.toFixed(2).replace('.',','), t.fixo?'sim':'não']);
+    linhas.push([t.data, t.tipo, t.desc, t.categoria, t.conta||'', statusEfetivo(t), t.valor.toFixed(2).replace('.',','), t.fixo?'sim':'não', t.tag||'']);
   });
   const csv = linhas.map(l => l.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
@@ -1247,7 +1264,7 @@ function filtrarTransacoes(lista){
   const status = document.getElementById('filtroStatus').value;
   return lista.filter(t=>{
     if(conta && t.conta !== conta) return false;
-    if(busca && !t.desc.toLowerCase().includes(busca)) return false;
+    if(busca && !t.desc.toLowerCase().includes(busca) && !(t.tag||'').toLowerCase().includes(busca)) return false;
     if(cat && t.categoria !== cat) return false;
     if(status && statusEfetivo(t) !== status) return false;
     return true;
@@ -1475,7 +1492,7 @@ function render(){
           : '<span class="tag" style="background:var(--green-bg);color:var(--green)">pago</span>';
       tr.innerHTML = `
         <td class="editable-only"><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" ${statusEf==='pago'?'disabled':''}></td>
-        <td>${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
+        <td>${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
         <td><span class="tag" style="background:${corCat}22;color:${corCat}">${t.categoria}</span></td>
         <td style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
         <td>${statusTag}</td>
@@ -1598,6 +1615,21 @@ function renderChartSaldo(conta){
   });
 }
 
+function mediaCategoriaUltimosMeses(cat, nMeses){
+  const chaves = [];
+  const [ano, mes] = mesAtual.split('-').map(Number);
+  for(let i=1; i<=nMeses; i++){
+    const d = new Date(ano, mes-1-i, 1);
+    chaves.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  const valores = chaves.map(chave =>
+    transacoes.filter(t=>t.tipo==='gasto' && t.categoria===cat && chaveMes(t.data)===chave)
+      .reduce((s,t)=>s+t.valor,0)
+  );
+  const comDados = valores.filter(v=>v>0);
+  if(comDados.length === 0) return null;
+  return valores.reduce((s,v)=>s+v,0) / nMeses;
+}
 function renderOrcamentos(porCat){
   const el = document.getElementById('orcamentos');
   const cats = CATEGORIAS.filter(c => orcamentos[c] || porCat[c]);
@@ -1608,8 +1640,17 @@ function renderOrcamentos(porCat){
     const cor = CORES[c];
     let pct = limite ? Math.min(100, (gasto/limite)*100) : 0;
     let corBarra = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : cor;
+    const media = mediaCategoriaUltimosMeses(c, 3);
+    let comparativo = '';
+    if(media && gasto > 0){
+      const diffPct = Math.round(((gasto-media)/media)*100);
+      if(Math.abs(diffPct) >= 10){
+        const corDiff = diffPct > 0 ? 'var(--red)' : 'var(--green)';
+        comparativo = `<span style="font-size:10.5px; color:${corDiff}; margin-left:6px;">${diffPct>0?'▲':'▼'} ${Math.abs(diffPct)}% vs média</span>`;
+      }
+    }
     return `<div class="orc-row">
-      <div class="orc-label">${c}</div>
+      <div class="orc-label">${c}${comparativo}</div>
       <div class="orc-track"><div class="orc-fill" style="width:${limite?pct:0}%; background:${corBarra}"></div></div>
       <div class="orc-val">${fmt(gasto)}${limite ? ' / '+fmt(limite) : ''}</div>
     </div>`;
@@ -1677,11 +1718,57 @@ function renderMetas(){
       <div class="meta-track"><div class="meta-fill" style="width:${pct}%"></div></div>
       <div class="meta-sub">
         <span>${fmt(m.valorAtual)} de ${fmt(m.valorAlvo)}${m.prazo ? ' · até '+m.prazo.split('-').reverse().join('/') : ''}</span>
-        <span><button class="iconbtn" style="color:var(--blue)" onclick="addValorMeta(${m.id})">+ add</button><button class="iconbtn" onclick="editarMeta(${m.id})" title="Editar">✎</button><button class="iconbtn del" onclick="removerMeta(${m.id})">&times;</button></span>
+        <span><button class="iconbtn" style="color:var(--blue)" onclick="addValorMeta(${m.id})">+ add</button><button class="iconbtn" onclick="verEvolucaoMeta(${m.id})" title="Ver evolução">📈</button><button class="iconbtn" onclick="editarMeta(${m.id})" title="Editar">✎</button><button class="iconbtn del" onclick="removerMeta(${m.id})">&times;</button></span>
       </div>
       ${economiaTxt}
     </div>`;
   }).join('');
+}
+
+function verEvolucaoMeta(id){
+  const m = metas.find(x=>x.id===id);
+  if(!m) return;
+  document.getElementById('tituloEvolucaoMeta').textContent = `Evolução — ${m.nome}`;
+
+  const contribuicoes = transacoes.filter(t => t.metaId === id).slice().sort((a,b)=>a.data.localeCompare(b.data));
+  const ctx = document.getElementById('chartEvolucaoMeta');
+  const vazioEl = document.getElementById('evolucaoMetaVazio');
+  if(chartEvolucaoMeta) chartEvolucaoMeta.destroy();
+
+  document.getElementById('modalEvolucaoMeta').style.display = 'flex';
+
+  if(contribuicoes.length === 0){
+    ctx.style.display = 'none';
+    vazioEl.style.display = 'block';
+    return;
+  }
+  ctx.style.display = 'block';
+  vazioEl.style.display = 'none';
+
+  let acumulado = 0;
+  const labels = [];
+  const pontos = [];
+  contribuicoes.forEach(t=>{
+    acumulado += t.valor;
+    const [y,mm,d] = t.data.split('-');
+    labels.push(`${d}/${mm}`);
+    pontos.push(acumulado);
+  });
+
+  const tc = getThemeColors();
+  chartEvolucaoMeta = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Valor acumulado', data:pontos, borderColor:'#4d9eff', backgroundColor:'rgba(77,158,255,.15)', fill:true, tension:.25, pointRadius:3 }
+    ]},
+    options:{ maintainAspectRatio:false,
+      scales:{ x:{ ticks:{color:tc.tick, font:{size:9}}, grid:{display:false} }, y:{ ticks:{color:tc.tick, font:{size:10}}, grid:{color:tc.grid} } },
+      plugins:{ legend:{display:false} }
+    }
+  });
+}
+function fecharModalEvolucaoMeta(){
+  document.getElementById('modalEvolucaoMeta').style.display = 'none';
 }
 
 function calcularSimulador(){
@@ -2013,6 +2100,20 @@ function exportarBackupJSON(){
   a.href = url; a.download = `bolso-certo-backup-${hojeISO()}.json`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+async function exportarComprovantes(){
+  const comAnexo = transacoes.filter(t => t.anexo);
+  if(comAnexo.length === 0){ alert('Nenhum lançamento tem comprovante anexado.'); return; }
+  if(!confirm(`Baixar ${comAnexo.length} comprovante(s) anexado(s)? O navegador pode pedir permissão para múltiplos downloads.`)) return;
+  for(const t of comAnexo){
+    const match = t.anexo.match(/^data:image\/(\w+);base64,/);
+    const ext = match ? match[1] : 'jpg';
+    const nomeArquivo = `${t.data}-${t.desc.replace(/[^\w\-]+/g,'_').substring(0,40)}.${ext}`;
+    const a = document.createElement('a');
+    a.href = t.anexo; a.download = nomeArquivo;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    await new Promise(r => setTimeout(r, 250));
+  }
 }
 async function importarBackupJSON(arquivo){
   if(!arquivo) return;
