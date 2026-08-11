@@ -549,7 +549,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.2';
+const APP_VERSION = '2026-08-11.3';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1592,7 +1592,11 @@ function renderChartMes(conta){
 }
 
 function renderChartSaldo(conta){
-  const base = transacoes.filter(t => !conta || t.conta===conta).slice().sort((a,b)=>a.data.localeCompare(b.data));
+  // só até hoje: transações futuras (ex: parcelas já cadastradas) não têm a receita
+  // futura correspondente lançada ainda, então incluí-las aqui derruba a linha
+  // artificialmente. O histórico real precisa parar em "agora".
+  const hoje = hojeISO();
+  const base = transacoes.filter(t => (!conta || t.conta===conta) && t.data <= hoje).slice().sort((a,b)=>a.data.localeCompare(b.data));
   let acumulado = 0;
   const pontos = [];
   base.forEach(t=>{
@@ -1612,7 +1616,7 @@ function renderChartSaldo(conta){
   const tc = getThemeColors();
   chartSaldo = new Chart(ctx, {
     type:'line',
-    data:{ labels: pontos.map(p=>{const [y,m,d]=p.x.split('-'); return d+'/'+m;}), datasets:[
+    data:{ labels: pontos.map(p=>{const [y,m,d]=p.x.split('-'); return `${d}/${m}/${y.slice(2)}`;}), datasets:[
       { label:'Saldo acumulado', data:pontos.map(p=>p.y), borderColor:'#4d9eff', backgroundColor:'rgba(77,158,255,.15)', fill:true, tension:.25, pointRadius:0 }
     ]},
     options:{ maintainAspectRatio:false,
