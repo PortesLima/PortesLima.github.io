@@ -452,7 +452,7 @@
 
     <div id="viewLista">
       <div class="row">
-        <input type="text" id="busca" placeholder="Buscar por descrição..." oninput="render()">
+        <input type="text" id="busca" placeholder="Buscar por descrição (em todos os meses)..." oninput="render()">
         <select id="filtroCategoria" onchange="render()"><option value="">Todas categorias</option></select>
         <select id="filtroStatus" onchange="render()">
           <option value="">Todos status</option>
@@ -471,8 +471,13 @@
         <button class="secondary" onclick="limparPeriodo()" id="btnLimparPeriodo" style="display:none;">Limpar período</button>
         <span style="font-size:11px; color:var(--muted2);">Filtra a lista abaixo em qualquer intervalo de datas, além do mês selecionado no topo.</span>
       </div>
+      <div class="row editable-only" id="barraSelecao" style="display:none;">
+        <span style="font-size:12px; color:var(--muted);" id="txtSelecao"></span>
+        <button class="secondary" onclick="marcarSelecionadosComoPago()">Marcar selecionados como pago</button>
+        <button class="secondary" onclick="limparSelecao()">Limpar seleção</button>
+      </div>
       <table>
-        <thead><tr><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Status</th><th>Valor</th><th></th></tr></thead>
+        <thead><tr><th class="editable-only" style="width:20px;"><input type="checkbox" id="checkTodos" onchange="toggleSelecionarTodos(this.checked)"></th><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Status</th><th>Valor</th><th></th></tr></thead>
         <tbody id="corpoTabela"></tbody>
       </table>
       <div id="vazio" class="empty" style="display:none;">Nenhum lançamento encontrado.</div>
@@ -1257,6 +1262,48 @@ function marcarComoPago(id){
   render();
 }
 
+function duplicarLancamento(id){
+  const t = transacoes.find(x=>x.id===id);
+  if(!t) return;
+  const copia = { ...t, id: uid(), data: hojeISO(), status: 'pendente' };
+  delete copia.grupoParcela;
+  delete copia.metaId;
+  transacoes.unshift(copia);
+  salvarTx();
+  render();
+}
+
+function toggleSelecionarTodos(marcado){
+  document.querySelectorAll('.checkLancamento:not(:disabled)').forEach(chk => chk.checked = marcado);
+  atualizarBarraSelecao();
+}
+function idsSelecionados(){
+  return Array.from(document.querySelectorAll('.checkLancamento:checked')).map(chk => parseInt(chk.dataset.id));
+}
+function atualizarBarraSelecao(){
+  const ids = idsSelecionados();
+  const barra = document.getElementById('barraSelecao');
+  if(ids.length === 0){ barra.style.display = 'none'; return; }
+  barra.style.display = 'flex';
+  document.getElementById('txtSelecao').textContent = `${ids.length} lançamento(s) selecionado(s)`;
+}
+function limparSelecao(){
+  document.querySelectorAll('.checkLancamento').forEach(chk => chk.checked = false);
+  document.getElementById('checkTodos').checked = false;
+  atualizarBarraSelecao();
+}
+function marcarSelecionadosComoPago(){
+  const ids = idsSelecionados();
+  if(ids.length === 0) return;
+  if(!confirm(`Marcar ${ids.length} lançamento(s) como pago?`)) return;
+  ids.forEach(id => {
+    const t = transacoes.find(x=>x.id===id);
+    if(t) t.status = 'pago';
+  });
+  salvarTx();
+  render();
+}
+
 function limparPeriodo(){
   document.getElementById('periodoDe').value = '';
   document.getElementById('periodoAte').value = '';
@@ -1277,7 +1324,8 @@ function render(){
   const todasDoMes = transacoes.filter(t => chaveMes(t.data) === mesAtual && (!conta || t.conta===conta));
   const doMes = filtrarTransacoes(todasDoMes);
 
-  const baseTabela = periodoAtivo
+  const buscaAtiva = !!(document.getElementById('busca').value||'').trim();
+  const baseTabela = (periodoAtivo || buscaAtiva)
     ? transacoes.filter(t => (!conta || t.conta===conta) && (!periodoDe || t.data>=periodoDe) && (!periodoAte || t.data<=periodoAte))
     : todasDoMes;
   const listaTabela = filtrarTransacoes(baseTabela);
@@ -1407,6 +1455,8 @@ function render(){
   const corpo = document.getElementById('corpoTabela');
   const vazio = document.getElementById('vazio');
   corpo.innerHTML = '';
+  document.getElementById('barraSelecao').style.display = 'none';
+  document.getElementById('checkTodos').checked = false;
   if(listaTabela.length === 0){
     vazio.style.display = 'block';
   }else{
@@ -1424,6 +1474,7 @@ function render(){
           ? '<span class="tag" style="background:var(--amber-bg);color:var(--amber)">pendente</span>'
           : '<span class="tag" style="background:var(--green-bg);color:var(--green)">pago</span>';
       tr.innerHTML = `
+        <td class="editable-only"><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" ${statusEf==='pago'?'disabled':''}></td>
         <td>${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
         <td><span class="tag" style="background:${corCat}22;color:${corCat}">${t.categoria}</span></td>
         <td style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
@@ -1432,6 +1483,7 @@ function render(){
         <td><div class="actions editable-only">
           ${statusEf!=='pago' ? `<button class="iconbtn" style="color:var(--green)" onclick="marcarComoPago(${t.id})" title="Marcar como pago">✓</button>` : ''}
           ${t.anexo?`<button class="iconbtn" onclick="verAnexo(${t.id})" title="Ver comprovante">📎</button>`:''}
+          <button class="iconbtn" onclick="duplicarLancamento(${t.id})" title="Duplicar">⧉</button>
           <button class="iconbtn" onclick="editar(${t.id})" title="Editar">✎</button>
           <button class="iconbtn del" onclick="remover(${t.id})" title="Excluir">&times;</button>
         </div></td>
