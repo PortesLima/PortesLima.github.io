@@ -494,7 +494,14 @@
       <div id="vazio" class="empty" style="display:none;">Nenhum lançamento encontrado.</div>
     </div>
 
-    <div id="viewDicas" style="display:none;"></div>
+    <div id="viewDicas" style="display:none;">
+      <div class="card" style="margin-bottom:14px;">
+        <h3 style="margin:0 0 4px;">Projeção de saldo</h3>
+        <div id="projecaoTexto" style="font-size:12.5px; color:var(--muted); margin-bottom:8px;"></div>
+        <div class="chart-wrap" style="height:160px;"><canvas id="chartProjecao"></canvas></div>
+      </div>
+      <div id="listaDicas"></div>
+    </div>
   </div>
 
   </div>
@@ -540,9 +547,9 @@ let metas = [];
 let recorrentes = [];
 let mesAtual = '';
 let editandoId = null;
-let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta;
+let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.1';
+const APP_VERSION = '2026-08-11.2';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1899,8 +1906,73 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   el.innerHTML = alertas.map(a=>`<div class="alert ${a.tipo}"><span class="ico">${a.ico}</span><span>${a.html}</span></div>`).join('');
 }
 
+function renderProjecaoSaldo(){
+  const textoEl = document.getElementById('projecaoTexto');
+  const nMeses = 3;
+  // média dos últimos 3 meses fechados, como linha de base para receita/gasto "não previsível"
+  const chavesPassadas = [];
+  const hoje = new Date();
+  for(let i=1;i<=3;i++){
+    const d = new Date(hoje.getFullYear(), hoje.getMonth()-i, 1);
+    chavesPassadas.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  const receitaMediaBase = chavesPassadas.reduce((s,k)=>s+transacoes.filter(t=>t.tipo==='receita'&&chaveMes(t.data)===k).reduce((a,t)=>a+t.valor,0),0) / nMeses;
+  // gasto médio "não fixo e sem parcela futura conhecida" — pra não contar duas vezes o que já está lançado como parcela futura
+  const gastoMedioVariavel = chavesPassadas.reduce((s,k)=>s+transacoes.filter(t=>t.tipo==='gasto'&&!t.fixo&&!t.grupoParcela&&chaveMes(t.data)===k).reduce((a,t)=>a+t.valor,0),0) / nMeses;
+
+  const chavesFuturas = [];
+  for(let i=0;i<nMeses;i++){
+    const d = new Date(hoje.getFullYear(), hoje.getMonth()+i, 1);
+    chavesFuturas.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+
+  let acumulado = 0;
+  const pontos = chavesFuturas.map(chave => {
+    // já lançado nesse mês (parcelas futuras, contas fixas já criadas, etc.)
+    const jaLancadoReceita = transacoes.filter(t=>t.tipo==='receita'&&chaveMes(t.data)===chave).reduce((s,t)=>s+t.valor,0);
+    const jaLancadoGastoFixo = transacoes.filter(t=>t.tipo==='gasto'&&t.fixo&&chaveMes(t.data)===chave).reduce((s,t)=>s+t.valor,0);
+    const jaLancadoParcela = transacoes.filter(t=>t.tipo==='gasto'&&t.grupoParcela&&chaveMes(t.data)===chave).reduce((s,t)=>s+t.valor,0);
+
+    // recorrentes ainda não lançados nesse mês futuro entram como estimativa
+    const recorrentesGasto = recorrentes.filter(r=>r.tipo!=='receita' && !transacoes.some(t=>t.desc===r.desc && t.categoria===r.categoria && chaveMes(t.data)===chave)).reduce((s,r)=>s+r.valor,0);
+    const recorrentesReceita = recorrentes.filter(r=>r.tipo==='receita' && !transacoes.some(t=>t.desc===r.desc && t.categoria===r.categoria && chaveMes(t.data)===chave)).reduce((s,r)=>s+r.valor,0);
+
+    const receitaMes = jaLancadoReceita>0 ? jaLancadoReceita : (receitaMediaBase + recorrentesReceita);
+    const gastoMes = jaLancadoGastoFixo + jaLancadoParcela + gastoMedioVariavel + recorrentesGasto;
+
+    acumulado += (receitaMes - gastoMes);
+    return { mes: chave, saldoMes: receitaMes-gastoMes, acumulado };
+  });
+
+  const ctx = document.getElementById('chartProjecao');
+  if(chartProjecao) chartProjecao.destroy();
+  const tc = getThemeColors();
+  chartProjecao = new Chart(ctx, {
+    type:'line',
+    data:{ labels: pontos.map(p=>fmtMesLabel(p.mes)), datasets:[
+      { label:'Saldo acumulado projetado', data:pontos.map(p=>p.acumulado), borderColor:'#4d9eff', backgroundColor:'rgba(77,158,255,.15)', fill:true, tension:.25, pointRadius:3 }
+    ]},
+    options:{ maintainAspectRatio:false,
+      scales:{ x:{ ticks:{color:tc.tick, font:{size:10}}, grid:{display:false} }, y:{ ticks:{color:tc.tick, font:{size:10}}, grid:{color:tc.grid} } },
+      plugins:{ legend:{display:false} }
+    }
+  });
+
+  const ultimo = pontos[pontos.length-1];
+  const primeiro = pontos[0];
+  if(receitaMediaBase===0 && gastoMedioVariavel===0 && recorrentes.length===0){
+    textoEl.textContent = 'Lance mais alguns meses de receitas e gastos para uma projeção confiável.';
+  }else if(ultimo.acumulado < 0){
+    textoEl.innerHTML = `Com base na sua média recente, parcelas e contas fixas já cadastradas, seu saldo projetado para ${fmtMesLabel(ultimo.mes)} fica <b style="color:var(--red)">${fmt(ultimo.acumulado)}</b>. Vale ajustar gastos nos próximos meses.`;
+  }else{
+    textoEl.innerHTML = `Com base na sua média recente, parcelas e contas fixas já cadastradas, você deve acumular <b style="color:var(--green)">${fmt(ultimo.acumulado)}</b> até ${fmtMesLabel(ultimo.mes)}.`;
+  }
+  return { pontos, gastoMedioVariavel };
+}
+
 function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
-  const el = document.getElementById('viewDicas');
+  const el = document.getElementById('listaDicas');
+  const projecao = renderProjecaoSaldo();
   // dicas = {tipo: 'danger'|'warning'|'tip', ico, html} — ordenadas por urgência abaixo
   const dicas = [];
 
@@ -1931,13 +2003,30 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
     const diaAtual = hoje.getDate();
     const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0).getDate();
     const mediaDiaria = totalGasto / diaAtual;
-    const projecao = mediaDiaria * diasNoMes;
+    const projecaoFechamento = mediaDiaria * diasNoMes;
     const limiteTotal = Object.values(orcamentos).reduce((s,v)=>s+v,0);
     const tetoComparar = limiteTotal>0 ? limiteTotal : totalReceita;
-    if(tetoComparar>0 && projecao > tetoComparar && diaAtual>=5){
+    if(tetoComparar>0 && projecaoFechamento > tetoComparar && diaAtual>=5){
       const diasFaltam = diasNoMes - diaAtual;
-      dicas.push({tipo:'danger', ico:'🧊', html:`No ritmo atual você vai fechar o mês em ${fmt(projecao)}, acima do que entra/do orçamento. Considere <b>não fazer nenhuma compra não essencial nos próximos ${diasFaltam} dia(s)</b> para voltar ao azul.`});
+      dicas.push({tipo:'danger', ico:'🧊', html:`No ritmo atual você vai fechar o mês em ${fmt(projecaoFechamento)}, acima do que entra/do orçamento. Considere <b>não fazer nenhuma compra não essencial nos próximos ${diasFaltam} dia(s)</b> para voltar ao azul.`});
     }
+  }
+
+  // 2b) projeção de saldo futuro (parcelas/fixos já cadastrados) fica negativa em algum mês à frente
+  const mesNegativo = projecao.pontos.find(p => p.acumulado < 0);
+  if(mesNegativo){
+    dicas.push({tipo:'warning', ico:'📉', html:`Pelas contas fixas e parcelas já cadastradas, seu saldo projetado fica negativo em <b>${fmtMesLabel(mesNegativo.mes)}</b> (${fmt(mesNegativo.acumulado)}). Vale se planejar com antecedência.`});
+  }
+
+  // 2c) categoria com maior potencial de economia: maior alta vs média dos últimos 3 meses
+  const candidatasCat = Object.entries(porCat)
+    .map(([cat,val]) => ({cat, val, media: mediaCategoriaUltimosMeses(cat,3)}))
+    .filter(c => c.media && c.val > c.media*1.15)
+    .sort((a,b) => (b.val-b.media) - (a.val-a.media));
+  if(candidatasCat.length > 0){
+    const c = candidatasCat[0];
+    const diffPct = Math.round(((c.val-c.media)/c.media)*100);
+    dicas.push({tipo:'tip', ico:'💡', html:`<b>${c.cat}</b> está ${diffPct}% acima da sua média dos últimos 3 meses (${fmt(c.val)} vs ${fmt(c.media)}) — é onde você tem mais potencial de economia agora.`});
   }
 
   // 3) fim de ano: se o saldo acumulado do ano está apertado, sugerir congelar supérfluos até dezembro
