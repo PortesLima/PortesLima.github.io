@@ -546,7 +546,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.5';
+const APP_VERSION = '2026-08-11.6';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -673,6 +673,30 @@ async function driveEncontrarOuCriarArquivo(){
     driveFileId = d2.id;
   }
 }
+// Aplica um blob de estado completo (Drive ou backup JSON manual) às variáveis top-level
+// e persiste tudo em window.storage. Mantém em UM lugar só os campos que um blob de estado
+// carrega — carregar() fica de fora por ler chave a chave do storage, não de um blob único.
+async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
+  transacoes = dados.transacoes || [];
+  orcamentos = dados.orcamentos || {};
+  contas = dados.contas && dados.contas.length ? dados.contas : (manterContasSeVazio ? contas : []);
+  if(!contas.includes('Outros')) contas.push('Outros');
+  contasDetalhes = dados.contasDetalhes || {};
+  metas = dados.metas || [];
+  recorrentes = dados.recorrentes || [];
+  if(dados.tema) aplicarTema(dados.tema);
+  if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
+  await setJSON(STORAGE_TX, transacoes);
+  await setJSON(STORAGE_ORC, orcamentos);
+  await setJSON(STORAGE_CONTAS, contas);
+  await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
+  await setJSON(STORAGE_METAS, metas);
+  await setJSON(STORAGE_REC, recorrentes);
+  await setJSON(STORAGE_MOEDA, moedaAtual);
+  popularSelectsEstaticos();
+  popularSeletorMes();
+}
+
 async function driveSincronizarInicial(){
   try{
     await driveEncontrarOuCriarArquivo();
@@ -681,24 +705,7 @@ async function driveSincronizarInicial(){
     let dados = {};
     try{ dados = texto ? JSON.parse(texto) : {}; }catch(e){ dados = {}; }
     if(dados.transacoes){
-      transacoes = dados.transacoes || [];
-      orcamentos = dados.orcamentos || {};
-      contas = dados.contas && dados.contas.length ? dados.contas : contas;
-      if(!contas.includes('Outros')) contas.push('Outros');
-      contasDetalhes = dados.contasDetalhes || {};
-      metas = dados.metas || [];
-      recorrentes = dados.recorrentes || [];
-      if(dados.tema) aplicarTema(dados.tema);
-      if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
-      await setJSON(STORAGE_TX, transacoes);
-      await setJSON(STORAGE_ORC, orcamentos);
-      await setJSON(STORAGE_CONTAS, contas);
-      await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
-      await setJSON(STORAGE_METAS, metas);
-      await setJSON(STORAGE_REC, recorrentes);
-      await setJSON(STORAGE_MOEDA, moedaAtual);
-      popularSelectsEstaticos();
-      popularSeletorMes();
+      await aplicarDadosImportados(dados, {manterContasSeVazio:true});
       if(moedaAtual !== 'BRL' && !cotacaoAtualizada) await carregarCotacoes();
       render();
     }else{
@@ -1227,9 +1234,14 @@ function criarRecorrente(){
 function lancarRecorrente(id){
   const r = recorrentes.find(x=>x.id===id);
   if(!r) return;
-  transacoes.unshift({id:uid(), tipo:r.tipo, desc:r.desc, valor:r.valor, categoria:r.categoria, conta:contas[0], data:mesAtual+'-05', fixo:true});
+  transacoes.unshift({id:uid(), tipo:r.tipo, desc:r.desc, valor:r.valor, categoria:r.categoria, conta:contas[0], data:mesAtual+'-05', fixo:true, recorrenteId:r.id});
   salvarTx();
   render();
+}
+function recorrenteJaLancadoEm(r, lista, chave){
+  // recorrenteId é a ligação confiável; desc+categoria é o fallback para lançamentos
+  // criados antes desse campo existir (não estampados retroativamente nos dados do usuário)
+  return lista.some(t => chaveMes(t.data)===chave && (t.recorrenteId===r.id || (!t.recorrenteId && t.desc===r.desc && t.categoria===r.categoria)));
 }
 function removerRecorrente(id){
   recorrentes = recorrentes.filter(r=>r.id!==id);
@@ -1877,9 +1889,7 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   // fixos ainda não lançados este mês (só avisa a partir do dia 3)
   const hojeCheck = new Date();
   if(mesAtual === chaveMes(hojeISO()) && hojeCheck.getDate() >= 3){
-    const naoLancados = recorrentes.filter(r =>
-      !doMes.some(t => t.desc === r.desc && t.categoria === r.categoria)
-    );
+    const naoLancados = recorrentes.filter(r => !recorrenteJaLancadoEm(r, doMes, mesAtual));
     if(naoLancados.length > 0){
       const nomes = naoLancados.map(r=>r.desc).join(', ');
       alertas.push({tipo:'tip', ico:'🔁', html:`Lançamentos fixos ainda não registrados este mês: <b>${nomes}</b>. Use "Lançar este mês" na seção de fixos.`});
@@ -1943,8 +1953,8 @@ function renderProjecaoSaldo(){
     const jaLancadoParcela = transacoes.filter(t=>t.tipo==='gasto'&&t.grupoParcela&&chaveMes(t.data)===chave).reduce((s,t)=>s+t.valor,0);
 
     // recorrentes ainda não lançados nesse mês futuro entram como estimativa
-    const recorrentesGasto = recorrentes.filter(r=>r.tipo!=='receita' && !transacoes.some(t=>t.desc===r.desc && t.categoria===r.categoria && chaveMes(t.data)===chave)).reduce((s,r)=>s+r.valor,0);
-    const recorrentesReceita = recorrentes.filter(r=>r.tipo==='receita' && !transacoes.some(t=>t.desc===r.desc && t.categoria===r.categoria && chaveMes(t.data)===chave)).reduce((s,r)=>s+r.valor,0);
+    const recorrentesGasto = recorrentes.filter(r=>r.tipo!=='receita' && !recorrenteJaLancadoEm(r, transacoes, chave)).reduce((s,r)=>s+r.valor,0);
+    const recorrentesReceita = recorrentes.filter(r=>r.tipo==='receita' && !recorrenteJaLancadoEm(r, transacoes, chave)).reduce((s,r)=>s+r.valor,0);
 
     const receitaMes = jaLancadoReceita>0 ? jaLancadoReceita : (receitaMediaBase + recorrentesReceita);
     const gastoMes = jaLancadoGastoFixo + jaLancadoParcela + gastoMedioVariavel + recorrentesGasto;
@@ -2281,20 +2291,7 @@ async function importarBackupJSON(arquivo){
   try{
     const texto = await arquivo.text();
     const dados = JSON.parse(texto);
-    transacoes = dados.transacoes || [];
-    orcamentos = dados.orcamentos || {};
-    contas = dados.contas && dados.contas.length ? dados.contas : contas;
-    contasDetalhes = dados.contasDetalhes || {};
-    metas = dados.metas || [];
-    recorrentes = dados.recorrentes || [];
-    if(dados.tema) aplicarTema(dados.tema);
-    if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
-    await salvarTx(); await salvarOrc(); await salvarMetas(); await salvarRec();
-    await setJSON(STORAGE_CONTAS, contas);
-    await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
-    await setJSON(STORAGE_MOEDA, moedaAtual);
-    popularSelectsEstaticos();
-    popularSeletorMes();
+    await aplicarDadosImportados(dados, {manterContasSeVazio:true});
     render();
     alert('Backup importado com sucesso.');
   }catch(e){
