@@ -340,7 +340,8 @@
         <div class="row">
           <input type="number" id="metaValor" placeholder="Valor alvo (R$)" step="10">
           <input type="date" id="metaPrazo">
-          <button onclick="criarMeta()">Criar meta</button>
+          <button id="btnSalvarMeta" onclick="criarMeta()">Criar meta</button>
+          <button class="secondary" id="btnCancelarEdicaoMeta" style="display:none;" onclick="cancelarEdicaoMeta()">Cancelar</button>
         </div>
       </div>
     </div>
@@ -432,6 +433,12 @@
         </select>
         <button class="secondary" onclick="exportarCSV()">Exportar CSV</button>
         <button class="secondary" onclick="exportarPDF()">Relatório PDF do mês</button>
+      </div>
+      <div class="row">
+        <label class="chk" style="font-size:11.5px; color:var(--muted);">De: <input type="date" id="periodoDe" onchange="render()" style="width:150px; flex:none;"></label>
+        <label class="chk" style="font-size:11.5px; color:var(--muted);">Até: <input type="date" id="periodoAte" onchange="render()" style="width:150px; flex:none;"></label>
+        <button class="secondary" onclick="limparPeriodo()" id="btnLimparPeriodo" style="display:none;">Limpar período</button>
+        <span style="font-size:11px; color:var(--muted2);">Filtra a lista abaixo em qualquer intervalo de datas, além do mês selecionado no topo.</span>
       </div>
       <table>
         <thead><tr><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Status</th><th>Valor</th><th></th></tr></thead>
@@ -953,6 +960,7 @@ function setOrcamento(cat, val){
   render();
 }
 
+let editandoMetaId = null;
 function toggleNovaMeta(){
   const el = document.getElementById('formMeta');
   el.style.display = el.style.display==='none' ? 'block' : 'none';
@@ -962,13 +970,40 @@ function criarMeta(){
   const valorAlvo = parseFloat(document.getElementById('metaValor').value);
   const prazo = document.getElementById('metaPrazo').value;
   if(!nome || isNaN(valorAlvo) || valorAlvo<=0){ alert('Preencha nome e valor alvo da meta.'); return; }
-  metas.push({id:uid(), nome, valorAlvo, valorAtual:0, prazo});
+  if(editandoMetaId){
+    const m = metas.find(x=>x.id===editandoMetaId);
+    Object.assign(m, {nome, valorAlvo, prazo});
+    cancelarEdicaoMeta();
+  }else{
+    metas.push({id:uid(), nome, valorAlvo, valorAtual:0, prazo});
+    document.getElementById('metaNome').value='';
+    document.getElementById('metaValor').value='';
+    document.getElementById('metaPrazo').value='';
+    toggleNovaMeta();
+  }
+  salvarMetas();
+  render();
+}
+function editarMeta(id){
+  const m = metas.find(x=>x.id===id);
+  if(!m) return;
+  editandoMetaId = id;
+  document.getElementById('metaNome').value = m.nome;
+  document.getElementById('metaValor').value = m.valorAlvo;
+  document.getElementById('metaPrazo').value = m.prazo || '';
+  document.getElementById('btnSalvarMeta').textContent = 'Salvar edição';
+  document.getElementById('btnCancelarEdicaoMeta').style.display = 'inline-block';
+  document.getElementById('formMeta').style.display = 'block';
+  document.getElementById('formMeta').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+function cancelarEdicaoMeta(){
+  editandoMetaId = null;
   document.getElementById('metaNome').value='';
   document.getElementById('metaValor').value='';
   document.getElementById('metaPrazo').value='';
-  toggleNovaMeta();
-  salvarMetas();
-  render();
+  document.getElementById('btnSalvarMeta').textContent = 'Criar meta';
+  document.getElementById('btnCancelarEdicaoMeta').style.display = 'none';
+  document.getElementById('formMeta').style.display = 'none';
 }
 function addValorMeta(id){
   const v = parseFloat(prompt('Quanto deseja adicionar a essa meta? (R$)'));
@@ -1067,15 +1102,30 @@ function marcarComoPago(id){
   render();
 }
 
+function limparPeriodo(){
+  document.getElementById('periodoDe').value = '';
+  document.getElementById('periodoAte').value = '';
+  render();
+}
 function render(){
   mesAtual = document.getElementById('mesSel').value || mesAtual;
   document.getElementById('subTitulo').textContent = `Visão geral de ${fmtMesLabel(mesAtual)}`;
   toggleCategoriaSel();
   atualizarDataPadrao();
 
+  const periodoDe = document.getElementById('periodoDe').value;
+  const periodoAte = document.getElementById('periodoAte').value;
+  const periodoAtivo = !!(periodoDe || periodoAte);
+  document.getElementById('btnLimparPeriodo').style.display = periodoAtivo ? 'inline-block' : 'none';
+
   const conta = contaAtivaFiltro();
   const todasDoMes = transacoes.filter(t => chaveMes(t.data) === mesAtual && (!conta || t.conta===conta));
   const doMes = filtrarTransacoes(todasDoMes);
+
+  const baseTabela = periodoAtivo
+    ? transacoes.filter(t => (!conta || t.conta===conta) && (!periodoDe || t.data>=periodoDe) && (!periodoAte || t.data<=periodoAte))
+    : todasDoMes;
+  const listaTabela = filtrarTransacoes(baseTabela);
 
   const receitas = todasDoMes.filter(t=>t.tipo==='receita');
   const gastos = todasDoMes.filter(t=>t.tipo==='gasto');
@@ -1202,11 +1252,11 @@ function render(){
   const corpo = document.getElementById('corpoTabela');
   const vazio = document.getElementById('vazio');
   corpo.innerHTML = '';
-  if(doMes.length === 0){
+  if(listaTabela.length === 0){
     vazio.style.display = 'block';
   }else{
     vazio.style.display = 'none';
-    doMes.slice().sort((a,b)=>b.data.localeCompare(a.data)).forEach(t=>{
+    listaTabela.slice().sort((a,b)=>b.data.localeCompare(a.data)).forEach(t=>{
       const tr = document.createElement('tr');
       const cor = t.tipo==='receita' ? 'green' : 'red';
       const sinal = t.tipo==='receita' ? '+' : '-';
@@ -1382,7 +1432,7 @@ function renderMetas(){
       <div class="meta-track"><div class="meta-fill" style="width:${pct}%"></div></div>
       <div class="meta-sub">
         <span>${fmt(m.valorAtual)} de ${fmt(m.valorAlvo)}${m.prazo ? ' · até '+m.prazo.split('-').reverse().join('/') : ''}</span>
-        <span><button class="iconbtn" style="color:var(--blue)" onclick="addValorMeta(${m.id})">+ add</button><button class="iconbtn del" onclick="removerMeta(${m.id})">&times;</button></span>
+        <span><button class="iconbtn" style="color:var(--blue)" onclick="addValorMeta(${m.id})">+ add</button><button class="iconbtn" onclick="editarMeta(${m.id})" title="Editar">✎</button><button class="iconbtn del" onclick="removerMeta(${m.id})">&times;</button></span>
       </div>
       ${economiaTxt}
     </div>`;
