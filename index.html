@@ -542,7 +542,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta;
 
-const APP_VERSION = '2026-08-10.3';
+const APP_VERSION = '2026-08-11.1';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1901,27 +1901,89 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
 
 function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   const el = document.getElementById('viewDicas');
+  // dicas = {tipo: 'danger'|'warning'|'tip', ico, html} — ordenadas por urgência abaixo
   const dicas = [];
+
+  // 1) contas em aberto (vencidas ou a vencer) em TODA a base, não só o mês selecionado —
+  // prioriza a que vence mais cedo, e em empate a de maior valor, pra responder
+  // diretamente "pague isso primeiro pra ter um respiro"
+  const abertas = transacoes
+    .filter(t => t.tipo==='gasto' && statusEfetivo(t) !== 'pago')
+    .sort((a,b) => a.data.localeCompare(b.data) || (b.valor - a.valor));
+  if(abertas.length > 0){
+    const prim = abertas[0];
+    const vencida = statusEfetivo(prim) === 'vencido';
+    const [y,m,d] = prim.data.split('-');
+    if(vencida){
+      dicas.push({tipo:'danger', ico:'🎯', html:`Pague primeiro <b>${prim.desc}</b> (${fmt(prim.valor)}, venceu em ${d}/${m}) — é a mais atrasada e some com o maior risco de juros/multa.`});
+    }else{
+      dicas.push({tipo:'warning', ico:'🎯', html:`Priorize <b>${prim.desc}</b> (${fmt(prim.valor)}, vence em ${d}/${m}) para se livrar dela primeiro e ganhar respiro no orçamento.`});
+    }
+    if(abertas.length > 1){
+      const restante = abertas.slice(1).reduce((s,t)=>s+t.valor,0);
+      dicas.push({tipo:'tip', ico:'📋', html:`Depois dela, ainda restam <b>${abertas.length-1} conta(s) em aberto</b> somando ${fmt(restante)}. Quitar da mais próxima do vencimento para a mais distante evita juros.`});
+    }
+  }
+
+  // 2) ritmo insustentável no mês corrente → sugestão de congelar gastos não essenciais
+  const hoje = new Date();
+  if(mesAtual === chaveMes(hojeISO()) && totalGasto > 0){
+    const diaAtual = hoje.getDate();
+    const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0).getDate();
+    const mediaDiaria = totalGasto / diaAtual;
+    const projecao = mediaDiaria * diasNoMes;
+    const limiteTotal = Object.values(orcamentos).reduce((s,v)=>s+v,0);
+    const tetoComparar = limiteTotal>0 ? limiteTotal : totalReceita;
+    if(tetoComparar>0 && projecao > tetoComparar && diaAtual>=5){
+      const diasFaltam = diasNoMes - diaAtual;
+      dicas.push({tipo:'danger', ico:'🧊', html:`No ritmo atual você vai fechar o mês em ${fmt(projecao)}, acima do que entra/do orçamento. Considere <b>não fazer nenhuma compra não essencial nos próximos ${diasFaltam} dia(s)</b> para voltar ao azul.`});
+    }
+  }
+
+  // 3) fim de ano: se o saldo acumulado do ano está apertado, sugerir congelar supérfluos até dezembro
+  const anoAtual = new Date().getFullYear();
+  const doAnoTodo = transacoes.filter(t => t.data.slice(0,4) === String(anoAtual));
+  const receitaAno = doAnoTodo.filter(t=>t.tipo==='receita').reduce((s,t)=>s+t.valor,0);
+  const gastoAno = doAnoTodo.filter(t=>t.tipo==='gasto').reduce((s,t)=>s+t.valor,0);
+  const saldoAno = receitaAno - gastoAno;
+  const mesAtualNum = hoje.getMonth()+1;
+  if(mesAtualNum <= 11 && receitaAno>0 && saldoAno < receitaAno*0.1){
+    dicas.push({tipo:'warning', ico:'❄️', html:`Sua sobra acumulada em ${anoAtual} está baixa (${fmt(saldoAno)}). Tente <b>evitar compras supérfluas até o fim do ano</b> e priorize só o essencial nos próximos meses.`});
+  }
+
+  // 4) metas com prazo apertado e pouco progresso
+  metas.forEach(m => {
+    const falta = Math.max(0, m.valorAlvo - m.valorAtual);
+    if(falta <= 0 || !m.prazo) return;
+    const meses = mesesAte(m.prazo);
+    if(meses > 0 && meses <= 3){
+      dicas.push({tipo:'warning', ico:'⏳', html:`A meta <b>${m.nome}</b> vence em ${meses} mês(es) e ainda faltam ${fmt(falta)}. Guarde ${fmt(falta/meses)}/mês para chegar lá a tempo.`});
+    }
+  });
+
   const maiorCat = Object.entries(porCat).sort((a,b)=>b[1]-a[1])[0];
   if(maiorCat && totalGasto > 0){
     const pct = Math.round(maiorCat[1]/totalGasto*100);
-    dicas.push(`Sua maior categoria de gasto é <b>${maiorCat[0]}</b>, representando ${pct}% do total gasto no mês.`);
+    dicas.push({tipo:'tip', ico:'i', html:`Sua maior categoria de gasto é <b>${maiorCat[0]}</b>, representando ${pct}% do total gasto no mês.`});
   }
-  dicas.push('A regra 50/30/20 sugere destinar 50% da renda para necessidades, 30% para desejos e 20% para poupança/investimentos.');
+  dicas.push({tipo:'tip', ico:'i', html:'A regra 50/30/20 sugere destinar 50% da renda para necessidades, 30% para desejos e 20% para poupança/investimentos.'});
   if(taxaPoupanca < 20 && totalReceita > 0){
-    dicas.push('Tente automatizar a poupança: no dia do salário, transfira uma parte fixa para uma conta separada antes de gastar o resto.');
+    dicas.push({tipo:'tip', ico:'i', html:'Tente automatizar a poupança: no dia do salário, transfira uma parte fixa para uma conta separada antes de gastar o resto.'});
   }
   if(Object.keys(orcamentos).length === 0){
-    dicas.push('Defina limites de orçamento por categoria para receber alertas automáticos quando estiver perto de estourar.');
+    dicas.push({tipo:'tip', ico:'i', html:'Defina limites de orçamento por categoria para receber alertas automáticos quando estiver perto de estourar.'});
   }
   if(recorrentes.length === 0){
-    dicas.push('Cadastre seus gastos fixos (aluguel, assinaturas) em "Lançamentos fixos" para lançá-los com 1 clique todo mês.');
+    dicas.push({tipo:'tip', ico:'i', html:'Cadastre seus gastos fixos (aluguel, assinaturas) em "Lançamentos fixos" para lançá-los com 1 clique todo mês.'});
   }
   if(metas.length === 0){
-    dicas.push('Crie uma meta de economia (ex: reserva de emergência) para acompanhar seu progresso mês a mês.');
+    dicas.push({tipo:'tip', ico:'i', html:'Crie uma meta de economia (ex: reserva de emergência) para acompanhar seu progresso mês a mês.'});
   }
-  dicas.push('Revise assinaturas recorrentes a cada poucos meses — é comum acumular serviços que você não usa mais.');
-  el.innerHTML = dicas.map(d=>`<div class="alert tip" style="align-items:center;"><span class="ico">i</span><span>${d}</span></div>`).join('');
+  dicas.push({tipo:'tip', ico:'i', html:'Revise assinaturas recorrentes a cada poucos meses — é comum acumular serviços que você não usa mais.'});
+
+  const ordem = {danger:0, warning:1, tip:2};
+  dicas.sort((a,b) => ordem[a.tipo]-ordem[b.tipo]);
+  el.innerHTML = dicas.map(d=>`<div class="alert ${d.tipo}" style="align-items:center;"><span class="ico">${d.ico}</span><span>${d.html}</span></div>`).join('');
 }
 
 function verAnexo(id){
