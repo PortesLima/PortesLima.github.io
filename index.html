@@ -497,6 +497,7 @@
           <div id="projecaoTexto" style="font-size:12.5px; color:var(--muted);"></div>
           <div class="chart-wrap" style="height:160px;"><canvas id="chartProjecao"></canvas></div>
         </div>
+        <div id="projecaoDetalhe" style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;"></div>
       </div>
       <div id="listaDicas"></div>
     </div>
@@ -546,7 +547,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.6';
+const APP_VERSION = '2026-08-11.7';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1960,7 +1961,10 @@ function renderProjecaoSaldo(){
     const gastoMes = jaLancadoGastoFixo + jaLancadoParcela + gastoMedioVariavel + recorrentesGasto;
 
     acumulado += (receitaMes - gastoMes);
-    return { mes: chave, saldoMes: receitaMes-gastoMes, acumulado };
+    return {
+      mes: chave, saldoMes: receitaMes-gastoMes, acumulado,
+      detalhe: { jaLancadoReceita, receitaMediaBase, recorrentesReceita, jaLancadoGastoFixo, jaLancadoParcela, gastoMedioVariavel, recorrentesGasto }
+    };
   });
 
   const ctx = document.getElementById('chartProjecao');
@@ -1986,6 +1990,26 @@ function renderProjecaoSaldo(){
   }else{
     textoEl.innerHTML = `Com base na sua média recente, parcelas e contas fixas já cadastradas, você deve acumular <b style="color:var(--green)">${fmt(ultimo.acumulado)}</b> até ${fmtMesLabel(ultimo.mes)}.`;
   }
+
+  const detalheEl = document.getElementById('projecaoDetalhe');
+  detalheEl.innerHTML = pontos.map(p=>{
+    const d = p.detalhe;
+    const receitaLinhas = d.jaLancadoReceita>0
+      ? `<div>Receita já lançada: <b style="color:var(--text)">${fmt(d.jaLancadoReceita)}</b></div>`
+      : `<div>Média histórica de receita: <b style="color:var(--text)">${fmt(d.receitaMediaBase)}</b>${d.recorrentesReceita>0 ? ` + receitas fixas a lançar: <b style="color:var(--text)">${fmt(d.recorrentesReceita)}</b>` : ''}</div>`;
+    const gastoPartes = [];
+    if(d.jaLancadoGastoFixo>0) gastoPartes.push(`contas fixas já lançadas: <b style="color:var(--text)">${fmt(d.jaLancadoGastoFixo)}</b>`);
+    if(d.jaLancadoParcela>0) gastoPartes.push(`parcelas já lançadas: <b style="color:var(--text)">${fmt(d.jaLancadoParcela)}</b>`);
+    if(d.gastoMedioVariavel>0) gastoPartes.push(`média de gastos variáveis: <b style="color:var(--text)">${fmt(d.gastoMedioVariavel)}</b>`);
+    if(d.recorrentesGasto>0) gastoPartes.push(`fixos a lançar: <b style="color:var(--text)">${fmt(d.recorrentesGasto)}</b>`);
+    const corSaldo = p.saldoMes>=0 ? 'var(--green)' : 'var(--red)';
+    return `<div style="font-size:11.5px; color:var(--muted); margin-bottom:8px;">
+      <div style="color:var(--text); font-weight:600; margin-bottom:2px;">${fmtMesLabel(p.mes)} — saldo do mês: <span style="color:${corSaldo}">${fmt(p.saldoMes)}</span></div>
+      ${receitaLinhas}
+      <div>Gasto estimado: ${gastoPartes.join(' + ') || fmt(0)}</div>
+    </div>`;
+  }).join('');
+
   return { pontos, gastoMedioVariavel };
 }
 
