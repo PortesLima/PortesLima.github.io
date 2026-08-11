@@ -181,6 +181,16 @@
 </div>
 <div class="wrap" id="conteudoApp">
 
+  <div id="modalExcluirParcela" class="modal-bg" style="display:none;">
+    <div class="modal-box">
+      <h2>Excluir lançamento parcelado</h2>
+      <p style="font-size:13px; color:var(--muted); margin-top:-8px;" id="modalExcluirParcelaTexto"></p>
+      <button onclick="confirmarExclusaoParcela('atual')" style="width:100%; margin-top:6px;">Excluir só esta parcela</button>
+      <button onclick="confirmarExclusaoParcela('todas')" class="secondary" style="width:100%; margin-top:8px;">Excluir todas as parcelas deste grupo</button>
+      <button onclick="fecharModalExcluirParcela()" class="secondary" style="width:100%; margin-top:8px;">Cancelar</button>
+    </div>
+  </div>
+
   <div id="modalOnboarding" class="modal-bg" style="display:none;">
     <div class="modal-box">
       <h2>Bem-vindo ao Bolso Certo</h2>
@@ -826,15 +836,42 @@ function atualizarDataPadrao(forcar){
   campo.value = (mesAtual === chaveHoje) ? hojeISO() : mesAtual + '-01';
 }
 
+let idExclusaoPendente = null;
 function remover(id){
   const t = transacoes.find(x=>x.id===id);
   if(!t) return;
+  if(t.grupoParcela){
+    idExclusaoPendente = id;
+    const qtd = transacoes.filter(x=>x.grupoParcela===t.grupoParcela).length;
+    document.getElementById('modalExcluirParcelaTexto').textContent =
+      `"${t.desc}" faz parte de um parcelamento com ${qtd} parcela(s). O que deseja excluir?`;
+    document.getElementById('modalExcluirParcela').style.display = 'flex';
+    return;
+  }
   if(!confirm(`Excluir o lançamento "${t.desc}" (${fmt(t.valor)})? Essa ação pode ser desfeita logo em seguida pelo botão "Desfazer".`)) return;
   salvarSnapshot();
   transacoes = transacoes.filter(x => x.id !== id);
   salvarTx();
   popularSeletorMes();
   render();
+}
+function fecharModalExcluirParcela(){
+  idExclusaoPendente = null;
+  document.getElementById('modalExcluirParcela').style.display = 'none';
+}
+function confirmarExclusaoParcela(escopo){
+  const t = transacoes.find(x=>x.id===idExclusaoPendente);
+  if(!t) { fecharModalExcluirParcela(); return; }
+  salvarSnapshot();
+  if(escopo === 'todas'){
+    transacoes = transacoes.filter(x => x.grupoParcela !== t.grupoParcela);
+  }else{
+    transacoes = transacoes.filter(x => x.id !== t.id);
+  }
+  salvarTx();
+  popularSeletorMes();
+  render();
+  fecharModalExcluirParcela();
 }
 
 function mudarAbaPrincipal(aba){
