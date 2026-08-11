@@ -191,6 +191,29 @@
     </div>
   </div>
 
+  <div id="modalContas" class="modal-bg" style="display:none;">
+    <div class="modal-box" style="max-width:520px;">
+      <h2>Gerenciar contas e cartões</h2>
+      <div id="listaContas" style="margin-bottom:14px;"></div>
+      <div style="border-top:1px solid var(--border); padding-top:12px;">
+        <div class="row">
+          <input type="text" id="novaContaNome" placeholder="Nome (ex: Nubank, Cofre)">
+        </div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="novaContaCartao" onchange="toggleCamposCartao()"> É cartão de crédito</label>
+        </div>
+        <div class="row" id="camposCartaoNovo" style="display:none;">
+          <input type="number" id="novaContaFechamento" placeholder="Dia do fechamento" min="1" max="31">
+          <input type="number" id="novaContaVencimento" placeholder="Dia do vencimento" min="1" max="31">
+        </div>
+        <div class="row">
+          <button onclick="adicionarConta()">Adicionar conta</button>
+          <button class="secondary" onclick="fecharModalContas()">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="modalOnboarding" class="modal-bg" style="display:none;">
     <div class="modal-box">
       <h2>Bem-vindo ao Bolso Certo</h2>
@@ -224,6 +247,7 @@
       <button class="theme-toggle" id="btnTema" onclick="alternarTema()">🌙 Escuro</button>
       <button class="theme-toggle" onclick="configurarPin()">🔒 PIN</button>
       <button class="theme-toggle editable-only" id="btnDesfazer" onclick="desfazer()" style="display:none;">↩️ Desfazer</button>
+      <button class="theme-toggle editable-only" onclick="abrirModalContas()">💳 Contas</button>
       <button class="theme-toggle editable-only" onclick="toggleMenuBackup()">💾 Backup</button>
       <button class="theme-toggle editable-only" onclick="gerarLinkSomenteLeitura()">🔗 Link leitura</button>
       <button class="theme-toggle" id="btnMoeda" onclick="alternarMoeda()">💱 BRL</button>
@@ -273,6 +297,11 @@
   </div>
 
   <div class="alerts" id="alertas"></div>
+
+  <div class="card" id="cardFaturas" style="display:none; margin-bottom:14px;">
+    <h2>Faturas de cartão em aberto</h2>
+    <div id="listaFaturas"></div>
+  </div>
 
   <div class="cols2">
     <div class="card">
@@ -459,6 +488,7 @@ const STORAGE_TX = 'transacoes';
 const STORAGE_ORC = 'orcamentos';
 const STORAGE_TEMA = 'tema';
 const STORAGE_CONTAS = 'contas';
+const STORAGE_CONTAS_DETALHES = 'contasDetalhes';
 const STORAGE_METAS = 'metas';
 const STORAGE_REC = 'recorrentes';
 const STORAGE_PIN = 'pin';
@@ -484,13 +514,14 @@ const CORES = {
 let transacoes = [];
 let orcamentos = {};
 let contas = ['Conta corrente','Cartão de crédito','Dinheiro','Outros'];
+let contasDetalhes = {};
 let metas = [];
 let recorrentes = [];
 let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador;
 
-const APP_VERSION = '2026-08-10.2';
+const APP_VERSION = '2026-08-10.3';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -577,7 +608,7 @@ function atualizarStatusGoogle(status){
 }
 function montarEstado(){
   return {
-    transacoes, orcamentos, contas, metas, recorrentes, moeda: moedaAtual,
+    transacoes, orcamentos, contas, contasDetalhes, metas, recorrentes, moeda: moedaAtual,
     tema: document.documentElement.getAttribute('data-theme') || 'dark'
   };
 }
@@ -628,6 +659,7 @@ async function driveSincronizarInicial(){
       orcamentos = dados.orcamentos || {};
       contas = dados.contas && dados.contas.length ? dados.contas : contas;
       if(!contas.includes('Outros')) contas.push('Outros');
+      contasDetalhes = dados.contasDetalhes || {};
       metas = dados.metas || [];
       recorrentes = dados.recorrentes || [];
       if(dados.tema) aplicarTema(dados.tema);
@@ -635,6 +667,7 @@ async function driveSincronizarInicial(){
       await setJSON(STORAGE_TX, transacoes);
       await setJSON(STORAGE_ORC, orcamentos);
       await setJSON(STORAGE_CONTAS, contas);
+      await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
       await setJSON(STORAGE_METAS, metas);
       await setJSON(STORAGE_REC, recorrentes);
       await setJSON(STORAGE_MOEDA, moedaAtual);
@@ -734,6 +767,7 @@ async function carregar(){
   orcamentos = await getJSON(STORAGE_ORC, {});
   contas = await getJSON(STORAGE_CONTAS, ['Conta corrente','Cartão de crédito','Dinheiro','Outros']);
   if(!contas.includes('Outros')){ contas.push('Outros'); await setJSON(STORAGE_CONTAS, contas); }
+  contasDetalhes = await getJSON(STORAGE_CONTAS_DETALHES, {});
   metas = await getJSON(STORAGE_METAS, []);
   recorrentes = await getJSON(STORAGE_REC, []);
   moedaAtual = await getJSON(STORAGE_MOEDA, 'BRL');
@@ -754,6 +788,83 @@ async function salvarTx(){ await setJSON(STORAGE_TX, transacoes); driveAgendarSy
 async function salvarOrc(){ await setJSON(STORAGE_ORC, orcamentos); driveAgendarSync(); }
 async function salvarMetas(){ await setJSON(STORAGE_METAS, metas); driveAgendarSync(); }
 async function salvarRec(){ await setJSON(STORAGE_REC, recorrentes); driveAgendarSync(); }
+async function salvarContas(){
+  await setJSON(STORAGE_CONTAS, contas);
+  await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
+  driveAgendarSync();
+}
+
+function abrirModalContas(){
+  renderListaContas();
+  document.getElementById('modalContas').style.display = 'flex';
+}
+function fecharModalContas(){
+  document.getElementById('modalContas').style.display = 'none';
+  document.getElementById('novaContaNome').value = '';
+  document.getElementById('novaContaCartao').checked = false;
+  document.getElementById('novaContaFechamento').value = '';
+  document.getElementById('novaContaVencimento').value = '';
+  toggleCamposCartao();
+}
+function toggleCamposCartao(){
+  document.getElementById('camposCartaoNovo').style.display =
+    document.getElementById('novaContaCartao').checked ? 'flex' : 'none';
+}
+async function adicionarConta(){
+  const nome = document.getElementById('novaContaNome').value.trim();
+  if(!nome){ alert('Digite um nome para a conta.'); return; }
+  if(contas.includes(nome)){ alert('Já existe uma conta com esse nome.'); return; }
+  const ehCartao = document.getElementById('novaContaCartao').checked;
+  contas.push(nome);
+  if(ehCartao){
+    const fechamento = parseInt(document.getElementById('novaContaFechamento').value);
+    const vencimento = parseInt(document.getElementById('novaContaVencimento').value);
+    contasDetalhes[nome] = {
+      tipo: 'cartao',
+      diaFechamento: (fechamento>=1 && fechamento<=31) ? fechamento : null,
+      diaVencimento: (vencimento>=1 && vencimento<=31) ? vencimento : null
+    };
+  }
+  await salvarContas();
+  popularSelectsEstaticos();
+  fecharModalContas();
+  renderListaContas();
+  render();
+}
+async function removerConta(nome){
+  if(contas.length <= 1){ alert('Deixe pelo menos uma conta.'); return; }
+  const emUso = transacoes.some(t=>t.conta===nome);
+  if(emUso && !confirm(`Existem lançamentos usando a conta "${nome}". Remover a conta não apaga esses lançamentos, mas eles ficarão sem uma conta válida na lista. Continuar?`)) return;
+  contas = contas.filter(c=>c!==nome);
+  delete contasDetalhes[nome];
+  await salvarContas();
+  popularSelectsEstaticos();
+  renderListaContas();
+  render();
+}
+async function editarDiasCartao(nome, campo, valor){
+  const v = parseInt(valor);
+  if(!contasDetalhes[nome]) contasDetalhes[nome] = {tipo:'cartao', diaFechamento:null, diaVencimento:null};
+  contasDetalhes[nome][campo] = (v>=1 && v<=31) ? v : null;
+  await salvarContas();
+}
+function renderListaContas(){
+  const el = document.getElementById('listaContas');
+  el.innerHTML = contas.map(nome=>{
+    const det = contasDetalhes[nome];
+    const ehCartao = det && det.tipo === 'cartao';
+    return `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <b style="font-size:13px;">${nome}${ehCartao?' 💳':''}</b>
+        <button class="iconbtn del" onclick="removerConta('${nome.replace(/'/g,"\\'")}')" title="Remover">&times;</button>
+      </div>
+      ${ehCartao ? `<div class="row" style="margin-top:8px;">
+        <label class="chk">Fecha dia <input type="number" min="1" max="31" value="${det.diaFechamento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${nome.replace(/'/g,"\\'")}','diaFechamento',this.value)"></label>
+        <label class="chk">Vence dia <input type="number" min="1" max="31" value="${det.diaVencimento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${nome.replace(/'/g,"\\'")}','diaVencimento',this.value)"></label>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
 
 function popularSeletorMes(){
   const sel = document.getElementById('mesSel');
@@ -1292,6 +1403,7 @@ function render(){
   renderChartCat(porCat);
   renderChartMes(conta);
   renderChartSaldo(conta);
+  renderFaturas();
   renderOrcamentos(porCat);
   renderMetas();
   renderRecorrentes();
@@ -1412,6 +1524,43 @@ function mesesAte(dataISO){
   const hoje = new Date(hojeISO());
   const alvo = new Date(dataISO);
   return (alvo.getFullYear()-hoje.getFullYear())*12 + (alvo.getMonth()-hoje.getMonth());
+}
+
+function ultimoDiaMes(ano, mesIndex){ return new Date(ano, mesIndex+1, 0).getDate(); }
+function calcularCicloFatura(diaFechamento, diaVencimento){
+  const hoje = new Date();
+  const diaHoje = hoje.getDate();
+  const fechamentoEsteMes = Math.min(diaFechamento, ultimoDiaMes(hoje.getFullYear(), hoje.getMonth()));
+  let fimAno = hoje.getFullYear(), fimMes = hoje.getMonth();
+  if(diaHoje > fechamentoEsteMes){ fimMes += 1; if(fimMes>11){ fimMes=0; fimAno++; } }
+  const fimCiclo = new Date(fimAno, fimMes, Math.min(diaFechamento, ultimoDiaMes(fimAno, fimMes)));
+  let inicioAno = fimAno, inicioMes = fimMes - 1;
+  if(inicioMes<0){ inicioMes=11; inicioAno--; }
+  const inicioCiclo = new Date(inicioAno, inicioMes, Math.min(diaFechamento, ultimoDiaMes(inicioAno, inicioMes)));
+  let vencAno = fimAno, vencMes = fimMes;
+  if(diaVencimento && diaVencimento < diaFechamento){ vencMes += 1; if(vencMes>11){ vencMes=0; vencAno++; } }
+  const dataVencimento = diaVencimento ? new Date(vencAno, vencMes, Math.min(diaVencimento, ultimoDiaMes(vencAno, vencMes))) : null;
+  const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return { inicioISO: toISO(inicioCiclo), fimISO: toISO(fimCiclo), vencimentoISO: dataVencimento ? toISO(dataVencimento) : null };
+}
+function renderFaturas(){
+  const cardEl = document.getElementById('cardFaturas');
+  const listaEl = document.getElementById('listaFaturas');
+  const cartoes = contas.filter(c => contasDetalhes[c] && contasDetalhes[c].tipo==='cartao' && contasDetalhes[c].diaFechamento);
+  if(cartoes.length===0){ cardEl.style.display = 'none'; return; }
+  cardEl.style.display = 'block';
+  listaEl.innerHTML = cartoes.map(nome=>{
+    const det = contasDetalhes[nome];
+    const ciclo = calcularCicloFatura(det.diaFechamento, det.diaVencimento);
+    const gastosCiclo = transacoes.filter(t => t.conta===nome && t.tipo==='gasto' && t.data > ciclo.inicioISO && t.data <= ciclo.fimISO);
+    const total = gastosCiclo.reduce((s,t)=>s+t.valor,0);
+    const vencTxt = ciclo.vencimentoISO ? ciclo.vencimentoISO.split('-').reverse().join('/') : 'não definido';
+    return `<div class="orc-row">
+      <div class="orc-label">${nome}</div>
+      <div class="meta-sub" style="flex:1;"><span>Fecha em ${ciclo.fimISO.split('-').reverse().join('/')} · vence ${vencTxt}</span></div>
+      <div class="orc-val">${fmt(total)}</div>
+    </div>`;
+  }).join('');
 }
 function renderMetas(){
   const el = document.getElementById('metas');
@@ -1715,11 +1864,13 @@ async function importarBackupJSON(arquivo){
     transacoes = dados.transacoes || [];
     orcamentos = dados.orcamentos || {};
     contas = dados.contas && dados.contas.length ? dados.contas : contas;
+    contasDetalhes = dados.contasDetalhes || {};
     metas = dados.metas || [];
     recorrentes = dados.recorrentes || [];
     if(dados.tema) aplicarTema(dados.tema);
     await salvarTx(); await salvarOrc(); await salvarMetas(); await salvarRec();
     await setJSON(STORAGE_CONTAS, contas);
+    await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
     popularSelectsEstaticos();
     popularSeletorMes();
     render();
