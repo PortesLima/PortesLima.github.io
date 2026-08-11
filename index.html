@@ -494,6 +494,7 @@ const STORAGE_REC = 'recorrentes';
 const STORAGE_PIN = 'pin';
 const STORAGE_ONBOARDING = 'onboardingVisto';
 const STORAGE_MOEDA = 'moeda';
+const STORAGE_CAMBIO_CACHE = 'cambioCache';
 const MOEDAS = {
   BRL: {locale:'pt-BR', label:'R$ Real'},
   USD: {locale:'en-US', label:'$ Dólar'},
@@ -503,6 +504,8 @@ const MOEDAS = {
 let moedaAtual = 'BRL';
 let snapshotAnterior = null;
 let readonlyMode = false;
+let taxasCambio = { BRL:1, USD:1, EUR:1, GBP:1 };
+let cotacaoAtualizada = false;
 
 const CATEGORIAS = ['Moradia','Condomínio','Alimentação','Transporte','Lazer','Saúde','Educação','Assinaturas','Empréstimos','Financiamentos','Doação','Outros'];
 const CORES = {
@@ -673,6 +676,7 @@ async function driveSincronizarInicial(){
       await setJSON(STORAGE_MOEDA, moedaAtual);
       popularSelectsEstaticos();
       popularSeletorMes();
+      if(moedaAtual !== 'BRL' && !cotacaoAtualizada) await carregarCotacoes();
       render();
     }else{
       await driveSalvarAgora();
@@ -710,13 +714,39 @@ function fmtMesLabel(chave){
   const nomes = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   return `${nomes[parseInt(m)-1]}/${a}`;
 }
-function fmt(v){ const m = MOEDAS[moedaAtual] || MOEDAS.BRL; return v.toLocaleString(m.locale, {style:'currency', currency:moedaAtual}); }
+function fmt(v){
+  const m = MOEDAS[moedaAtual] || MOEDAS.BRL;
+  const valorConvertido = v * (taxasCambio[moedaAtual] || 1);
+  return valorConvertido.toLocaleString(m.locale, {style:'currency', currency:moedaAtual});
+}
+async function carregarCotacoes(){
+  let cache = null;
+  try{
+    cache = await getJSON(STORAGE_CAMBIO_CACHE, null);
+    const hoje = hojeISO();
+    if(cache && cache.data === hoje && cache.taxas){
+      taxasCambio = cache.taxas;
+      cotacaoAtualizada = true;
+      return;
+    }
+    const res = await fetch('https://api.frankfurter.app/latest?from=BRL&to=USD,EUR,GBP');
+    if(!res.ok) throw new Error('falha ao buscar cotação');
+    const dados = await res.json();
+    taxasCambio = { BRL:1, USD:dados.rates.USD, EUR:dados.rates.EUR, GBP:dados.rates.GBP };
+    cotacaoAtualizada = true;
+    await setJSON(STORAGE_CAMBIO_CACHE, { data: hoje, taxas: taxasCambio });
+  }catch(e){
+    console.error('Não foi possível atualizar a cotação, usando cache/1:1', e);
+    if(cache && cache.taxas) taxasCambio = cache.taxas;
+  }
+}
 async function alternarMoeda(){
   const codigos = Object.keys(MOEDAS);
   const idx = codigos.indexOf(moedaAtual);
   moedaAtual = codigos[(idx+1) % codigos.length];
   document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual;
   await setJSON(STORAGE_MOEDA, moedaAtual);
+  if(moedaAtual !== 'BRL' && !cotacaoAtualizada) await carregarCotacoes();
   driveAgendarSync();
   render();
 }
@@ -783,6 +813,10 @@ async function carregar(){
     document.getElementById('btnNotif').textContent = '🔔 Ativadas';
   }
   verificarNotificacoesPendentes();
+  if(moedaAtual !== 'BRL'){
+    await carregarCotacoes();
+    render();
+  }
 }
 async function salvarTx(){ await setJSON(STORAGE_TX, transacoes); driveAgendarSync(); }
 async function salvarOrc(){ await setJSON(STORAGE_ORC, orcamentos); driveAgendarSync(); }
