@@ -132,10 +132,6 @@
   @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
   .sec-fade{ animation: fadeIn .25s ease; }
 
-  @keyframes pulse{ 0%{opacity:.5;} 50%{opacity:.9;} 100%{opacity:.5;} }
-  .skeleton{ background:var(--card2); border-radius:8px; animation: pulse 1.3s ease-in-out infinite; }
-  .skeleton-chart{ height:200px; width:100%; }
-
   .modal-bg{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:900; display:flex; align-items:center; justify-content:center; padding:16px; }
   .modal-box{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px; max-width:440px; width:100%; }
   .modal-box h2{ margin-top:0; }
@@ -173,7 +169,7 @@
     <text x="36" y="50" text-anchor="middle" font-size="11" font-weight="700" fill="var(--btn-text)" font-family="Arial, sans-serif">R$</text>
   </svg>
   <div style="font-size:17px; font-weight:600;">Bolso Certo</div>
-  <div style="font-size:15px; color:var(--muted);" id="pinTitulo">Digite seu PIN</div>
+  <div style="font-size:15px; color:var(--muted);">Digite seu PIN</div>
   <input type="password" id="pinInput" inputmode="numeric" maxlength="6" style="width:160px; text-align:center; font-size:20px; letter-spacing:6px;" placeholder="••••">
   <button onclick="conferirPin()">Entrar</button>
   <div id="pinErro" style="color:var(--red); font-size:12px; display:none;">PIN incorreto, tente novamente.</div>
@@ -463,7 +459,7 @@
 
     <div id="viewLista">
       <div class="row">
-        <input type="text" id="busca" placeholder="Buscar por descrição (em todos os meses)..." oninput="render()">
+        <input type="text" id="busca" placeholder="Buscar por descrição (em todos os meses)..." oninput="renderDebounced()">
         <select id="filtroCategoria" onchange="render()"><option value="">Todas categorias</option></select>
         <select id="filtroStatus" onchange="render()">
           <option value="">Todos status</option>
@@ -530,7 +526,6 @@ const MOEDAS = {
 };
 let moedaAtual = 'BRL';
 let snapshotAnterior = null;
-let readonlyMode = false;
 let taxasCambio = { BRL:1, USD:1, EUR:1, GBP:1 };
 let cotacaoAtualizada = false;
 
@@ -551,7 +546,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.4';
+const APP_VERSION = '2026-08-11.5';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -743,6 +738,9 @@ function fmtMesLabel(chave){
   const nomes = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   return `${nomes[parseInt(m)-1]}/${a}`;
 }
+function fmtDataBR(dataISO){ return dataISO.split('-').reverse().join('/'); }
+function somarPorTipo(lista, tipo){ return lista.filter(t=>t.tipo===tipo).reduce((s,t)=>s+t.valor,0); }
+function somarPorTipoNoMes(lista, tipo, chave){ return somarPorTipo(lista.filter(t=>chaveMes(t.data)===chave), tipo); }
 function fmt(v){
   const m = MOEDAS[moedaAtual] || MOEDAS.BRL;
   const valorConvertido = v * (taxasCambio[moedaAtual] || 1);
@@ -998,11 +996,10 @@ async function adicionar(){
     if(anexoBase64) t.anexo = anexoBase64;
     cancelarEdicao();
   }else if(parcelas > 1 && tipo === 'gasto'){
-    const valorParcela = valorTotal;
     const grupo = uid();
     for(let i=0;i<parcelas;i++){
       transacoes.unshift({
-        id: uid()+i, tipo, desc: `${desc} (${i+1}/${parcelas})`, valor: valorParcela, categoria, conta,
+        id: uid()+i, tipo, desc: `${desc} (${i+1}/${parcelas})`, valor: valorTotal, categoria, conta,
         data: addMeses(dataISO, i), fixo:false, grupoParcela: grupo, status: i===0 ? status : 'pendente',
         anexo: anexoBase64, tag: tag||null
       });
@@ -1335,6 +1332,11 @@ function limparPeriodo(){
   document.getElementById('periodoAte').value = '';
   render();
 }
+let renderDebounceTimer = null;
+function renderDebounced(){
+  clearTimeout(renderDebounceTimer);
+  renderDebounceTimer = setTimeout(render, 250);
+}
 function render(){
   mesAtual = document.getElementById('mesSel').value || mesAtual;
   document.getElementById('subTitulo').textContent = `Visão geral de ${fmtMesLabel(mesAtual)}`;
@@ -1366,8 +1368,8 @@ function render(){
   // comparação com mês anterior
   const chaveAnt = mesAnterior(mesAtual);
   const doMesAnt = transacoes.filter(t=>chaveMes(t.data)===chaveAnt && (!conta || t.conta===conta));
-  const receitaAnt = doMesAnt.filter(t=>t.tipo==='receita').reduce((s,t)=>s+t.valor,0);
-  const gastoAnt = doMesAnt.filter(t=>t.tipo==='gasto').reduce((s,t)=>s+t.valor,0);
+  const receitaAnt = somarPorTipo(doMesAnt, 'receita');
+  const gastoAnt = somarPorTipo(doMesAnt, 'gasto');
   const saldoAnt = receitaAnt - gastoAnt;
 
   function deltaTxt(atual, anterior, invertido){
@@ -1438,7 +1440,8 @@ function render(){
     }
     ritmoEl.innerHTML = texto;
   }else if(totalGasto > 0){
-    const diasNoMes = new Date(parseInt(mesAtual.split('-')[0]), parseInt(mesAtual.split('-')[1]), 0).getDate();
+    const [anoRitmo, mesRitmo] = mesAtual.split('-').map(Number);
+    const diasNoMes = ultimoDiaMes(anoRitmo, mesRitmo-1);
     ritmoEl.innerHTML = `Média de <b style="color:var(--text)">${fmt(totalGasto/diasNoMes)}</b> por dia neste mês.`;
   }else{
     ritmoEl.textContent = 'Sem gastos lançados neste mês ainda.';
@@ -1449,7 +1452,7 @@ function render(){
   const [anoAtualNum, mesNum] = mesAtual.split('-');
   const chaveAnoPassado = `${parseInt(anoAtualNum)-1}-${mesNum}`;
   const doMesAnoPassado = transacoes.filter(t=>chaveMes(t.data)===chaveAnoPassado && (!conta || t.conta===conta));
-  const gastoAnoPassado = doMesAnoPassado.filter(t=>t.tipo==='gasto').reduce((s,t)=>s+t.valor,0);
+  const gastoAnoPassado = somarPorTipo(doMesAnoPassado, 'gasto');
   if(gastoAnoPassado > 0){
     const diffPct = Math.round(((totalGasto-gastoAnoPassado)/gastoAnoPassado)*100);
     const cor = diffPct<=0 ? 'var(--green)' : 'var(--red)';
@@ -1574,8 +1577,8 @@ function renderChartMes(conta){
     chaves.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
   }
   const base = transacoes.filter(t => !conta || t.conta===conta);
-  const receitasM = chaves.map(k => base.filter(t=>t.tipo==='receita'&&chaveMes(t.data)===k).reduce((s,t)=>s+t.valor,0));
-  const gastosM = chaves.map(k => base.filter(t=>t.tipo==='gasto'&&chaveMes(t.data)===k).reduce((s,t)=>s+t.valor,0));
+  const receitasM = chaves.map(k => somarPorTipoNoMes(base, 'receita', k));
+  const gastosM = chaves.map(k => somarPorTipoNoMes(base, 'gasto', k));
 
   const ctx = document.getElementById('chartMes');
   if(chartMes) chartMes.destroy();
@@ -1704,10 +1707,10 @@ function renderFaturas(){
     const ciclo = calcularCicloFatura(det.diaFechamento, det.diaVencimento);
     const gastosCiclo = transacoes.filter(t => t.conta===nome && t.tipo==='gasto' && t.data > ciclo.inicioISO && t.data <= ciclo.fimISO);
     const total = gastosCiclo.reduce((s,t)=>s+t.valor,0);
-    const vencTxt = ciclo.vencimentoISO ? ciclo.vencimentoISO.split('-').reverse().join('/') : 'não definido';
+    const vencTxt = ciclo.vencimentoISO ? fmtDataBR(ciclo.vencimentoISO) : 'não definido';
     return `<div class="orc-row">
       <div class="orc-label">${nome}</div>
-      <div class="meta-sub" style="flex:1;"><span>Fecha em ${ciclo.fimISO.split('-').reverse().join('/')} · vence ${vencTxt}</span></div>
+      <div class="meta-sub" style="flex:1;"><span>Fecha em ${fmtDataBR(ciclo.fimISO)} · vence ${vencTxt}</span></div>
       <div class="orc-val">${fmt(total)}</div>
     </div>`;
   }).join('');
@@ -1721,7 +1724,7 @@ function renderMetas(){
     let economiaTxt = '';
     if(falta > 0 && m.prazo){
       const meses = mesesAte(m.prazo);
-      if(meses > 0) economiaTxt = `<div class="meta-economia">Economize ${fmt(falta/meses)}/mês para chegar lá até ${m.prazo.split('-').reverse().join('/')}</div>`;
+      if(meses > 0) economiaTxt = `<div class="meta-economia">Economize ${fmt(falta/meses)}/mês para chegar lá até ${fmtDataBR(m.prazo)}</div>`;
       else economiaTxt = `<div class="meta-economia" style="color:var(--red)">Prazo já passou ou é este mês — faltam ${fmt(falta)}</div>`;
     }else if(falta === 0){
       economiaTxt = `<div class="meta-economia" style="color:var(--green)">Meta alcançada! 🎉</div>`;
@@ -1730,7 +1733,7 @@ function renderMetas(){
       <div class="meta-top"><b>${m.nome}</b><span>${pct}%</span></div>
       <div class="meta-track"><div class="meta-fill" style="width:${pct}%"></div></div>
       <div class="meta-sub">
-        <span>${fmt(m.valorAtual)} de ${fmt(m.valorAlvo)}${m.prazo ? ' · até '+m.prazo.split('-').reverse().join('/') : ''}</span>
+        <span>${fmt(m.valorAtual)} de ${fmt(m.valorAlvo)}${m.prazo ? ' · até '+fmtDataBR(m.prazo) : ''}</span>
         <span><button class="iconbtn" style="color:var(--blue)" onclick="addValorMeta(${m.id})">+ add</button><button class="iconbtn" onclick="verEvolucaoMeta(${m.id})" title="Ver evolução">📈</button><button class="iconbtn" onclick="editarMeta(${m.id})" title="Editar">✎</button><button class="iconbtn del" onclick="removerMeta(${m.id})">&times;</button></span>
       </div>
       ${economiaTxt}
@@ -1888,7 +1891,7 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   const chaveHoje = chaveMes(hojeISO());
   if(mesAtual === chaveHoje){
     const diaAtual = hoje.getDate();
-    const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0).getDate();
+    const diasNoMes = ultimoDiaMes(hoje.getFullYear(), hoje.getMonth());
     if(diaAtual >= 5 && totalGasto > 0){
       const projecao = (totalGasto/diaAtual) * diasNoMes;
       if(limiteTotal>0 && projecao > limiteTotal){
@@ -1922,7 +1925,7 @@ function renderProjecaoSaldo(){
     const d = new Date(hoje.getFullYear(), hoje.getMonth()-i, 1);
     chavesPassadas.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
   }
-  const receitaMediaBase = chavesPassadas.reduce((s,k)=>s+transacoes.filter(t=>t.tipo==='receita'&&chaveMes(t.data)===k).reduce((a,t)=>a+t.valor,0),0) / nMeses;
+  const receitaMediaBase = chavesPassadas.reduce((s,k)=>s+somarPorTipoNoMes(transacoes,'receita',k),0) / nMeses;
   // gasto médio "não fixo e sem parcela futura conhecida" — pra não contar duas vezes o que já está lançado como parcela futura
   const gastoMedioVariavel = chavesPassadas.reduce((s,k)=>s+transacoes.filter(t=>t.tipo==='gasto'&&!t.fixo&&!t.grupoParcela&&chaveMes(t.data)===k).reduce((a,t)=>a+t.valor,0),0) / nMeses;
 
@@ -1935,7 +1938,7 @@ function renderProjecaoSaldo(){
   let acumulado = 0;
   const pontos = chavesFuturas.map(chave => {
     // já lançado nesse mês (parcelas futuras, contas fixas já criadas, etc.)
-    const jaLancadoReceita = transacoes.filter(t=>t.tipo==='receita'&&chaveMes(t.data)===chave).reduce((s,t)=>s+t.valor,0);
+    const jaLancadoReceita = somarPorTipoNoMes(transacoes, 'receita', chave);
     const jaLancadoGastoFixo = transacoes.filter(t=>t.tipo==='gasto'&&t.fixo&&chaveMes(t.data)===chave).reduce((s,t)=>s+t.valor,0);
     const jaLancadoParcela = transacoes.filter(t=>t.tipo==='gasto'&&t.grupoParcela&&chaveMes(t.data)===chave).reduce((s,t)=>s+t.valor,0);
 
@@ -2007,7 +2010,7 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   const hoje = new Date();
   if(mesAtual === chaveMes(hojeISO()) && totalGasto > 0){
     const diaAtual = hoje.getDate();
-    const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0).getDate();
+    const diasNoMes = ultimoDiaMes(hoje.getFullYear(), hoje.getMonth());
     const mediaDiaria = totalGasto / diaAtual;
     const projecaoFechamento = mediaDiaria * diasNoMes;
     const limiteTotal = Object.values(orcamentos).reduce((s,v)=>s+v,0);
@@ -2038,8 +2041,8 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   // 3) fim de ano: se o saldo acumulado do ano está apertado, sugerir congelar supérfluos até dezembro
   const anoAtual = new Date().getFullYear();
   const doAnoTodo = transacoes.filter(t => t.data.slice(0,4) === String(anoAtual));
-  const receitaAno = doAnoTodo.filter(t=>t.tipo==='receita').reduce((s,t)=>s+t.valor,0);
-  const gastoAno = doAnoTodo.filter(t=>t.tipo==='gasto').reduce((s,t)=>s+t.valor,0);
+  const receitaAno = somarPorTipo(doAnoTodo, 'receita');
+  const gastoAno = somarPorTipo(doAnoTodo, 'gasto');
   const saldoAno = receitaAno - gastoAno;
   const mesAtualNum = hoje.getMonth()+1;
   if(mesAtualNum <= 11 && receitaAno>0 && saldoAno < receitaAno*0.1){
@@ -2092,8 +2095,8 @@ function exportarPDF(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const doMes = transacoes.filter(t => chaveMes(t.data) === mesAtual);
-  const receitas = doMes.filter(t=>t.tipo==='receita').reduce((s,t)=>s+t.valor,0);
-  const gastos = doMes.filter(t=>t.tipo==='gasto').reduce((s,t)=>s+t.valor,0);
+  const receitas = somarPorTipo(doMes, 'receita');
+  const gastos = somarPorTipo(doMes, 'gasto');
 
   doc.setFontSize(16);
   doc.text(`Relatório financeiro — ${fmtMesLabel(mesAtual)}`, 14, 18);
@@ -2129,8 +2132,8 @@ function exportarPDF(){
 function exportarPDFAnual(){
   const ano = document.getElementById('anoRelatorio').value;
   const doAno = transacoes.filter(t => t.data.slice(0,4) === ano);
-  const receitasAno = doAno.filter(t=>t.tipo==='receita').reduce((s,t)=>s+t.valor,0);
-  const gastosAno = doAno.filter(t=>t.tipo==='gasto').reduce((s,t)=>s+t.valor,0);
+  const receitasAno = somarPorTipo(doAno, 'receita');
+  const gastosAno = somarPorTipo(doAno, 'gasto');
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
@@ -2156,8 +2159,8 @@ function exportarPDFAnual(){
     const chave = `${ano}-${String(m).padStart(2,'0')}`;
     const doMes = doAno.filter(t=>chaveMes(t.data)===chave);
     if(doMes.length===0) continue;
-    const rec = doMes.filter(t=>t.tipo==='receita').reduce((s,t)=>s+t.valor,0);
-    const gas = doMes.filter(t=>t.tipo==='gasto').reduce((s,t)=>s+t.valor,0);
+    const rec = somarPorTipo(doMes, 'receita');
+    const gas = somarPorTipo(doMes, 'gasto');
     if(y > 270){ doc.addPage(); y = 20; }
     doc.text(fmtMesLabel(chave), 14, y);
     doc.text(fmt(rec), 60, y);
@@ -2285,9 +2288,11 @@ async function importarBackupJSON(arquivo){
     metas = dados.metas || [];
     recorrentes = dados.recorrentes || [];
     if(dados.tema) aplicarTema(dados.tema);
+    if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
     await salvarTx(); await salvarOrc(); await salvarMetas(); await salvarRec();
     await setJSON(STORAGE_CONTAS, contas);
     await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
+    await setJSON(STORAGE_MOEDA, moedaAtual);
     popularSelectsEstaticos();
     popularSeletorMes();
     render();
@@ -2301,16 +2306,6 @@ function toggleMenuBackup(){
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
-function apagarTodosGastos(){
-  const qtdAntes = transacoes.length;
-  const qtdGastos = transacoes.filter(t=>t.tipo==='gasto').length;
-  if(!confirm(`Isso vai apagar ${qtdGastos} lançamento(s) de gasto e manter só as receitas. Não pode ser desfeito. Continuar?`)) return;
-  transacoes = transacoes.filter(t=>t.tipo!=='gasto');
-  salvarTx();
-  render();
-  alert(`Pronto. ${qtdAntes - transacoes.length} lançamento(s) de gasto removido(s).`);
-}
-
 // ---- Link somente leitura ----
 function gerarLinkSomenteLeitura(){
   const url = new URL(window.location.href);
@@ -2321,7 +2316,6 @@ function gerarLinkSomenteLeitura(){
 function aplicarModoReadonly(){
   const params = new URLSearchParams(window.location.search);
   if(params.get('readonly') === '1'){
-    readonlyMode = true;
     document.body.classList.add('readonly');
   }
 }
