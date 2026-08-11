@@ -976,7 +976,7 @@ async function adicionar(){
       transacoes.unshift({
         id: uid()+i, tipo, desc: `${desc} (${i+1}/${parcelas})`, valor: valorParcela, categoria, conta,
         data: addMeses(dataISO, i), fixo:false, grupoParcela: grupo, status: i===0 ? status : 'pendente',
-        anexo: i===0 ? anexoBase64 : null
+        anexo: anexoBase64
       });
     }
   }else{
