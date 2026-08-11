@@ -129,6 +129,11 @@
 
   canvas{max-height:200px;}
 
+  .help-icon{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:var(--card2); border:1px solid var(--border); color:var(--muted); font-size:10.5px; font-weight:700; cursor:help; margin-left:5px; position:relative; vertical-align:middle; }
+  .help-icon::after{ content:attr(data-tip); position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:11.5px; font-weight:400; line-height:1.4; width:230px; white-space:normal; text-align:left; box-shadow:0 4px 16px rgba(0,0,0,.25); opacity:0; visibility:hidden; transition:opacity .15s ease; z-index:50; pointer-events:none; }
+  .help-icon:hover::after, .help-icon:focus::after{ opacity:1; visibility:visible; }
+  @media(max-width:480px){ .help-icon::after{ width:180px; left:auto; right:-10px; transform:none; } }
+
   @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
   .sec-fade{ animation: fadeIn .25s ease; }
 
@@ -189,7 +194,7 @@
 
   <div id="modalEvolucaoMeta" class="modal-bg" style="display:none;">
     <div class="modal-box" style="max-width:520px;">
-      <h2 id="tituloEvolucaoMeta">Evolução da meta</h2>
+      <h2 id="tituloEvolucaoMeta">Evolução da meta<span class="help-icon" tabindex="0" data-tip="Cada ponto é um valor adicionado à meta, na ordem em que foi lançado. Mostra quanto você já acumulou ao longo do tempo, não uma previsão.">?</span></h2>
       <div class="chart-wrap" style="height:240px;"><canvas id="chartEvolucaoMeta"></canvas></div>
       <div id="evolucaoMetaVazio" class="empty" style="display:none;">Ainda não há valores adicionados a esta meta.</div>
       <button class="secondary" onclick="fecharModalEvolucaoMeta()" style="width:100%; margin-top:12px;">Fechar</button>
@@ -318,7 +323,7 @@
       <div class="meta-sub" id="orcTotalTexto"></div>
     </div>
     <div class="card">
-      <h2>Fixos x variáveis</h2>
+      <h2>Fixos x variáveis<span class="help-icon" tabindex="0" data-tip="Proporção entre gastos marcados como 'fixo' no lançamento e os demais gastos do mês selecionado. Ajuda a ver quanto do seu orçamento já está comprometido de antemão.">?</span></h2>
       <div style="display:flex; align-items:center; gap:14px;">
         <div style="width:90px; height:90px; flex-shrink:0; position:relative;"><canvas id="chartFixoVar"></canvas></div>
         <div style="flex:1;">
@@ -349,15 +354,15 @@
 
   <div class="cols">
     <div class="card">
-      <h2>Por categoria</h2>
+      <h2>Por categoria<span class="help-icon" tabindex="0" data-tip="Soma dos gastos do mês selecionado, agrupados por categoria. Só considera gastos, não receitas, e só o mês atual no topo da tela.">?</span></h2>
       <div class="chart-wrap"><canvas id="chartCat"></canvas><div class="empty-chart" id="chartCatVazio" style="display:none;">Nenhum gasto lançado neste mês ainda.</div></div>
     </div>
     <div class="card">
-      <h2>Últimos 6 meses</h2>
+      <h2>Últimos 6 meses<span class="help-icon" tabindex="0" data-tip="Compara receitas e gastos totais de cada um dos últimos 6 meses (incluindo o atual), lado a lado, para ver a tendência mês a mês.">?</span></h2>
       <div class="chart-wrap"><canvas id="chartMes"></canvas></div>
     </div>
     <div class="card">
-      <h2>Saldo acumulado</h2>
+      <h2>Saldo acumulado<span class="help-icon" tabindex="0" data-tip="Cada ponto é uma transação já ocorrida (até hoje), na ordem cronológica — soma receitas e subtrai gastos. Mostra a tendência histórica real, não uma previsão. Datas repetidas no eixo indicam vários lançamentos no mesmo dia.">?</span></h2>
       <div class="chart-wrap"><canvas id="chartSaldo"></canvas><div class="empty-chart" id="chartSaldoVazio" style="display:none;">Adicione seu primeiro lançamento para ver a evolução do saldo.</div></div>
     </div>
   </div>
@@ -398,7 +403,7 @@
   </div>
 
   <div class="card" style="margin-top:14px;">
-    <h2>Simulador de economia</h2>
+    <h2>Simulador de economia<span class="help-icon" tabindex="0" data-tip="Simulação simples: valor mensal × número de meses, sem juros. Não usa seus dados reais — é só uma calculadora para planejar quanto guardar.">?</span></h2>
     <div class="row">
       <input type="number" id="simValorMensal" placeholder="Valor guardado por mês (R$)" step="10">
       <input type="number" id="simMeses" placeholder="Por quantos meses" step="1" min="1">
@@ -492,7 +497,7 @@
 
     <div id="viewDicas" style="display:none;">
       <div class="card" style="margin-bottom:14px;">
-        <h3 style="margin:0 0 8px;">Projeção de saldo</h3>
+        <h3 style="margin:0 0 8px;">Projeção de saldo<span class="help-icon" tabindex="0" data-tip="Estimativa para os próximos 3 meses: usa receita/gastos já lançados quando existem, e a média dos últimos 3 meses fechados para preencher o resto, somando parcelas e contas fixas já cadastradas. É uma projeção, não um extrato real.">?</span></h3>
         <div class="cols2" style="margin-bottom:0; align-items:center;">
           <div id="projecaoTexto" style="font-size:12.5px; color:var(--muted);"></div>
           <div class="chart-wrap" style="height:160px;"><canvas id="chartProjecao"></canvas></div>
@@ -547,7 +552,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.7';
+const APP_VERSION = '2026-08-11.8';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
