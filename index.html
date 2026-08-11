@@ -505,22 +505,55 @@ let driveFileId = null;
 let tokenClient = null;
 let syncTimer = null;
 
+let renovacaoTimer = null;
+let callbackTokenPendente = null;
 function initGoogle(){
   if(typeof google === 'undefined') return;
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: DRIVE_SCOPE,
     callback: async (resp) => {
-      if(resp.error){ alert('Não foi possível conectar com o Google.'); return; }
+      const cb = callbackTokenPendente;
+      callbackTokenPendente = null;
+      if(resp.error){
+        if(cb) cb(false);
+        else alert('Não foi possível conectar com o Google.');
+        return;
+      }
       accessToken = resp.access_token;
+      agendarRenovacaoToken();
+      if(cb){ cb(true); return; }
       atualizarStatusGoogle('conectando');
       await driveSincronizarInicial();
     }
   });
+  tentarConexaoAutomatica();
+}
+async function tentarConexaoAutomatica(){
+  if(accessToken) return;
+  const ok = await renovarTokenSilenciosamente();
+  if(ok){
+    atualizarStatusGoogle('conectando');
+    await driveSincronizarInicial();
+  }
 }
 function entrarGoogle(){
   if(!tokenClient){ alert('O login do Google ainda está carregando, tente de novo em alguns segundos.'); return; }
   tokenClient.requestAccessToken();
+}
+function renovarTokenSilenciosamente(){
+  return new Promise(resolve => {
+    if(!tokenClient){ resolve(false); return; }
+    callbackTokenPendente = (ok) => resolve(ok);
+    tokenClient.requestAccessToken({ prompt: '' });
+  });
+}
+function agendarRenovacaoToken(){
+  clearTimeout(renovacaoTimer);
+  renovacaoTimer = setTimeout(async () => {
+    const ok = await renovarTokenSilenciosamente();
+    if(!ok) atualizarStatusGoogle('expirado');
+  }, 50 * 60 * 1000);
 }
 function atualizarStatusGoogle(status){
   const btn = document.getElementById('btnGoogle');
@@ -541,12 +574,16 @@ function montarEstado(){
     tema: document.documentElement.getAttribute('data-theme') || 'dark'
   };
 }
-async function driveApi(path, opts={}){
+async function driveApi(path, opts={}, jaTentouRenovar){
   const res = await fetch('https://www.googleapis.com/'+path, {
     ...opts,
     headers: { ...(opts.headers||{}), Authorization: 'Bearer '+accessToken }
   });
   if(res.status === 401){
+    if(!jaTentouRenovar){
+      const ok = await renovarTokenSilenciosamente();
+      if(ok) return driveApi(path, opts, true);
+    }
     accessToken = null;
     atualizarStatusGoogle('expirado');
     throw new Error('token expirado');
