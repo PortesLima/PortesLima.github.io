@@ -368,7 +368,7 @@
       <div class="chart-wrap"><canvas id="chartCat"></canvas><div class="empty-chart" id="chartCatVazio" style="display:none;">Nenhum gasto lançado neste mês ainda.</div></div>
     </div>
     <div class="card">
-      <h2>Últimos 6 meses<span class="help-icon" tabindex="0" data-tip="Compara receitas e gastos totais de cada um dos últimos 6 meses (incluindo o atual), lado a lado, para ver a tendência mês a mês.">?</span></h2>
+      <h2>Últimos 6 meses<span class="help-icon" tabindex="0" data-tip="Compara receitas e gastos totais de cada mês (incluindo o atual), lado a lado, para ver a tendência. O histórico do app começa em julho/2026, então no início aparecem menos de 6 barras.">?</span></h2>
       <div class="chart-wrap"><canvas id="chartMes"></canvas></div>
     </div>
     <div class="card">
@@ -507,7 +507,7 @@
 
     <div id="viewDicas" style="display:none;">
       <div class="card" style="margin-bottom:14px;">
-        <h3 style="margin:0 0 8px;">Projeção de saldo<span class="help-icon" tabindex="0" data-tip="A linha parte do saldo atual das suas contas (informado por você em Contas) — ou, se não informado, do resultado do mês atual — e, para cada mês até dezembro, soma a sobra ou o rombo estimado: receita/gastos já lançados quando existem, senão a média dos últimos 3 meses fechados, mais parcelas e contas fixas já cadastradas. É uma projeção, não um extrato real.">?</span></h3>
+        <h3 style="margin:0 0 8px;">Projeção de saldo<span class="help-icon" tabindex="0" data-tip="A linha parte do saldo atual das suas contas (informado por você em Contas) — ou, se não informado, do resultado do mês atual — e, para cada mês até dezembro, soma a sobra ou o rombo estimado: receita/gastos já lançados quando existem, senão a média dos meses fechados desde julho/2026 (até 3), mais parcelas e contas fixas já cadastradas. É uma projeção, não um extrato real.">?</span></h3>
         <div class="cols2" style="margin-bottom:0; align-items:center;">
           <div id="projecaoTexto" style="font-size:12.5px; color:var(--muted);"></div>
           <div class="chart-wrap" style="height:160px;"><canvas id="chartProjecao"></canvas></div>
@@ -547,6 +547,9 @@ const STORAGE_PIN = 'pin';
 const STORAGE_ONBOARDING = 'onboardingVisto';
 const STORAGE_MOEDA = 'moeda';
 const STORAGE_CAMBIO_CACHE = 'cambioCache';
+// marco zero do histórico: nenhum cálculo de média/tendência olha para antes deste mês.
+// (o usuário só começou a lançar dados de forma completa a partir daqui.)
+const HISTORICO_INICIO = '2026-07';
 const MOEDAS = {
   BRL: {locale:'pt-BR', label:'R$ Real'},
   USD: {locale:'en-US', label:'$ Dólar'},
@@ -578,7 +581,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.11';
+const APP_VERSION = '2026-08-11.12';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1674,8 +1677,11 @@ function renderChartMes(conta){
   const chaves = [];
   for(let i=5;i>=0;i--){
     const d = new Date(hoje.getFullYear(), hoje.getMonth()-i, 1);
-    chaves.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+    const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if(k >= HISTORICO_INICIO) chaves.push(k);
   }
+  // se o mês selecionado é anterior ao início do histórico, mostra ao menos ele
+  if(chaves.length === 0) chaves.push(mesAtual);
   const base = transacoes.filter(t => !conta || t.conta===conta);
   const receitasM = chaves.map(k => somarPorTipoNoMes(base, 'receita', k));
   const gastosM = chaves.map(k => somarPorTipoNoMes(base, 'gasto', k));
@@ -1736,15 +1742,17 @@ function mediaCategoriaUltimosMeses(cat, nMeses){
   const [ano, mes] = mesAtual.split('-').map(Number);
   for(let i=1; i<=nMeses; i++){
     const d = new Date(ano, mes-1-i, 1);
-    chaves.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+    const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if(k >= HISTORICO_INICIO) chaves.push(k);
   }
+  if(chaves.length === 0) return null;
   const valores = chaves.map(chave =>
     transacoes.filter(t=>t.tipo==='gasto' && t.categoria===cat && chaveMes(t.data)===chave)
       .reduce((s,t)=>s+t.valor,0)
   );
   const comDados = valores.filter(v=>v>0);
   if(comDados.length === 0) return null;
-  return valores.reduce((s,v)=>s+v,0) / nMeses;
+  return valores.reduce((s,v)=>s+v,0) / chaves.length;
 }
 function renderOrcamentos(porCat){
   const el = document.getElementById('orcamentos');
@@ -2015,12 +2023,20 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
 
 function renderProjecaoSaldo(){
   const textoEl = document.getElementById('projecaoTexto');
-  const nBaseMeses = 3;
-  // média dos últimos 3 meses fechados, como linha de base para receita/gasto "não previsível"
-  const chavesPassadas = [];
   const hoje = new Date();
 
   const chaveMesCorrente = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+
+  // meses fechados que servem de base para a média: os até 3 anteriores ao mês atual,
+  // mas nunca antes de HISTORICO_INICIO. A média é dividida pelos meses que existem
+  // nessa janela — não por 3 fixo — pra não subestimar quando o histórico é curto.
+  const chavesPassadas = [];
+  for(let i=1;i<=3;i++){
+    const d = new Date(hoje.getFullYear(), hoje.getMonth()-i, 1);
+    const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if(k >= HISTORICO_INICIO) chavesPassadas.push(k);
+  }
+  const nBaseMeses = Math.max(1, chavesPassadas.length);
 
   // ponto de partida da linha:
   //  - se o usuário informou o saldo total das contas, parte desse valor (ajustado pelos
@@ -2044,10 +2060,6 @@ function renderProjecaoSaldo(){
     partidaReal = false;
   }
 
-  for(let i=1;i<=3;i++){
-    const d = new Date(hoje.getFullYear(), hoje.getMonth()-i, 1);
-    chavesPassadas.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
-  }
   const receitaMediaBase = chavesPassadas.reduce((s,k)=>s+somarPorTipoNoMes(transacoes,'receita',k),0) / nBaseMeses;
   // gasto médio "não fixo e sem parcela futura conhecida" — pra não contar duas vezes o que já está lançado como parcela futura
   const gastoMedioVariavel = chavesPassadas.reduce((s,k)=>s+transacoes.filter(t=>t.tipo==='gasto'&&!t.fixo&&!t.grupoParcela&&chaveMes(t.data)===k).reduce((a,t)=>a+t.valor,0),0) / nBaseMeses;
@@ -2187,7 +2199,7 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
     dicas.push({tipo:'warning', ico:'📉', html:`${abertura} Vale se planejar com antecedência.`});
   }
 
-  // 2c) categoria com maior potencial de economia: maior alta vs média dos últimos 3 meses
+  // 2c) categoria com maior potencial de economia: maior alta vs média dos meses anteriores (até 3, desde julho/2026)
   const candidatasCat = Object.entries(porCat)
     .map(([cat,val]) => ({cat, val, media: mediaCategoriaUltimosMeses(cat,3)}))
     .filter(c => c.media && c.val > c.media*1.15)
@@ -2195,7 +2207,7 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   if(candidatasCat.length > 0){
     const c = candidatasCat[0];
     const diffPct = Math.round(((c.val-c.media)/c.media)*100);
-    dicas.push({tipo:'tip', ico:'💡', html:`<b>${c.cat}</b> está ${diffPct}% acima da sua média dos últimos 3 meses (${fmt(c.val)} vs ${fmt(c.media)}) — é onde você tem mais potencial de economia agora.`});
+    dicas.push({tipo:'tip', ico:'💡', html:`<b>${c.cat}</b> está ${diffPct}% acima da sua média recente (${fmt(c.val)} vs ${fmt(c.media)}) — é onde você tem mais potencial de economia agora.`});
   }
 
   // 3) fim de ano: se o saldo acumulado do ano está apertado, sugerir congelar supérfluos até dezembro
