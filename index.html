@@ -205,6 +205,16 @@
     <div class="modal-box" style="max-width:520px;">
       <h2>Gerenciar contas e cartões</h2>
       <div id="listaContas" style="margin-bottom:14px;"></div>
+      <div style="border-top:1px solid var(--border); padding-top:12px; margin-bottom:12px;">
+        <label style="font-size:12.5px; color:var(--muted); display:block; margin-bottom:6px;">
+          Saldo total das contas hoje <span class="help-icon" tabindex="0" data-tip="Quanto você tem somando todas as suas contas neste momento. Serve só para a projeção de saldo (aba Dicas) partir de um número real. Não altera seus lançamentos nem os KPIs.">?</span>
+        </label>
+        <div class="row">
+          <input type="number" inputmode="decimal" step="0.01" id="inputSaldoContas" placeholder="ex: 20000.00">
+          <button onclick="salvarSaldoContas()">Salvar</button>
+        </div>
+        <div id="saldoContasInfo" style="font-size:11.5px; color:var(--muted); margin-top:4px;"></div>
+      </div>
       <div style="border-top:1px solid var(--border); padding-top:12px;">
         <div class="row">
           <input type="text" id="novaContaNome" placeholder="Nome (ex: Nubank, Cofre)">
@@ -497,7 +507,7 @@
 
     <div id="viewDicas" style="display:none;">
       <div class="card" style="margin-bottom:14px;">
-        <h3 style="margin:0 0 8px;">Projeção de saldo<span class="help-icon" tabindex="0" data-tip="Estimativa para os próximos 3 meses: usa receita/gastos já lançados quando existem, e a média dos últimos 3 meses fechados para preencher o resto, somando parcelas e contas fixas já cadastradas. É uma projeção, não um extrato real.">?</span></h3>
+        <h3 style="margin:0 0 8px;">Projeção de saldo<span class="help-icon" tabindex="0" data-tip="A linha parte do saldo atual das suas contas (informado por você em Contas) — ou, se não informado, do resultado do mês atual — e, para cada mês até dezembro, soma a sobra ou o rombo estimado: receita/gastos já lançados quando existem, senão a média dos últimos 3 meses fechados, mais parcelas e contas fixas já cadastradas. É uma projeção, não um extrato real.">?</span></h3>
         <div class="cols2" style="margin-bottom:0; align-items:center;">
           <div id="projecaoTexto" style="font-size:12.5px; color:var(--muted);"></div>
           <div class="chart-wrap" style="height:160px;"><canvas id="chartProjecao"></canvas></div>
@@ -520,6 +530,7 @@ const STORAGE_CONTAS = 'contas';
 const STORAGE_CONTAS_DETALHES = 'contasDetalhes';
 const STORAGE_METAS = 'metas';
 const STORAGE_REC = 'recorrentes';
+const STORAGE_SALDO_CONTAS = 'saldoContas';
 const STORAGE_PIN = 'pin';
 const STORAGE_ONBOARDING = 'onboardingVisto';
 const STORAGE_MOEDA = 'moeda';
@@ -548,11 +559,14 @@ let contas = ['Conta corrente','Cartão de crédito','Dinheiro','Outros'];
 let contasDetalhes = {};
 let metas = [];
 let recorrentes = [];
+// saldo total das contas informado manualmente pelo usuário, usado como âncora da projeção.
+// { valor: number, em: 'YYYY-MM-DD' } — ou null se nunca foi informado.
+let saldoContas = null;
 let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.8';
+const APP_VERSION = '2026-08-11.10';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -640,7 +654,7 @@ function atualizarStatusGoogle(status){
 }
 function montarEstado(){
   return {
-    transacoes, orcamentos, contas, contasDetalhes, metas, recorrentes, moeda: moedaAtual,
+    transacoes, orcamentos, contas, contasDetalhes, metas, recorrentes, saldoContas, moeda: moedaAtual,
     tema: document.documentElement.getAttribute('data-theme') || 'dark'
   };
 }
@@ -690,6 +704,7 @@ async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
   contasDetalhes = dados.contasDetalhes || {};
   metas = dados.metas || [];
   recorrentes = dados.recorrentes || [];
+  saldoContas = dados.saldoContas || null;
   if(dados.tema) aplicarTema(dados.tema);
   if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
   await setJSON(STORAGE_TX, transacoes);
@@ -698,6 +713,7 @@ async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
   await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
   await setJSON(STORAGE_METAS, metas);
   await setJSON(STORAGE_REC, recorrentes);
+  await setJSON(STORAGE_SALDO_CONTAS, saldoContas);
   await setJSON(STORAGE_MOEDA, moedaAtual);
   popularSelectsEstaticos();
   popularSeletorMes();
@@ -848,6 +864,7 @@ async function carregar(){
   contasDetalhes = await getJSON(STORAGE_CONTAS_DETALHES, {});
   metas = await getJSON(STORAGE_METAS, []);
   recorrentes = await getJSON(STORAGE_REC, []);
+  saldoContas = await getJSON(STORAGE_SALDO_CONTAS, null);
   moedaAtual = await getJSON(STORAGE_MOEDA, 'BRL');
   document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual;
 
@@ -878,7 +895,35 @@ async function salvarContas(){
 
 function abrirModalContas(){
   renderListaContas();
+  renderCampoSaldoContas();
   document.getElementById('modalContas').style.display = 'flex';
+}
+function renderCampoSaldoContas(){
+  const input = document.getElementById('inputSaldoContas');
+  const info = document.getElementById('saldoContasInfo');
+  if(saldoContas && typeof saldoContas.valor === 'number'){
+    input.value = saldoContas.valor;
+    const [y,m,d] = (saldoContas.em || '').split('-');
+    info.textContent = d ? `Informado em ${d}/${m}/${y}. Atualize sempre que quiser deixar a projeção mais precisa.`
+                         : 'A projeção de saldo parte deste valor.';
+  }else{
+    input.value = '';
+    info.textContent = 'Sem esse valor, a projeção parte do resultado (receita − gasto) do mês atual.';
+  }
+}
+async function salvarSaldoContas(){
+  const bruto = document.getElementById('inputSaldoContas').value.trim();
+  if(bruto === ''){
+    saldoContas = null;
+  }else{
+    const v = parseFloat(bruto.replace(',', '.'));
+    if(isNaN(v)){ alert('Informe um número válido.'); return; }
+    saldoContas = { valor: v, em: hojeISO() };
+  }
+  await setJSON(STORAGE_SALDO_CONTAS, saldoContas);
+  driveAgendarSync();
+  renderCampoSaldoContas();
+  render();
 }
 function fecharModalContas(){
   document.getElementById('modalContas').style.display = 'none';
@@ -1933,25 +1978,54 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
 
 function renderProjecaoSaldo(){
   const textoEl = document.getElementById('projecaoTexto');
-  const nMeses = 3;
+  const nBaseMeses = 3;
   // média dos últimos 3 meses fechados, como linha de base para receita/gasto "não previsível"
   const chavesPassadas = [];
   const hoje = new Date();
+
+  const chaveMesCorrente = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+
+  // ponto de partida da linha:
+  //  - se o usuário informou o saldo total das contas, parte desse valor (ajustado pelos
+  //    lançamentos feitos depois da data em que ele informou) — é o saldo bancário real;
+  //  - senão, parte do resultado (receita - gasto) do mês corrente.
+  let saldoInicial, partidaReal;
+  if(saldoContas && typeof saldoContas.valor === 'number'){
+    // ajusta o saldo informado pelos lançamentos entre a data em que ele foi informado
+    // e hoje (exclusive → inclusive de hoje). Lançamentos futuros NÃO entram aqui — eles
+    // já são contados nos meses projetados adiante, senão seriam contados duas vezes.
+    const desde = saldoContas.em || hojeISO();
+    const ate = hojeISO();
+    const ajuste = transacoes
+      .filter(t => t.data > desde && t.data <= ate)
+      .reduce((s,t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0);
+    saldoInicial = saldoContas.valor + ajuste;
+    partidaReal = true;
+  }else{
+    saldoInicial = somarPorTipoNoMes(transacoes, 'receita', chaveMesCorrente)
+                 - somarPorTipoNoMes(transacoes, 'gasto', chaveMesCorrente);
+    partidaReal = false;
+  }
+
   for(let i=1;i<=3;i++){
     const d = new Date(hoje.getFullYear(), hoje.getMonth()-i, 1);
     chavesPassadas.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
   }
-  const receitaMediaBase = chavesPassadas.reduce((s,k)=>s+somarPorTipoNoMes(transacoes,'receita',k),0) / nMeses;
+  const receitaMediaBase = chavesPassadas.reduce((s,k)=>s+somarPorTipoNoMes(transacoes,'receita',k),0) / nBaseMeses;
   // gasto médio "não fixo e sem parcela futura conhecida" — pra não contar duas vezes o que já está lançado como parcela futura
-  const gastoMedioVariavel = chavesPassadas.reduce((s,k)=>s+transacoes.filter(t=>t.tipo==='gasto'&&!t.fixo&&!t.grupoParcela&&chaveMes(t.data)===k).reduce((a,t)=>a+t.valor,0),0) / nMeses;
+  const gastoMedioVariavel = chavesPassadas.reduce((s,k)=>s+transacoes.filter(t=>t.tipo==='gasto'&&!t.fixo&&!t.grupoParcela&&chaveMes(t.data)===k).reduce((a,t)=>a+t.valor,0),0) / nBaseMeses;
 
+  // projeta do próximo mês até dezembro do ano corrente (mínimo 3 meses, pra não sumir
+  // quando já estamos em out/nov/dez).
   const chavesFuturas = [];
-  for(let i=0;i<nMeses;i++){
+  const mesesAteDezembro = 12 - (hoje.getMonth() + 1);
+  const nMeses = Math.max(3, mesesAteDezembro);
+  for(let i=1;i<=nMeses;i++){
     const d = new Date(hoje.getFullYear(), hoje.getMonth()+i, 1);
     chavesFuturas.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
   }
 
-  let acumulado = 0;
+  let acumulado = saldoInicial;
   const pontos = chavesFuturas.map(chave => {
     // já lançado nesse mês (parcelas futuras, contas fixas já criadas, etc.)
     const jaLancadoReceita = somarPorTipoNoMes(transacoes, 'receita', chave);
@@ -1975,10 +2049,13 @@ function renderProjecaoSaldo(){
   const ctx = document.getElementById('chartProjecao');
   if(chartProjecao) chartProjecao.destroy();
   const tc = getThemeColors();
+  // a linha começa no saldo de hoje (ponto âncora) e segue somando cada mês projetado
+  const labelsGrafico = ['hoje', ...pontos.map(p=>fmtMesLabel(p.mes))];
+  const dadosGrafico = [saldoInicial, ...pontos.map(p=>p.acumulado)];
   chartProjecao = new Chart(ctx, {
     type:'line',
-    data:{ labels: pontos.map(p=>fmtMesLabel(p.mes)), datasets:[
-      { label:'Saldo acumulado projetado', data:pontos.map(p=>p.acumulado), borderColor:'#4d9eff', backgroundColor:'rgba(77,158,255,.15)', fill:true, tension:.25, pointRadius:3 }
+    data:{ labels: labelsGrafico, datasets:[
+      { label:'Saldo projetado', data:dadosGrafico, borderColor:'#4d9eff', backgroundColor:'rgba(77,158,255,.15)', fill:true, tension:.25, pointRadius:3 }
     ]},
     options:{ maintainAspectRatio:false,
       scales:{ x:{ ticks:{color:tc.tick, font:{size:10}}, grid:{display:false} }, y:{ ticks:{color:tc.tick, font:{size:10}}, grid:{color:tc.grid} } },
@@ -1987,13 +2064,16 @@ function renderProjecaoSaldo(){
   });
 
   const ultimo = pontos[pontos.length-1];
-  const primeiro = pontos[0];
+  const partida = partidaReal
+    ? `Partindo do saldo atual das suas contas (<b>${fmt(saldoInicial)}</b>)`
+    : `Partindo do resultado de ${fmtMesLabel(chaveMesCorrente)} (<b>${fmt(saldoInicial)}</b>, receita − gasto do mês)`;
+  const semSaldoNota = partidaReal ? '' : ` <span style="opacity:.8;">Informe o saldo real das suas contas em <b>Contas</b> para a projeção partir do quanto você tem de verdade.</span>`;
   if(receitaMediaBase===0 && gastoMedioVariavel===0 && recorrentes.length===0){
     textoEl.textContent = 'Lance mais alguns meses de receitas e gastos para uma projeção confiável.';
   }else if(ultimo.acumulado < 0){
-    textoEl.innerHTML = `Com base na sua média recente, parcelas e contas fixas já cadastradas, seu saldo projetado para ${fmtMesLabel(ultimo.mes)} fica <b style="color:var(--red)">${fmt(ultimo.acumulado)}</b>. Vale ajustar gastos nos próximos meses.`;
+    textoEl.innerHTML = `${partida} e somando sua média recente, parcelas e contas fixas já cadastradas, seu saldo projetado para ${fmtMesLabel(ultimo.mes)} fica <b style="color:var(--red)">${fmt(ultimo.acumulado)}</b>. Vale ajustar gastos nos próximos meses.${semSaldoNota}`;
   }else{
-    textoEl.innerHTML = `Com base na sua média recente, parcelas e contas fixas já cadastradas, você deve acumular <b style="color:var(--green)">${fmt(ultimo.acumulado)}</b> até ${fmtMesLabel(ultimo.mes)}.`;
+    textoEl.innerHTML = `${partida} e somando sua média recente, parcelas e contas fixas já cadastradas, seu saldo projetado até ${fmtMesLabel(ultimo.mes)} é <b style="color:var(--green)">${fmt(ultimo.acumulado)}</b>.${semSaldoNota}`;
   }
 
   const detalheEl = document.getElementById('projecaoDetalhe');
@@ -2008,14 +2088,15 @@ function renderProjecaoSaldo(){
     if(d.gastoMedioVariavel>0) gastoPartes.push(`média de gastos variáveis: <b style="color:var(--text)">${fmt(d.gastoMedioVariavel)}</b>`);
     if(d.recorrentesGasto>0) gastoPartes.push(`fixos a lançar: <b style="color:var(--text)">${fmt(d.recorrentesGasto)}</b>`);
     const corSaldo = p.saldoMes>=0 ? 'var(--green)' : 'var(--red)';
+    const corAcum = p.acumulado>=0 ? 'var(--green)' : 'var(--red)';
     return `<div style="font-size:11.5px; color:var(--muted); margin-bottom:8px;">
-      <div style="color:var(--text); font-weight:600; margin-bottom:2px;">${fmtMesLabel(p.mes)} — saldo do mês: <span style="color:${corSaldo}">${fmt(p.saldoMes)}</span></div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:2px;">${fmtMesLabel(p.mes)} — ${p.saldoMes>=0?'sobra':'rombo'} de <span style="color:${corSaldo}">${fmt(p.saldoMes)}</span> → saldo projetado <span style="color:${corAcum}">${fmt(p.acumulado)}</span></div>
       ${receitaLinhas}
       <div>Gasto estimado: ${gastoPartes.join(' + ') || fmt(0)}</div>
     </div>`;
   }).join('');
 
-  return { pontos, gastoMedioVariavel };
+  return { pontos, gastoMedioVariavel, partidaReal };
 }
 
 function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
@@ -2063,7 +2144,10 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   // 2b) projeção de saldo futuro (parcelas/fixos já cadastrados) fica negativa em algum mês à frente
   const mesNegativo = projecao.pontos.find(p => p.acumulado < 0);
   if(mesNegativo){
-    dicas.push({tipo:'warning', ico:'📉', html:`Pelas contas fixas e parcelas já cadastradas, seu saldo projetado fica negativo em <b>${fmtMesLabel(mesNegativo.mes)}</b> (${fmt(mesNegativo.acumulado)}). Vale se planejar com antecedência.`});
+    const abertura = projecao.partidaReal
+      ? `No ritmo atual, seu saldo projetado fica negativo em <b>${fmtMesLabel(mesNegativo.mes)}</b> (${fmt(mesNegativo.acumulado)}) — ou seja, o dinheiro que você tem hoje não cobre até lá.`
+      : `Somando o resultado deste mês com as contas fixas e parcelas já cadastradas, a projeção fica negativa em <b>${fmtMesLabel(mesNegativo.mes)}</b> (${fmt(mesNegativo.acumulado)}).`;
+    dicas.push({tipo:'warning', ico:'📉', html:`${abertura} Vale se planejar com antecedência.`});
   }
 
   // 2c) categoria com maior potencial de economia: maior alta vs média dos últimos 3 meses
