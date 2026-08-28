@@ -475,7 +475,7 @@
     <div id="viewLista">
       <div class="row">
         <input type="text" id="busca" placeholder="Buscar por descrição (em todos os meses)..." oninput="renderDebounced()">
-        <select id="filtroCategoria" onchange="render()"><option value="">Todas categorias</option></select>
+        <select id="filtroCategoria" onchange="render()"><option value="">Todas categorias</option><option>Receita</option></select>
         <select id="filtroStatus" onchange="render()">
           <option value="">Todos status</option>
           <option value="pago">Pago</option>
@@ -581,7 +581,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.12';
+const APP_VERSION = '2026-08-11.13';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -857,7 +857,7 @@ function getThemeColors(){
 function popularSelectsEstaticos(){
   document.getElementById('categoria').innerHTML = CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('recCategoria').innerHTML = CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
-  document.getElementById('filtroCategoria').innerHTML = '<option value="">Todas categorias</option>' + CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('filtroCategoria').innerHTML = '<option value="">Todas categorias</option><option>Receita</option>' + CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('conta').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('contaFiltro').innerHTML = '<option value="">Todas as contas</option>' + contas.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('dataInput').value = hojeISO();
