@@ -210,7 +210,7 @@
           Saldo total das contas hoje <span class="help-icon" tabindex="0" data-tip="Quanto você tem somando todas as suas contas neste momento. Serve só para a projeção de saldo (aba Dicas) partir de um número real. Não altera seus lançamentos nem os KPIs.">?</span>
         </label>
         <div class="row">
-          <input type="number" inputmode="decimal" step="0.01" id="inputSaldoContas" placeholder="ex: 20000.00">
+          <input type="text" inputmode="decimal" id="inputSaldoContas" placeholder="ex: 20.000,00">
           <button onclick="salvarSaldoContas()">Salvar</button>
         </div>
         <div id="saldoContasInfo" style="font-size:11.5px; color:var(--muted); margin-top:4px;"></div>
@@ -523,6 +523,18 @@
 </div>
 
 <script>
+// window.storage é provido pelo runtime dos Artifacts. Fora dele (ex: GitHub Pages),
+// cai para localStorage com a mesma interface: get(k) -> {value} | null, set(k,v), remove(k).
+// Sem isto, no site publicado getJSON/setJSON falhavam em silêncio e NADA persistia por
+// dispositivo — só o Google Drive salvava.
+if(!window.storage){
+  window.storage = {
+    get: async (k) => { try{ const v = localStorage.getItem('bc_'+k); return v === null ? null : {value:v}; }catch(e){ return null; } },
+    set: async (k, v) => { try{ localStorage.setItem('bc_'+k, v); }catch(e){} },
+    remove: async (k) => { try{ localStorage.removeItem('bc_'+k); }catch(e){} }
+  };
+}
+
 const STORAGE_TX = 'transacoes';
 const STORAGE_ORC = 'orcamentos';
 const STORAGE_TEMA = 'tema';
@@ -566,7 +578,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.10';
+const APP_VERSION = '2026-08-11.11';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -901,8 +913,9 @@ function abrirModalContas(){
 function renderCampoSaldoContas(){
   const input = document.getElementById('inputSaldoContas');
   const info = document.getElementById('saldoContasInfo');
+  info.style.color = 'var(--muted)';
   if(saldoContas && typeof saldoContas.valor === 'number'){
-    input.value = saldoContas.valor;
+    input.value = saldoContas.valor.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
     const [y,m,d] = (saldoContas.em || '').split('-');
     info.textContent = d ? `Informado em ${d}/${m}/${y}. Atualize sempre que quiser deixar a projeção mais precisa.`
                          : 'A projeção de saldo parte deste valor.';
@@ -911,18 +924,42 @@ function renderCampoSaldoContas(){
     info.textContent = 'Sem esse valor, a projeção parte do resultado (receita − gasto) do mês atual.';
   }
 }
+function parseValorBR(txt){
+  // aceita "5970", "5970.50", "5.970,00", "R$ 5.970,00", "5 970,00", "15.000"
+  let s = String(txt).trim().replace(/[R$\s]/gi, '');
+  if(s === '') return NaN;
+  if(s.includes(',')){
+    // vírgula é o separador decimal → pontos são milhar
+    s = s.replace(/\./g, '').replace(',', '.');
+  }else{
+    const pontos = (s.match(/\./g) || []).length;
+    // "1.234.567" → milhar; "15.000" (ponto + exatamente 3 dígitos) → milhar;
+    // "5970.50" → decimal
+    if(pontos > 1 || /\.\d{3}$/.test(s)) s = s.replace(/\./g, '');
+  }
+  return parseFloat(s);
+}
 async function salvarSaldoContas(){
+  const info = document.getElementById('saldoContasInfo');
   const bruto = document.getElementById('inputSaldoContas').value.trim();
   if(bruto === ''){
     saldoContas = null;
   }else{
-    const v = parseFloat(bruto.replace(',', '.'));
-    if(isNaN(v)){ alert('Informe um número válido.'); return; }
+    const v = parseValorBR(bruto);
+    if(isNaN(v) || v < 0){
+      info.textContent = 'Valor inválido. Use apenas números, ex: 5970 ou 5.970,00.';
+      info.style.color = 'var(--red)';
+      return;
+    }
     saldoContas = { valor: v, em: hojeISO() };
   }
   await setJSON(STORAGE_SALDO_CONTAS, saldoContas);
   driveAgendarSync();
   renderCampoSaldoContas();
+  info.textContent = saldoContas
+    ? `✓ Saldo de ${fmt(saldoContas.valor)} salvo. A projeção (aba Dicas) já usa esse valor.`
+    : '✓ Saldo removido. A projeção volta a partir do resultado do mês.';
+  info.style.color = 'var(--green)';
   render();
 }
 function fecharModalContas(){
