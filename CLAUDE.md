@@ -56,9 +56,14 @@ in-memory state and month/period filters currently selected in the DOM.
 
 ### Persistence: three layers, always in this order
 
-1. **`window.storage`** (`getJSON`/`setJSON` helpers) — a key-value API assumed to be provided
-   by the Artifacts runtime. This is per-device/per-browser and is the only storage that works
-   offline.
+1. **`window.storage`** (`getJSON`/`setJSON` helpers) — a key-value API provided by the
+   Artifacts runtime. This is per-device/per-browser and the only storage that works offline.
+   On GitHub Pages the runtime does **not** provide it, so a shim at the very top of the
+   `<script>` falls back to `localStorage` (keys prefixed `bc_`) with the same
+   `get(k)→{value}|null` / `set(k,v)` / `remove(k)` interface. Without the shim, `getJSON`/
+   `setJSON` on the published site failed silently (empty `catch`) and nothing persisted
+   per-device — only Drive saved. Don't call `fetch`/`localStorage` for app state directly;
+   go through `getJSON`/`setJSON`.
 2. **Google Drive** (`drive.file` OAuth scope) — a single JSON file (`bolso-certo-dados.json`)
    per user, holding the full app state (see `montarEstado()`). This is what makes data
    available across devices. Sync is one-way-at-a-time and debounced: any mutation calls
@@ -117,6 +122,11 @@ diaVencimento}}`) holding extra config *only* for accounts marked as credit card
 entries in `contas` have no corresponding `contasDetalhes` entry. `CATEGORIAS`/`CORES` are
 fixed constants, not user-editable data — they aren't persisted per-user.
 
+`CATEGORIAS` holds **expense** categories only. Every income transaction has a fixed
+`categoria: 'Receita'` (the category dropdown is hidden for `tipo === 'receita'`), so
+`'Receita'` is added manually as an extra option in `filtroCategoria` (the Lançamentos
+category filter) on top of `CATEGORIAS`.
+
 ### Credit card invoice cycle math
 
 `calcularCicloFatura(diaFechamento, diaVencimento)` computes the currently-open billing cycle
@@ -126,22 +136,34 @@ diaFechamento`, same month otherwise. This is pure date arithmetic with no year-
 special-casing beyond normal `Date` rollover — if you touch it, re-verify with cases spanning
 Dec→Jan and short months (Feb).
 
+### History start marker
+
+`HISTORICO_INICIO` (`'2026-07'`, a `YYYY-MM` string near the top of the script) is the zero
+point for every rolling-average / trend calculation — the user only started entering complete
+data then, and earlier months had missing income that dragged projections down. Anything that
+looks back N months clips the window to `>= HISTORICO_INICIO` and divides by the number of
+months **actually in the window**, not a fixed N: `renderProjecaoSaldo()`'s base average,
+`mediaCategoriaUltimosMeses()`, and `renderChartMes()` ("Últimos 6 meses" — shows fewer bars
+early on). If you add another look-back, clip it the same way.
+
 ### Balance projection (Dicas tab)
 
 `renderProjecaoSaldo()` draws a line chart projecting the running account balance from *now*
 to December of the current year (minimum 3 months). The line's anchor point is either:
 
 - **`saldoContas`** (`{valor, em}` — a total-account-balance figure the user types once in the
-  *Contas* modal, stamped with the date entered), adjusted by transactions dated between `em`
-  and today. Future transactions are excluded from that adjustment — they're already counted
-  in the projected months ahead, so including them would double-count. `partidaReal` is true.
+  *Contas* modal, stamped with the date entered; `parseValorBR()` accepts `5970`, `5.970,00`,
+  `R$ 5.970,00`), adjusted by transactions dated between `em` and today. Future transactions
+  are excluded from that adjustment — they're already counted in the projected months ahead,
+  so including them would double-count. `partidaReal` is true.
 - If `saldoContas` is null: the current real month's `receita − gasto` result. `partidaReal`
   is false, and the summary text nudges the user to enter their real balance.
 
 Each projected month adds its estimated surplus/deficit: posted income/expenses when present,
-otherwise the 3-closed-month average, plus already-registered installments, fixed bills, and
-not-yet-launched recurring items. `partidaReal` is returned so `renderDicas()` can word the
-"projection goes negative" tip correctly. This is an estimate, not a ledger.
+otherwise the base average (up to 3 closed months since `HISTORICO_INICIO`, divided by how
+many exist), plus already-registered installments, fixed bills, and not-yet-launched recurring
+items. `partidaReal` is returned so `renderDicas()` can word the "projection goes negative"
+tip correctly. This is an estimate, not a ledger.
 
 ### Currency: display-only conversion
 
