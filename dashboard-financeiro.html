@@ -165,6 +165,24 @@
 </style>
 </head>
 <body>
+<div id="telaInicial" style="position:fixed; inset:0; background:var(--bg); z-index:1000; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px;">
+  <div style="width:100%; max-width:360px; text-align:center;">
+    <svg width="76" height="76" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:16px;">
+      <circle cx="36" cy="36" r="34" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="2"/>
+      <path d="M22 40c0-9 6-16 14-16s14 7 14 16" stroke="var(--blue)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <circle cx="36" cy="24" r="4" fill="var(--blue)"/>
+      <rect x="20" y="40" width="32" height="14" rx="4" fill="var(--blue)"/>
+      <text x="36" y="50" text-anchor="middle" font-size="11" font-weight="700" fill="var(--btn-text)" font-family="Arial, sans-serif">R$</text>
+    </svg>
+    <h1 style="font-size:24px; margin:0 0 6px;">Bolso Certo</h1>
+    <p style="font-size:13.5px; color:var(--muted); margin:0 0 24px;">Suas finanças pessoais organizadas num só lugar.</p>
+    <div class="card" style="padding:20px; text-align:left;">
+      <div id="telaInicialResumo" style="font-size:13px; color:var(--muted); margin-bottom:16px;">Carregando seus dados…</div>
+      <button id="btnEntrarApp" onclick="entrarNoApp()" style="width:100%; padding:12px;">Entrar nos registros</button>
+    </div>
+    <p style="font-size:11px; color:var(--muted2); margin-top:16px;">Seus dados ficam no seu navegador e, se conectar, no seu Google Drive.</p>
+  </div>
+</div>
 <div id="telaPin" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:999; flex-direction:column; align-items:center; justify-content:center; gap:14px;">
   <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="36" cy="36" r="34" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="2"/>
@@ -581,7 +599,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.13';
+const APP_VERSION = '2026-08-11.14';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -2364,6 +2382,30 @@ function exportarPDFAnual(){
   doc.save(`relatorio-anual-${ano}.pdf`);
 }
 
+// ---- Tela inicial (abertura) ----
+function atualizarResumoTelaInicial(){
+  const el = document.getElementById('telaInicialResumo');
+  if(!el) return;
+  const chaveHoje = chaveMes(hojeISO());
+  const receita = somarPorTipoNoMes(transacoes, 'receita', chaveHoje);
+  const gasto = somarPorTipoNoMes(transacoes, 'gasto', chaveHoje);
+  const abertas = transacoes.filter(t => t.tipo==='gasto' && statusEfetivo(t) !== 'pago').length;
+  if(transacoes.length === 0){
+    el.innerHTML = 'Comece registrando seu salário e seus gastos na aba <b>Lançamentos</b>.';
+    return;
+  }
+  const cor = (receita - gasto) >= 0 ? 'var(--green)' : 'var(--red)';
+  el.innerHTML = `Saldo de ${fmtMesLabel(chaveHoje)}: <b style="color:${cor}">${fmt(receita - gasto)}</b>`
+    + (abertas > 0 ? `<br><span style="color:var(--amber)">${abertas} conta(s) em aberto.</span>` : '');
+}
+async function entrarNoApp(){
+  document.getElementById('telaInicial').style.display = 'none';
+  await verificarPinInicial();
+  // se não há PIN, verificarPinInicial já mostrou o app — vai direto para os registros
+  if(document.getElementById('conteudoApp').style.display !== 'none'){
+    mudarAbaPrincipal('lancamentos');
+  }
+}
 async function verificarPinInicial(){
   const pin = await getJSON(STORAGE_PIN, null);
   if(pin){
@@ -2381,6 +2423,7 @@ async function conferirPin(){
     document.getElementById('telaPin').style.display = 'none';
     document.getElementById('conteudoApp').style.display = 'block';
     document.getElementById('pinErro').style.display = 'none';
+    mudarAbaPrincipal('lancamentos');
   }else{
     document.getElementById('pinErro').style.display = 'block';
     document.getElementById('pinInput').value = '';
@@ -2532,8 +2575,9 @@ function verificarNotificacoesPendentes(forcarMsg){
   }
 }
 
-verificarPinInicial();
-carregarTema().then(carregar);
+// a tela inicial (telaInicial) já está visível e gateia a entrada; verificarPinInicial()
+// só roda quando o usuário clica em "Entrar nos registros" (entrarNoApp).
+carregarTema().then(carregar).then(atualizarResumoTelaInicial);
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogle()"></script>
 </body>
