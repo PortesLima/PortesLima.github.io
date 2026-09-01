@@ -181,6 +181,20 @@
   .modal-box .passo .n{ background:var(--blue-bg); color:var(--blue); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0; }
 
   body.readonly .editable-only{ display:none !important; }
+
+  /* barra de teste grátis / bloqueio pós-teste */
+  .barra-trial{
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    padding:10px 14px; margin-bottom:14px; border-radius:10px; font-size:12.5px;
+    background:var(--card2); border:1px solid var(--border); color:var(--muted);
+  }
+  .barra-trial b{ color:var(--text); }
+  .barra-trial.urgente{
+    background:var(--amber-bg); border-color:rgba(255,184,77,.35); color:var(--amber);
+  }
+  .barra-trial.urgente b{ color:inherit; }
+  .barra-trial button{ padding:6px 12px; font-size:12px; flex-shrink:0; }
+  .barra-trial button.secondary{ background:var(--card); }
   .empty-chart{ display:flex; align-items:center; justify-content:center; height:200px; color:var(--muted); font-size:12.5px; text-align:center; padding:0 20px; }
   .chart-wrap{position:relative; height:200px; margin-bottom:6px;}
 
@@ -351,6 +365,52 @@
     </div>
   </div>
 
+  <div id="modalTrialFim" class="modal-bg" style="display:none;">
+    <div class="modal-box">
+      <h2>Seu teste de 15 dias terminou</h2>
+      <p style="font-size:13.5px; color:var(--muted); margin-top:-6px;">
+        Seus dados estão salvos e continuam aqui. Para voltar a lançar gastos e usar os alertas,
+        assine o Bolso Certo — cancela quando quiser, sem multa.
+      </p>
+      <button onclick="abrirPlanos()" style="width:100%; margin-top:6px;">Assinar por R$ 20/mês</button>
+      <button class="secondary" onclick="continuarSoConsultando()" style="width:100%; margin-top:8px;">Continuar só consultando meus dados</button>
+      <button class="secondary" onclick="exportarBackupJSON()" style="width:100%; margin-top:8px;">Baixar backup dos meus dados</button>
+    </div>
+  </div>
+
+  <div id="modalPlanos" class="modal-bg" style="display:none;">
+    <div class="modal-box">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;">Assinar o Bolso Certo
+        <button class="iconbtn" style="font-size:20px;" onclick="fecharPlanos()" title="Fechar">&times;</button>
+      </h2>
+      <div style="background:var(--blue-bg); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
+        <div style="font-size:12.5px; color:var(--muted);">Plano mensal</div>
+        <div style="font-size:28px; font-weight:700; letter-spacing:-.02em;">R$ 20<span style="font-size:15px; font-weight:500; color:var(--muted);">/mês</span></div>
+        <div style="font-size:12px; color:var(--muted); margin-top:4px;">Todas as funções liberadas · sem fidelidade · cancele quando quiser</div>
+      </div>
+      <div style="font-size:11.5px; color:var(--muted); margin-bottom:14px;">
+        Ao assinar você concorda com os <b>Termos de Uso</b> e a <b>Política de Assinatura</b>
+        (plano, valor, ciclo e cancelamento). Seus dados de pagamento nunca ficam no app —
+        são tratados pela operadora de pagamento.
+      </div>
+      <button onclick="assinarProvisorio()" style="width:100%;">Assinar agora</button>
+      <div style="font-size:11px; color:var(--muted2); margin-top:10px; text-align:center;">
+        Nesta versão de teste, assinar apenas libera o acesso — a cobrança de R$ 20/mês
+        entra numa próxima atualização.
+      </div>
+    </div>
+  </div>
+
+  <div id="modalAssinatura" class="modal-bg" style="display:none;">
+    <div class="modal-box">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;">Minha assinatura
+        <button class="iconbtn" style="font-size:20px;" onclick="fecharMinhaAssinatura()" title="Fechar">&times;</button>
+      </h2>
+      <div id="minhaAssinaturaCorpo"></div>
+      <button class="secondary" onclick="fecharMinhaAssinatura()" style="width:100%; margin-top:10px;">Fechar</button>
+    </div>
+  </div>
+
   <div class="top">
     <div style="display:flex; align-items:center; gap:10px;">
       <svg width="34" height="34" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
@@ -377,6 +437,7 @@
       <div class="menu-wrap">
         <button class="theme-toggle" id="btnConfig" onclick="toggleMenuConfig()" aria-haspopup="true" title="Mais opções">⚙️</button>
         <div id="menuConfig" class="menu-drop" style="display:none;">
+          <button onclick="abrirMinhaAssinatura()">⭐ Minha assinatura</button>
           <button onclick="configurarPin(); fecharMenuConfig()">🔒 PIN de acesso</button>
           <button id="btnMoeda" onclick="alternarMoeda()">💱 Moeda: BRL</button>
           <button id="btnNotif" onclick="ativarNotificacoes()">🔔 Notificações</button>
@@ -391,6 +452,12 @@
     <div class="tab" id="navLancamentos" onclick="mudarAbaPrincipal('lancamentos')">📝 Lançamentos</div>
     <div class="tab" id="navOrcamento" onclick="mudarAbaPrincipal('orcamento')">🎯 Orçamento</div>
     <div class="tab" id="navMetas" onclick="mudarAbaPrincipal('metas')">💰 Metas e fixos</div>
+  </div>
+
+  <div id="barraTrial" class="barra-trial" style="display:none;"></div>
+  <div id="avisoBloqueio" class="barra-trial urgente" style="display:none;">
+    <span>Seu teste terminou — você pode consultar e exportar, mas não lançar. <b>Assine por R$ 20/mês</b> para voltar.</span>
+    <button class="small" onclick="abrirPlanos()">Assinar</button>
   </div>
 
   <div id="painelBackup" class="card editable-only" style="display:none; margin-bottom:14px;">
@@ -678,6 +745,16 @@ const STORAGE_PIN = 'pin';
 const STORAGE_ONBOARDING = 'onboardingVisto';
 const STORAGE_MOEDA = 'moeda';
 const STORAGE_CAMBIO_CACHE = 'cambioCache';
+const STORAGE_ASSINATURA = 'assinatura';
+
+// ---- Assinatura (Fase 1: só trial + bloqueio, sem gateway) ----
+// { status, trialInicio, assinouEm }
+//   status: 'trial' | 'ativo' | 'bloqueado'
+//   trialInicio: 'YYYY-MM-DD' — gravado na 1ª abertura, base da contagem
+//   assinouEm:  'YYYY-MM-DD' | null — provisório nesta fase (o botão "Assinar" só destrava)
+// Fase 2 troca isto pela consulta ao backend; o localStorage vira cache.
+const TRIAL_DIAS = 15;
+let assinatura = { status: 'trial', trialInicio: null, assinouEm: null };
 // marco zero do histórico: nenhum cálculo de média/tendência olha para antes deste mês.
 // (o usuário só começou a lançar dados de forma completa a partir daqui.)
 const HISTORICO_INICIO = '2026-07';
@@ -717,7 +794,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.3';
+const APP_VERSION = '2026-09-01.4';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -806,7 +883,8 @@ function atualizarStatusGoogle(status){
 function montarEstado(){
   return {
     transacoes, orcamentos, contas, contasDetalhes, metas, recorrentes, saldoContas, saldosIniciais, moeda: moedaAtual,
-    tema: document.documentElement.getAttribute('data-theme') || 'dark'
+    tema: document.documentElement.getAttribute('data-theme') || 'dark',
+    assinatura
   };
 }
 async function driveApi(path, opts={}, jaTentouRenovar){
@@ -857,8 +935,22 @@ async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
   recorrentes = dados.recorrentes || [];
   saldoContas = dados.saldoContas || null;
   saldosIniciais = dados.saldosIniciais || {};
+  // Assinatura: mantém o trialInicio MAIS ANTIGO entre o que já existe e o que veio do blob —
+  // sincronizar entre aparelhos não pode reiniciar nem esticar o teste.
+  if(dados.assinatura && typeof dados.assinatura === 'object'){
+    const local = assinatura || {};
+    const remoto = dados.assinatura;
+    const inicio = [local.trialInicio, remoto.trialInicio].filter(Boolean).sort()[0] || null;
+    const assinouEm = [local.assinouEm, remoto.assinouEm].filter(Boolean).sort()[0] || null;
+    assinatura = {
+      status: assinouEm ? 'ativo' : (local.status || remoto.status || 'trial'),
+      trialInicio: inicio,
+      assinouEm
+    };
+  }
   if(dados.tema) aplicarTema(dados.tema);
   if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
+  await setJSON(STORAGE_ASSINATURA, assinatura);
   await setJSON(STORAGE_TX, transacoes);
   await setJSON(STORAGE_ORC, orcamentos);
   await setJSON(STORAGE_CONTAS, contas);
@@ -1060,11 +1152,13 @@ async function carregar(){
   }
   moedaAtual = await getJSON(STORAGE_MOEDA, 'BRL');
   document.getElementById('btnMoeda').textContent = '💱 Moeda: ' + moedaAtual;
+  await carregarAssinatura();
 
   mesAtual = chaveMes(hojeISO());
   popularSelectsEstaticos();
   popularSeletorMes();
   aplicarModoReadonly();
+  avaliarAssinatura();
   render();
   verificarOnboarding();
   if('Notification' in window && Notification.permission === 'granted'){
@@ -1244,6 +1338,7 @@ function addMeses(dataISO, n){
 }
 
 async function adicionar(){
+  if(!podeEditar()) return;
   const tipo = document.getElementById('tipo').value;
   const desc = document.getElementById('descricao').value.trim();
   const valorTotal = parseFloat(document.getElementById('valor').value);
@@ -1342,6 +1437,7 @@ function palpitarCategoria(desc){
 
 let rapidoTipo = 'gasto';
 function abrirModalRapido(){
+  if(!podeEditar()) return;
   rapidoTipo = 'gasto';
   rapidoSetTipo('gasto');
   document.getElementById('rapValor').value = '';
@@ -1373,6 +1469,7 @@ function rapidoAtualizarPalpite(){
   }
 }
 function salvarRapido(){
+  if(!podeEditar()) return;
   const valor = parseFloat(document.getElementById('rapValor').value);
   const desc = document.getElementById('rapDesc').value.trim();
   if(isNaN(valor) || valor <= 0){ alert('Informe um valor válido.'); return; }
@@ -2907,6 +3004,146 @@ function aplicarModoReadonly(){
   if(params.get('readonly') === '1'){
     document.body.classList.add('readonly');
   }
+}
+
+// ---- Assinatura / trial (Fase 1) ----
+function diasEntre(aISO, bISO){
+  const a = new Date(aISO + 'T00:00:00'), b = new Date(bISO + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+// dias restantes de teste; negativo = já venceu; null = sem trial iniciado
+function diasRestantesTrial(){
+  if(!assinatura.trialInicio) return null;
+  return TRIAL_DIAS - diasEntre(assinatura.trialInicio, hojeISO());
+}
+async function carregarAssinatura(){
+  const guardada = await getJSON(STORAGE_ASSINATURA, null);
+  if(guardada && typeof guardada === 'object'){
+    assinatura = { status:'trial', trialInicio:null, assinouEm:null, ...guardada };
+  }
+  // primeira abertura de sempre: marca o início do teste
+  if(!assinatura.trialInicio && !assinatura.assinouEm){
+    assinatura.trialInicio = hojeISO();
+    await setJSON(STORAGE_ASSINATURA, assinatura);
+    driveAgendarSync();
+  }
+}
+// decide status efetivo e aplica bloqueio/aviso. Roda no boot e ao voltar de background.
+function avaliarAssinatura(){
+  if(assinatura.assinouEm){
+    assinatura.status = 'ativo';
+  }else{
+    const rest = diasRestantesTrial();
+    assinatura.status = (rest !== null && rest < 0) ? 'bloqueado' : 'trial';
+  }
+  const bloqueado = assinatura.status === 'bloqueado';
+  // não mexe no readonly vindo de ?readonly=1 (link de compartilhamento)
+  const params = new URLSearchParams(window.location.search);
+  const linkReadonly = params.get('readonly') === '1';
+  if(!linkReadonly){
+    document.body.classList.toggle('readonly', bloqueado);
+  }
+  document.body.classList.toggle('trial-bloqueado', bloqueado);
+  renderBarraTrial();
+  const aviso = document.getElementById('avisoBloqueio');
+  if(aviso) aviso.style.display = (bloqueado && !linkReadonly) ? 'flex' : 'none';
+  const modal = document.getElementById('modalTrialFim');
+  if(modal && !linkReadonly && bloqueado && !modalTrialJaFechadoNaSessao){
+    modal.style.display = 'flex';
+  }else if(modal && !bloqueado){
+    modal.style.display = 'none';
+  }
+}
+let modalTrialJaFechadoNaSessao = false;
+function renderBarraTrial(){
+  const barra = document.getElementById('barraTrial');
+  if(!barra) return;
+  const rest = diasRestantesTrial();
+  // só aparece durante o teste (status 'trial' e com data de início)
+  if(assinatura.status !== 'trial' || rest === null){
+    barra.style.display = 'none';
+    return;
+  }
+  barra.style.display = 'flex';
+  const urgente = rest <= 5;
+  barra.className = 'barra-trial' + (urgente ? ' urgente' : '');
+  const qtd = rest === 1 ? '1 dia' : `${Math.max(rest, 0)} dias`;
+  if(urgente){
+    barra.innerHTML = `<span>Seu teste termina em <b>${qtd}</b>. Continue com tudo por R$ 20/mês.</span>`
+      + `<button class="small" onclick="abrirPlanos()">Ver planos</button>`;
+  }else{
+    barra.innerHTML = `<span>Teste grátis · faltam <b>${qtd}</b></span>`
+      + `<button class="small secondary" onclick="abrirPlanos()">Ver planos</button>`;
+  }
+}
+function abrirPlanos(){
+  document.getElementById('modalPlanos').style.display = 'flex';
+}
+function fecharPlanos(){
+  document.getElementById('modalPlanos').style.display = 'none';
+}
+// Fase 1: "assinar" é provisório — só destrava para testar a lógica de acesso.
+async function assinarProvisorio(){
+  assinatura.assinouEm = hojeISO();
+  assinatura.status = 'ativo';
+  await setJSON(STORAGE_ASSINATURA, assinatura);
+  driveAgendarSync();
+  fecharPlanos();
+  avaliarAssinatura();
+  render();
+  alert('Pronto! Nesta versão de teste o acesso fica liberado sem cobrança.\nA cobrança de verdade (R$ 20/mês) entra numa próxima atualização.');
+}
+async function reverterAssinaturaTeste(){
+  if(!confirm('Só para testes: isto remove a "assinatura" e volta o app ao estado de teste/bloqueio conforme a data. Continuar?')) return;
+  assinatura.assinouEm = null;
+  await setJSON(STORAGE_ASSINATURA, assinatura);
+  driveAgendarSync();
+  avaliarAssinatura();
+  render();
+}
+function continuarSoConsultando(){
+  document.getElementById('modalTrialFim').style.display = 'none';
+  modalTrialJaFechadoNaSessao = true;
+}
+function renderMinhaAssinatura(){
+  const el = document.getElementById('minhaAssinaturaCorpo');
+  if(!el) return;
+  const rest = diasRestantesTrial();
+  let linha;
+  if(assinatura.status === 'ativo'){
+    linha = `<b style="color:var(--green)">Ativa</b> · assinou em ${fmtDataBR(assinatura.assinouEm)}`;
+  }else if(assinatura.status === 'bloqueado'){
+    linha = `<b style="color:var(--red)">Teste encerrado</b> · assine para voltar a lançar`;
+  }else{
+    const qtd = rest === 1 ? '1 dia' : `${rest} dias`;
+    linha = `<b style="color:var(--blue)">Em teste</b> · faltam ${qtd} (começou em ${fmtDataBR(assinatura.trialInicio)})`;
+  }
+  el.innerHTML = `
+    <div style="font-size:13.5px; margin-bottom:10px;">${linha}</div>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">
+      Plano: <b style="color:var(--text)">R$ 20,00/mês</b> · sem fidelidade, cancele quando quiser.
+      A cobrança recorrente entra numa próxima atualização; por enquanto o acesso após o teste é liberado pelo botão abaixo.
+    </div>
+    ${assinatura.status === 'ativo'
+      ? `<button class="secondary" onclick="reverterAssinaturaTeste()" style="width:100%;">Reverter (só para testes)</button>`
+      : `<button onclick="assinarProvisorio()" style="width:100%;">Liberar acesso (teste)</button>`}
+  `;
+}
+function abrirMinhaAssinatura(){
+  renderMinhaAssinatura();
+  document.getElementById('modalAssinatura').style.display = 'flex';
+  fecharMenuConfig();
+}
+function fecharMinhaAssinatura(){
+  document.getElementById('modalAssinatura').style.display = 'none';
+}
+// porteiro das ações de escrita: true = pode seguir; false = bloqueado (abre planos)
+function podeEditar(){
+  if(assinatura.status === 'bloqueado'){
+    abrirPlanos();
+    return false;
+  }
+  return true;
 }
 
 // ---- Onboarding ----
