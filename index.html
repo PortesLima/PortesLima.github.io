@@ -229,6 +229,28 @@
   body.readonly #fab{ display:none; }
   @media(max-width:480px){ #fab{ right:14px; bottom:14px; } }
 
+  /* toast de confirmação (rodapé, sai do caminho do FAB) */
+  #toast{
+    position:fixed; left:50%; bottom:20px; transform:translate(-50%, 120%);
+    z-index:850; max-width:calc(100vw - 32px); width:max-content;
+    display:flex; align-items:center; gap:14px;
+    background:var(--card); color:var(--text); border:1px solid var(--border);
+    border-radius:12px; padding:12px 14px 12px 16px; font-size:13.5px;
+    box-shadow:0 8px 28px rgba(0,0,0,.28);
+    transition:transform .28s cubic-bezier(.2,.8,.3,1), opacity .2s ease;
+    opacity:0; pointer-events:none;
+  }
+  #toast.show{ transform:translate(-50%, 0); opacity:1; pointer-events:auto; }
+  #toast .toast-msg{ display:flex; align-items:center; gap:8px; }
+  #toast .toast-ico{ color:var(--green); font-weight:700; flex-shrink:0; }
+  #toast button{
+    background:none; border:none; color:var(--blue); font-weight:600; font-size:13.5px;
+    padding:11px 12px; margin:-11px -6px -11px 0; min-height:44px; cursor:pointer; flex-shrink:0;
+  }
+  #toast button:active{ opacity:.7; }
+  @media(max-width:480px){ #toast{ right:14px; left:14px; bottom:82px; transform:translateY(120%); width:auto; } #toast.show{ transform:translateY(0); } }
+  @media(prefers-reduced-motion:reduce){ #toast{ transition:opacity .15s ease; } }
+
   .seg{ display:flex; gap:0; border:1px solid var(--border); border-radius:9px; overflow:hidden; }
   .seg-btn{ flex:1; padding:9px 0; border:none; border-radius:0; background:var(--card2); color:var(--muted); font-weight:600; font-size:13px; }
   .seg-btn.active{ background:var(--blue); color:#fff; }
@@ -354,6 +376,8 @@
 
   <button id="fab" onclick="abrirModalRapido()" title="Registro rápido" aria-label="Registro rápido">+</button>
 
+  <div id="toast" role="status" aria-live="polite"></div>
+
   <div id="modalOnboarding" class="modal-bg" style="display:none;">
     <div class="modal-box">
       <h2>Bem-vindo ao Bolso Certo</h2>
@@ -430,7 +454,6 @@
       <select id="mesSel" onchange="render()"></select>
       <button class="theme-toggle" id="btnGoogle" onclick="entrarGoogle()">🔗 Conectar Google Drive</button>
       <span id="ultimaSync" style="font-size:11px; color:var(--muted);"></span>
-      <button class="theme-toggle editable-only" id="btnDesfazer" onclick="desfazer()" style="display:none;">↩️ Desfazer</button>
       <button class="theme-toggle editable-only" onclick="abrirModalContas()">💳 Contas</button>
       <button class="theme-toggle editable-only" onclick="toggleMenuBackup()">💾 Backup</button>
       <button class="theme-toggle" id="btnTema" onclick="alternarTema()">🌙 Escuro</button>
@@ -794,7 +817,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.4';
+const APP_VERSION = '2026-09-01.5';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1361,15 +1384,13 @@ async function adicionar(){
     if(editandoId){ alert('Para alterar uma transferência, exclua e lance novamente.'); return; }
     const grupo = uid();
     const rotulo = desc || 'Transferência';
+    salvarSnapshot();
     transacoes.unshift({ id: uid(), tipo:'transferencia', subtipo:'saida', desc:`${rotulo} → ${contaDestino}`, valor:valorTotal, categoria:'Transferência', conta, data:dataISO, status:'pago', grupoTransferencia:grupo, tag: tag||null });
     transacoes.unshift({ id: uid()+1, tipo:'transferencia', subtipo:'entrada', desc:`${rotulo} ← ${conta}`, valor:valorTotal, categoria:'Transferência', conta:contaDestino, data:dataISO, status:'pago', grupoTransferencia:grupo, tag: tag||null });
     document.getElementById('descricao').value = '';
     document.getElementById('valor').value = '';
     document.getElementById('tag').value = '';
-    salvarTx();
-    mesAtual = chaveMes(dataISO);
-    popularSeletorMes();
-    render();
+    commitTransacoes(`Transferência de ${fmt(valorTotal)} registrada`, { irParaMes: chaveMes(dataISO) });
     return;
   }
 
@@ -1384,11 +1405,14 @@ async function adicionar(){
     });
   }
 
+  salvarSnapshot();
+  let msgToast, comUndo = true;
   if(editandoId){
     const t = transacoes.find(x=>x.id===editandoId);
     Object.assign(t, {tipo, desc, valor:valorTotal, categoria, conta, data:dataISO, fixo, status, tag: tag||null});
     if(anexoBase64) t.anexo = anexoBase64;
     cancelarEdicao();
+    msgToast = 'Lançamento atualizado';
   }else if(parcelas > 1 && tipo === 'gasto'){
     const grupo = uid();
     for(let i=0;i<parcelas;i++){
@@ -1398,8 +1422,12 @@ async function adicionar(){
         anexo: anexoBase64, tag: tag||null
       });
     }
+    // parcelamento cria N lançamentos: sem "Desfazer" no toast (multi-item), excluir pelo modal
+    msgToast = `${parcelas}x de ${fmt(valorTotal)} lançadas`;
+    comUndo = false;
   }else{
     transacoes.unshift({ id: uid(), tipo, desc, valor:valorTotal, categoria, conta, data: dataISO, fixo, status, anexo: anexoBase64, tag: tag||null });
+    msgToast = `${tipo === 'receita' ? 'Receita' : 'Gasto'} de ${fmt(valorTotal)} em ${categoria}`;
   }
 
   document.getElementById('descricao').value = '';
@@ -1411,10 +1439,7 @@ async function adicionar(){
   document.getElementById('status').value = 'pago';
   document.getElementById('dataInput').value = dataISO;
 
-  salvarTx();
-  mesAtual = chaveMes(dataISO);
-  popularSeletorMes();
-  render();
+  commitTransacoes(msgToast, { comUndo, irParaMes: chaveMes(dataISO) });
 }
 
 // palavras-chave → categoria, para o registro rápido adivinhar a categoria pela descrição.
@@ -1477,12 +1502,10 @@ function salvarRapido(){
   const categoria = rapidoTipo === 'receita' ? 'Receita' : document.getElementById('rapCategoria').value;
   const descFinal = desc || (rapidoTipo === 'receita' ? 'Receita' : categoria);
   const dataISO = hojeISO();
+  salvarSnapshot();
   transacoes.unshift({ id: uid(), tipo: rapidoTipo, desc: descFinal, valor, categoria, conta, data: dataISO, fixo:false, status:'pago', anexo:null, tag:null });
-  salvarTx();
-  mesAtual = chaveMes(dataISO);
-  popularSeletorMes();
   fecharModalRapido();
-  render();
+  commitTransacoes(`${rapidoTipo === 'receita' ? 'Receita' : 'Gasto'} de ${fmt(valor)} em ${categoria}`, { irParaMes: chaveMes(dataISO) });
 }
 
 function editar(id){
@@ -1538,20 +1561,17 @@ function remover(id){
     return;
   }
   if(t.grupoTransferencia){
-    if(!confirm(`Excluir esta transferência (${fmt(t.valor)})? Os dois lançamentos (saída e entrada) serão removidos. Pode ser desfeito em seguida.`)) return;
+    // transferência = 2 lançamentos: mantém o confirm (undo às cegas em multi-item é arriscado)
+    if(!confirm(`Excluir esta transferência (${fmt(t.valor)})? Os dois lançamentos (saída e entrada) serão removidos.`)) return;
     salvarSnapshot();
     transacoes = transacoes.filter(x => x.grupoTransferencia !== t.grupoTransferencia);
-    salvarTx();
-    popularSeletorMes();
-    render();
+    commitTransacoes('Transferência excluída', { comUndo:false });
     return;
   }
-  if(!confirm(`Excluir o lançamento "${t.desc}" (${fmt(t.valor)})? Essa ação pode ser desfeita logo em seguida pelo botão "Desfazer".`)) return;
+  // lançamento simples: sem confirm — o toast oferece "Desfazer" por 6s
   salvarSnapshot();
   transacoes = transacoes.filter(x => x.id !== id);
-  salvarTx();
-  popularSeletorMes();
-  render();
+  commitTransacoes(`"${t.desc}" excluído`);
 }
 function fecharModalExcluirParcela(){
   idExclusaoPendente = null;
@@ -1561,15 +1581,18 @@ function confirmarExclusaoParcela(escopo){
   const t = transacoes.find(x=>x.id===idExclusaoPendente);
   if(!t) { fecharModalExcluirParcela(); return; }
   salvarSnapshot();
+  let msg;
   if(escopo === 'todas'){
+    const n = transacoes.filter(x => x.grupoParcela === t.grupoParcela).length;
     transacoes = transacoes.filter(x => x.grupoParcela !== t.grupoParcela);
+    msg = `${n} parcelas excluídas`;
   }else{
     transacoes = transacoes.filter(x => x.id !== t.id);
+    msg = 'Parcela excluída';
   }
-  salvarTx();
-  popularSeletorMes();
-  render();
   fecharModalExcluirParcela();
+  // multi-item ou uma parcela isolada de um grupo: sem "Desfazer" no toast
+  commitTransacoes(msg, { comUndo:false });
 }
 
 function mudarAbaPrincipal(aba){
@@ -1669,8 +1692,9 @@ function addValorMeta(id){
     conta: contas[0], data: hojeISO(), fixo:false, status:'pago', metaId: m.id
   });
   salvarMetas();
-  salvarTx();
-  render();
+  // sem undo: reverter só transacoes deixaria m.valorAtual inconsistente
+  snapshotAnterior = null;
+  commitTransacoes(`${fmt(v)} guardado em "${m.nome}"`, { comUndo:false });
 }
 function removerMeta(id){
   metas = metas.filter(m=>m.id!==id);
@@ -1698,9 +1722,9 @@ function criarRecorrente(){
 function lancarRecorrente(id){
   const r = recorrentes.find(x=>x.id===id);
   if(!r) return;
+  salvarSnapshot();
   transacoes.unshift({id:uid(), tipo:r.tipo, desc:r.desc, valor:r.valor, categoria:r.categoria, conta:contas[0], data:mesAtual+'-05', fixo:true, recorrenteId:r.id});
-  salvarTx();
-  render();
+  commitTransacoes(`"${r.desc}" lançado neste mês`);
 }
 function recorrenteJaLancadoEm(r, lista, chave){
   // recorrenteId é a ligação confiável; desc+categoria é o fallback para lançamentos
@@ -2924,19 +2948,55 @@ async function configurarPin(){
 }
 document.getElementById('pinInput').addEventListener('keydown', e => { if(e.key==='Enter') conferirPin(); });
 
-// ---- Desfazer última ação ----
+// ---- Toast de confirmação ----
+let toastTimer = null;
+// mostrarToast('texto', { acao:'Desfazer', onAcao: fn })  — sem opts = toast simples de 3s
+function mostrarToast(msg, opts = {}){
+  const el = document.getElementById('toast');
+  if(!el) return;
+  clearTimeout(toastTimer);
+  const dur = opts.acao ? 6000 : 3000;
+  el.innerHTML = `<span class="toast-msg">${opts.ico !== false ? '<span class="toast-ico">✓</span>' : ''}<span>${msg}</span></span>`;
+  if(opts.acao){
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = opts.acao;
+    btn.onclick = () => { esconderToast(); if(opts.onAcao) opts.onAcao(); };
+    el.appendChild(btn);
+  }
+  el.classList.add('show');
+  toastTimer = setTimeout(esconderToast, dur);
+}
+function esconderToast(){
+  clearTimeout(toastTimer);
+  document.getElementById('toast')?.classList.remove('show');
+}
+
+// ---- Desfazer última ação em transacoes ----
+// snapshotAnterior guarda a lista ANTES da última mutação; commitTransacoes() a salva
+// e o toast oferece "Desfazer" que chama desfazer(). Um snapshot por vez (a 2ª ação
+// substitui o toast e o snapshot da 1ª — trade-off intencional, igual ao Gmail).
 function salvarSnapshot(){
   snapshotAnterior = JSON.parse(JSON.stringify(transacoes));
-  document.getElementById('btnDesfazer').style.display = 'inline-block';
+}
+// funil das mutações em transacoes: snapshot → persiste → re-renderiza → toast com undo
+function commitTransacoes(msgToast, { comUndo = true, irParaMes = null } = {}){
+  if(irParaMes) mesAtual = irParaMes;
+  salvarTx();
+  popularSeletorMes();
+  render();
+  if(msgToast){
+    mostrarToast(msgToast, comUndo && snapshotAnterior ? { acao:'Desfazer', onAcao: desfazer } : {});
+  }
 }
 function desfazer(){
   if(!snapshotAnterior) return;
   transacoes = snapshotAnterior;
   snapshotAnterior = null;
-  document.getElementById('btnDesfazer').style.display = 'none';
   salvarTx();
   popularSeletorMes();
   render();
+  mostrarToast('Desfeito', { ico:false });
 }
 
 // ---- Backup completo ----
