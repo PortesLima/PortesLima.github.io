@@ -77,7 +77,8 @@ key, the `getJSON` call in `carregar()`, `montarEstado()` (for Drive sync), and
 `aplicarDadosImportados()` (the single funnel both `driveSincronizarInicial()` and
 `importarBackupJSON()` go through — read + `setJSON` the field there). Missing one means the
 field silently doesn't survive a sync or an import — this has been the source of most
-cross-device bugs in this app.
+cross-device bugs in this app. `saldosIniciais` is the most recent field wired this way
+(also persisted by `salvarContas()`).
 
 ### Auth: token renewal without a backend
 
@@ -112,6 +113,48 @@ month-relative math.
 - **Goal contributions** (`addValorMeta`): also synthesize a real transaction (`tipo:'gasto'`,
   `metaId` set) so the amount actually affects the month's balance/KPIs — a goal's `valorAtual`
   by itself does not.
+- **Transfers** (`tipo: 'transferencia'`): two linked transactions sharing a
+  `grupoTransferencia` id — one `subtipo:'saida'` on the source account, one
+  `subtipo:'entrada'` on the destination, same date, always `status:'pago'`, `categoria:
+  'Transferência'`. The distinct `tipo` is deliberate: every existing `t.tipo==='receita'` /
+  `'gasto'` check ignores transfers automatically, so they stay out of all income/expense KPIs
+  with no per-site filtering. Places that iterate *all* transactions and sign by
+  `receita?+:−` (the "saldo acumulado" chart, the `saldoContas` adjustment in
+  `renderLivreParaGastar`/`renderProjecaoSaldo`) must still exclude `tipo==='transferencia'`
+  explicitly — grep for `!== 'transferencia'`. Deleting either leg removes both.
+
+### "Livre para gastar" card + per-account balances
+
+`renderLivreParaGastar()` (top of Visão Geral, current month only) answers "how much can I
+spend until month-end": an anchor balance minus this month's still-open commitments (pending/
+overdue bills, open installments, not-yet-launched recurring expenses), plus pending income.
+Anchor preference order: (1) sum of `saldoAtualConta()` for accounts with a `saldosIniciais`
+entry; (2) the global `saldoContas`; (3) month result so far. `partidaReal` tracks whether
+the anchor is a real balance.
+
+`saldosIniciais` (`{nomeConta: {valor, em}}`) is per-account starting balance. `saldoAtualConta(nome)`
+= that value + Σ of **effectivated** movements on the account since `em` (`efeitoNoSaldo()`:
+receita +, gasto −, transfer signed by `subtipo`) — **only** `status:'pago'` items and
+transfers count, so pending bills don't reduce the shown balance (they surface as commitments
+in the Livre card instead). `renderSaldosContas()` shows the "Saldo por conta" card, hidden
+unless at least one account has a starting balance.
+
+### Registro rápido (FAB)
+
+The floating `+` button (`#fab`) opens `#modalRapido` — a 2-field capture (valor + descrição)
+plus account/category selects and a Gasto/Receita toggle. `palpitarCategoria()` guesses the
+category from keywords in the description (`PALPITE_CATEGORIA` regex list). Entries are always
+`status:'pago'`, dated today. `salvarRapido()` is a thin path that does **not** go through
+`adicionar()` — no installments, no attachment, no fixo flag.
+
+### PWA
+
+`<head>` carries a `manifest` (inline data URI), `apple-touch-icon`, and the mobile-web-app
+meta tags, so the site is installable ("Add to Home Screen", standalone display). There is
+**no service worker** — a real one needs a separate script file at a stable URL, which breaks
+the single-file constraint, and SW scripts can't be data/blob URLs. So the installed app is
+not offline-capable beyond what the browser HTTP cache happens to hold; `window.storage`
+(localStorage) is still the offline data layer.
 
 ### Accounts vs. categories
 
@@ -124,8 +167,8 @@ fixed constants, not user-editable data — they aren't persisted per-user.
 
 `CATEGORIAS` holds **expense** categories only. Every income transaction has a fixed
 `categoria: 'Receita'` (the category dropdown is hidden for `tipo === 'receita'`), so
-`'Receita'` is added manually as an extra option in `filtroCategoria` (the Lançamentos
-category filter) on top of `CATEGORIAS`.
+`'Receita'` — and `'Transferência'` — are added manually as extra options in `filtroCategoria`
+(the Lançamentos category filter) on top of `CATEGORIAS`.
 
 ### Credit card invoice cycle math
 

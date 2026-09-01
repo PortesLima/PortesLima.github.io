@@ -7,8 +7,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="google" content="notranslate">
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bolso Certo">
 <title>Bolso Certo</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 72'%3E%3Ccircle cx='36' cy='36' r='34' fill='%23e6f1fb' stroke='%234d9eff' stroke-width='3'/%3E%3Cpath d='M22 40c0-9 6-16 14-16s14 7 14 16' stroke='%234d9eff' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='36' cy='24' r='4.5' fill='%234d9eff'/%3E%3Crect x='19' y='40' width='34' height='15' rx='4' fill='%234d9eff'/%3E%3Ctext x='36' y='51' text-anchor='middle' font-size='12' font-weight='700' fill='white' font-family='Arial'%3ER%24%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 72'%3E%3Crect width='72' height='72' rx='16' fill='%230f1115'/%3E%3Ccircle cx='36' cy='36' r='26' fill='none' stroke='%234d9eff' stroke-width='3'/%3E%3Cpath d='M25 40c0-7 5-13 11-13s11 6 11 13' stroke='%234d9eff' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='36' cy='26' r='3.5' fill='%234d9eff'/%3E%3Crect x='23' y='40' width='26' height='12' rx='3' fill='%234d9eff'/%3E%3Ctext x='36' y='49' text-anchor='middle' font-size='10' font-weight='700' fill='%230f1115' font-family='Arial'%3ER%24%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href='data:application/manifest+json,{"name":"Bolso Certo","short_name":"Bolso Certo","description":"Suas finan%C3%A7as pessoais organizadas num s%C3%B3 lugar.","start_url":".","scope":".","display":"standalone","background_color":"%230f1115","theme_color":"%230f1115","icons":[{"src":"data:image/svg+xml,%253Csvg xmlns=%2527http://www.w3.org/2000/svg%2527 viewBox=%25270 0 72 72%2527%253E%253Crect width=%252772%2527 height=%252772%2527 rx=%252716%2527 fill=%2527%25230f1115%2527/%253E%253Ccircle cx=%252736%2527 cy=%252736%2527 r=%252726%2527 fill=%2527none%2527 stroke=%2527%25234d9eff%2527 stroke-width=%25273%2527/%253E%253Cpath d=%2527M25 40c0-7 5-13 11-13s11 6 11 13%2527 stroke=%2527%25234d9eff%2527 stroke-width=%25273%2527 stroke-linecap=%2527round%2527 fill=%2527none%2527/%253E%253Ccircle cx=%252736%2527 cy=%252726%2527 r=%25273.5%2527 fill=%2527%25234d9eff%2527/%253E%253Crect x=%252723%2527 y=%252740%2527 width=%252726%2527 height=%252712%2527 rx=%25273%2527 fill=%2527%25234d9eff%2527/%253E%253C/svg%253E","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}'>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -48,10 +55,36 @@
   }
 
   .grid4{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px;}
-  .kpi{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 16px;}
+  .kpi{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 16px; transition:border-color .15s ease, transform .15s ease;}
+  .kpi:hover{border-color:var(--muted2);}
   .kpi .label{font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-bottom:6px;}
-  .kpi .value{font-size:21px; font-weight:600;}
+  .kpi .value{font-size:21px; font-weight:600; letter-spacing:-.01em;}
   .kpi .delta{font-size:11px; margin-top:4px;}
+
+  /* card "Livre para gastar" — a resposta principal da tela */
+  .livre-card{
+    background:linear-gradient(135deg, var(--blue-bg), transparent 70%), var(--card);
+    border:1px solid var(--border); border-radius:16px; padding:18px 20px; margin-bottom:16px;
+    display:flex; gap:22px; align-items:center; flex-wrap:wrap;
+    box-shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  .livre-card.neg{ background:linear-gradient(135deg, var(--red-bg), transparent 70%), var(--card); border-color:rgba(255,92,92,.35); }
+  .livre-main{ flex:0 0 auto; min-width:180px; }
+  .livre-label{ font-size:12.5px; color:var(--muted); margin-bottom:4px; }
+  .livre-value{ font-size:34px; font-weight:700; letter-spacing:-.02em; line-height:1.1; color:var(--blue); }
+  .livre-card.neg .livre-value{ color:var(--red); }
+  .livre-dia{ font-size:12px; color:var(--muted); margin-top:4px; }
+  .livre-breakdown{ flex:1; min-width:220px; display:flex; flex-direction:column; gap:5px; font-size:12px; }
+  .livre-breakdown .lb-row{ display:flex; justify-content:space-between; gap:12px; color:var(--muted); }
+  .livre-breakdown .lb-row b{ color:var(--text); font-weight:600; }
+  .livre-breakdown .lb-row.total{ border-top:1px solid var(--border); padding-top:5px; margin-top:2px; color:var(--text); }
+  @media(max-width:560px){ .livre-value{ font-size:28px; } .livre-card{ padding:15px 16px; gap:14px; } }
+
+  .saldos-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
+  .saldo-conta{ border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--card2); }
+  .saldo-conta .nome{ font-size:11.5px; color:var(--muted); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .saldo-conta .val{ font-size:16px; font-weight:700; letter-spacing:-.01em; }
+  .saldo-conta .mov{ font-size:10.5px; color:var(--muted2); margin-top:2px; }
   .green{color:var(--green);} .red{color:var(--red);} .blue{color:var(--blue);} .amber{color:var(--amber);}
 
   .alerts{margin-bottom:16px; display:flex; flex-direction:column; gap:8px;}
@@ -162,6 +195,25 @@
   .rec-row:last-child{border-bottom:none;}
   .rec-info b{font-weight:600;}
   .rec-info div{color:var(--muted); font-size:11px;}
+
+  /* botão flutuante de registro rápido */
+  #fab{
+    position:fixed; right:20px; bottom:20px; z-index:800;
+    width:56px; height:56px; border-radius:50%; padding:0;
+    font-size:28px; font-weight:400; line-height:1;
+    background:var(--blue); color:#fff;
+    box-shadow:0 6px 20px rgba(77,158,255,.45);
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  #fab:hover{ transform:scale(1.06); box-shadow:0 8px 26px rgba(77,158,255,.55); }
+  #fab:active{ transform:scale(.96); }
+  body.readonly #fab{ display:none; }
+  @media(max-width:480px){ #fab{ right:14px; bottom:14px; } }
+
+  .seg{ display:flex; gap:0; border:1px solid var(--border); border-radius:9px; overflow:hidden; }
+  .seg-btn{ flex:1; padding:9px 0; border:none; border-radius:0; background:var(--card2); color:var(--muted); font-weight:600; font-size:13px; }
+  .seg-btn.active{ background:var(--blue); color:#fff; }
 </style>
 </head>
 <body>
@@ -252,12 +304,39 @@
     </div>
   </div>
 
+  <div id="modalRapido" class="modal-bg" style="display:none;">
+    <div class="modal-box" style="max-width:400px;">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;">Registro rápido
+        <button class="iconbtn" style="font-size:20px;" onclick="fecharModalRapido()" title="Fechar">&times;</button>
+      </h2>
+      <div class="seg" style="margin-bottom:12px;">
+        <button type="button" class="seg-btn active" id="rapGasto" onclick="rapidoSetTipo('gasto')">Gasto</button>
+        <button type="button" class="seg-btn" id="rapReceita" onclick="rapidoSetTipo('receita')">Receita</button>
+      </div>
+      <div class="row">
+        <input type="number" id="rapValor" inputmode="decimal" placeholder="Valor (R$)" step="0.01" style="font-size:18px; padding:12px;">
+      </div>
+      <div class="row">
+        <input type="text" id="rapDesc" placeholder="Descrição (ex: iFood, Uber, Salário)" oninput="rapidoAtualizarPalpite()">
+      </div>
+      <div class="row">
+        <select id="rapConta" style="flex:1;"></select>
+        <select id="rapCategoria" style="flex:1;"></select>
+      </div>
+      <div id="rapPalpite" style="font-size:11px; color:var(--muted); margin:-2px 4px 8px;"></div>
+      <button onclick="salvarRapido()" style="width:100%; padding:12px;">Adicionar</button>
+      <div style="font-size:11px; color:var(--muted2); margin-top:8px; text-align:center;">Entra como pago, com data de hoje. Ajuste depois em Lançamentos se precisar.</div>
+    </div>
+  </div>
+
+  <button id="fab" onclick="abrirModalRapido()" title="Registro rápido" aria-label="Registro rápido">+</button>
+
   <div id="modalOnboarding" class="modal-bg" style="display:none;">
     <div class="modal-box">
       <h2>Bem-vindo ao Bolso Certo</h2>
-      <div class="passo"><div class="n">1</div><div>Na aba <b>Lançamentos</b>, registre seu salário e seus gastos, com categoria, conta e status de pagamento.</div></div>
-      <div class="passo"><div class="n">2</div><div>Em <b>Orçamento</b>, defina limites por categoria para receber alertas quando estiver perto de estourar.</div></div>
-      <div class="passo"><div class="n">3</div><div>Em <b>Metas e fixos</b>, crie metas de economia e cadastre contas fixas recorrentes (aluguel, assinaturas).</div></div>
+      <div class="passo"><div class="n">1</div><div>Toque no botão <b>+</b> (canto inferior direito) para um registro rápido, ou use a aba <b>Lançamentos</b> para o formulário completo (parcelas, comprovante, transferência entre contas).</div></div>
+      <div class="passo"><div class="n">2</div><div>Em <b>Contas</b> (topo), informe o <b>saldo inicial</b> de cada conta para ver o saldo atual de cada uma e quanto está <b>livre para gastar</b> no mês.</div></div>
+      <div class="passo"><div class="n">3</div><div>Em <b>Orçamento</b> defina limites por categoria; em <b>Metas e fixos</b>, metas de economia e contas fixas recorrentes.</div></div>
       <div class="passo"><div class="n">4</div><div>Conecte sua conta Google (botão no topo) para sincronizar os dados entre celular e computador.</div></div>
       <button onclick="fecharOnboarding()" style="width:100%; margin-top:6px;">Entendi, vamos lá</button>
     </div>
@@ -312,6 +391,15 @@
 
   <div id="secGeral">
 
+  <div class="livre-card" id="livreCard">
+    <div class="livre-main">
+      <div class="livre-label" id="livreTitulo">Livre para gastar</div>
+      <div class="livre-value" id="livreValor">R$ 0,00</div>
+      <div class="livre-dia" id="livrePorDia"></div>
+    </div>
+    <div class="livre-breakdown" id="livreBreakdown"></div>
+  </div>
+
   <div class="grid4">
     <div class="kpi">
       <div class="label">Receitas</div>
@@ -336,6 +424,11 @@
   </div>
 
   <div class="alerts" id="alertas"></div>
+
+  <div class="card" id="cardSaldosContas" style="display:none; margin-bottom:14px;">
+    <h2>Saldo por conta <span class="small" onclick="abrirModalContas()">gerenciar</span></h2>
+    <div id="listaSaldosContas" class="saldos-grid"></div>
+  </div>
 
   <div class="card" id="cardFaturas" style="display:none; margin-bottom:14px;">
     <h2>Faturas de cartão em aberto</h2>
@@ -459,9 +552,13 @@
       <select id="tipo" onchange="toggleCategoriaSel()">
         <option value="gasto">Gasto</option>
         <option value="receita">Receita</option>
+        <option value="transferencia">Transferência entre contas</option>
       </select>
       <input type="text" id="descricao" placeholder="Descrição (ex: Mercado, Salário)">
       <select id="conta"></select>
+      <span id="wrapContaDestino" style="display:none; flex:1; min-width:100px;">
+        <select id="contaDestino" style="width:100%;"></select>
+      </span>
     </div>
     <div class="row">
       <input type="number" id="valor" placeholder="Valor (R$)" step="0.01">
@@ -471,9 +568,9 @@
         <option value="pago">Pago</option>
         <option value="pendente">Pendente</option>
       </select>
-      <label class="chk"><input type="checkbox" id="fixoChk"> gasto fixo</label>
+      <label class="chk" id="wrapFixoChk"><input type="checkbox" id="fixoChk"> gasto fixo</label>
     </div>
-    <div class="row">
+    <div class="row" id="wrapLinhaExtra">
       <label class="chk">Parcelas: <input type="number" id="parcelas" min="1" max="48" value="1" style="width:60px; flex:none;"></label>
       <input type="text" id="tag" placeholder="Tag (opcional, ex: Mercado, Uber)" style="flex:1;">
       <label class="chk" style="flex:1;">Comprovante: <input type="file" id="anexo" accept="image/*" style="flex:1;"></label>
@@ -561,6 +658,7 @@ const STORAGE_CONTAS_DETALHES = 'contasDetalhes';
 const STORAGE_METAS = 'metas';
 const STORAGE_REC = 'recorrentes';
 const STORAGE_SALDO_CONTAS = 'saldoContas';
+const STORAGE_SALDOS_INICIAIS = 'saldosIniciais';
 const STORAGE_PIN = 'pin';
 const STORAGE_ONBOARDING = 'onboardingVisto';
 const STORAGE_MOEDA = 'moeda';
@@ -595,11 +693,15 @@ let recorrentes = [];
 // saldo total das contas informado manualmente pelo usuário, usado como âncora da projeção.
 // { valor: number, em: 'YYYY-MM-DD' } — ou null se nunca foi informado.
 let saldoContas = null;
+// saldo inicial por conta, informado pelo usuário — { nomeConta: { valor: number, em: 'YYYY-MM-DD' } }.
+// O saldo atual de cada conta = valor + soma dos lançamentos dessa conta a partir de 'em'.
+// Independente de saldoContas (que continua sendo a âncora única da projeção).
+let saldosIniciais = {};
 let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-08-11.14';
+const APP_VERSION = '2026-08-31.15';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -687,7 +789,7 @@ function atualizarStatusGoogle(status){
 }
 function montarEstado(){
   return {
-    transacoes, orcamentos, contas, contasDetalhes, metas, recorrentes, saldoContas, moeda: moedaAtual,
+    transacoes, orcamentos, contas, contasDetalhes, metas, recorrentes, saldoContas, saldosIniciais, moeda: moedaAtual,
     tema: document.documentElement.getAttribute('data-theme') || 'dark'
   };
 }
@@ -738,6 +840,7 @@ async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
   metas = dados.metas || [];
   recorrentes = dados.recorrentes || [];
   saldoContas = dados.saldoContas || null;
+  saldosIniciais = dados.saldosIniciais || {};
   if(dados.tema) aplicarTema(dados.tema);
   if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
   await setJSON(STORAGE_TX, transacoes);
@@ -747,6 +850,7 @@ async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
   await setJSON(STORAGE_METAS, metas);
   await setJSON(STORAGE_REC, recorrentes);
   await setJSON(STORAGE_SALDO_CONTAS, saldoContas);
+  await setJSON(STORAGE_SALDOS_INICIAIS, saldosIniciais);
   await setJSON(STORAGE_MOEDA, moedaAtual);
   popularSelectsEstaticos();
   popularSeletorMes();
@@ -803,6 +907,34 @@ function fmtMesLabel(chave){
 function fmtDataBR(dataISO){ return dataISO.split('-').reverse().join('/'); }
 function somarPorTipo(lista, tipo){ return lista.filter(t=>t.tipo===tipo).reduce((s,t)=>s+t.valor,0); }
 function somarPorTipoNoMes(lista, tipo, chave){ return somarPorTipo(lista.filter(t=>chaveMes(t.data)===chave), tipo); }
+
+// efeito de um lançamento no saldo de uma conta: receita soma, gasto subtrai,
+// transferência soma na conta de entrada e subtrai na de saída.
+function efeitoNoSaldo(t){
+  if(t.tipo === 'receita') return t.valor;
+  if(t.tipo === 'gasto') return -t.valor;
+  if(t.tipo === 'transferencia') return t.subtipo === 'entrada' ? t.valor : -t.valor;
+  return 0;
+}
+// saldo atual de uma conta: saldo inicial informado + soma dos lançamentos JÁ EFETIVADOS
+// dessa conta a partir da data do saldo inicial. Só entra o que de fato movimentou a conta:
+// gastos/receitas com status "pago" e transferências (sempre efetivadas). Lançamentos
+// pendentes/vencidos ainda não saíram da conta, então não reduzem o saldo aqui — eles
+// aparecem como "compromissos" no card Livre para gastar. Sem saldo inicial, parte de zero.
+function saldoAtualConta(nome){
+  const ini = saldosIniciais[nome];
+  const base = ini && typeof ini.valor === 'number' ? ini.valor : 0;
+  const desde = ini && ini.em ? ini.em : '0000-00-00';
+  const ate = hojeISO();
+  const mov = transacoes
+    .filter(t => t.conta === nome && t.data >= desde && t.data <= ate
+              && (t.tipo === 'transferencia' || statusEfetivo(t) === 'pago'))
+    .reduce((s,t) => s + efeitoNoSaldo(t), 0);
+  return base + mov;
+}
+function temSaldoInicial(nome){
+  return saldosIniciais[nome] && typeof saldosIniciais[nome].valor === 'number';
+}
 function fmt(v){
   const m = MOEDAS[moedaAtual] || MOEDAS.BRL;
   const valorConvertido = v * (taxasCambio[moedaAtual] || 1);
@@ -875,8 +1007,9 @@ function getThemeColors(){
 function popularSelectsEstaticos(){
   document.getElementById('categoria').innerHTML = CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('recCategoria').innerHTML = CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
-  document.getElementById('filtroCategoria').innerHTML = '<option value="">Todas categorias</option><option>Receita</option>' + CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('filtroCategoria').innerHTML = '<option value="">Todas categorias</option><option>Receita</option><option>Transferência</option>' + CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('conta').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('contaDestino').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('contaFiltro').innerHTML = '<option value="">Todas as contas</option>' + contas.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('dataInput').value = hojeISO();
 
@@ -898,6 +1031,7 @@ async function carregar(){
   metas = await getJSON(STORAGE_METAS, []);
   recorrentes = await getJSON(STORAGE_REC, []);
   saldoContas = await getJSON(STORAGE_SALDO_CONTAS, null);
+  saldosIniciais = await getJSON(STORAGE_SALDOS_INICIAIS, {});
   moedaAtual = await getJSON(STORAGE_MOEDA, 'BRL');
   document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual;
 
@@ -923,6 +1057,7 @@ async function salvarRec(){ await setJSON(STORAGE_REC, recorrentes); driveAgenda
 async function salvarContas(){
   await setJSON(STORAGE_CONTAS, contas);
   await setJSON(STORAGE_CONTAS_DETALHES, contasDetalhes);
+  await setJSON(STORAGE_SALDOS_INICIAIS, saldosIniciais);
   driveAgendarSync();
 }
 
@@ -1022,6 +1157,7 @@ async function removerConta(nome){
   if(emUso && !confirm(`Existem lançamentos usando a conta "${nome}". Remover a conta não apaga esses lançamentos, mas eles ficarão sem uma conta válida na lista. Continuar?`)) return;
   contas = contas.filter(c=>c!==nome);
   delete contasDetalhes[nome];
+  delete saldosIniciais[nome];
   await salvarContas();
   popularSelectsEstaticos();
   renderListaContas();
@@ -1033,19 +1169,48 @@ async function editarDiasCartao(nome, campo, valor){
   contasDetalhes[nome][campo] = (v>=1 && v<=31) ? v : null;
   await salvarContas();
 }
+async function editarSaldoInicialConta(nome, valorTxt, dataTxt){
+  const v = parseValorBR(valorTxt);
+  const data = dataTxt || hojeISO();
+  if(isNaN(v) || valorTxt.trim() === ''){
+    delete saldosIniciais[nome];
+  }else{
+    saldosIniciais[nome] = { valor: v, em: data };
+  }
+  await salvarContas();
+  renderListaContas();
+  render();
+}
 function renderListaContas(){
   const el = document.getElementById('listaContas');
   el.innerHTML = contas.map(nome=>{
     const det = contasDetalhes[nome];
     const ehCartao = det && det.tipo === 'cartao';
+    const ini = saldosIniciais[nome];
+    const saldoAtual = saldoAtualConta(nome);
+    const temIni = temSaldoInicial(nome);
+    const esc = nome.replace(/'/g,"\\'");
+    const corSaldo = saldoAtual >= 0 ? 'var(--green)' : 'var(--red)';
     return `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <b style="font-size:13px;">${nome}${ehCartao?' 💳':''}</b>
-        <button class="iconbtn del" onclick="removerConta('${nome.replace(/'/g,"\\'")}')" title="Remover">&times;</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          ${temIni ? `<span style="font-size:12.5px; font-weight:600; color:${corSaldo};">${fmt(saldoAtual)}</span>` : ''}
+          <button class="iconbtn del" onclick="removerConta('${esc}')" title="Remover">&times;</button>
+        </div>
       </div>
+      <div class="row" style="margin-top:8px; align-items:center;">
+        <label class="chk" style="flex:1;">Saldo inicial
+          <input type="text" inputmode="decimal" placeholder="ex: 1.200,00" value="${ini ? ini.valor.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}"
+            style="flex:1; min-width:90px;" id="si-val-${esc}"
+            onchange="editarSaldoInicialConta('${esc}', this.value, document.getElementById('si-em-${esc}').value)"></label>
+        <label class="chk">em <input type="date" value="${ini && ini.em ? ini.em : ''}" style="flex:none;" id="si-em-${esc}"
+            onchange="editarSaldoInicialConta('${esc}', document.getElementById('si-val-${esc}').value, this.value)"></label>
+      </div>
+      ${temIni ? `<div style="font-size:10.5px; color:var(--muted2); margin-top:2px;">Saldo hoje = saldo inicial ${fmt(ini.valor)} ${saldoAtual-ini.valor>=0?'+':'−'} ${fmt(Math.abs(saldoAtual-ini.valor))} de movimento desde ${ini.em ? ini.em.split('-').reverse().join('/') : 'sempre'}.</div>` : ''}
       ${ehCartao ? `<div class="row" style="margin-top:8px;">
-        <label class="chk">Fecha dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaFechamento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${nome.replace(/'/g,"\\'")}','diaFechamento',this.value)"></label>
-        <label class="chk">Vence dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaVencimento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${nome.replace(/'/g,"\\'")}','diaVencimento',this.value)"></label>
+        <label class="chk">Fecha dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaFechamento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${esc}','diaFechamento',this.value)"></label>
+        <label class="chk">Vence dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaVencimento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${esc}','diaVencimento',this.value)"></label>
       </div>` : ''}
     </div>`;
   }).join('');
@@ -1071,7 +1236,15 @@ function popularSeletorMes(){
 
 function toggleCategoriaSel(){
   const tipo = document.getElementById('tipo').value;
+  const ehTransf = tipo === 'transferencia';
   document.getElementById('categoria').style.display = tipo==='gasto' ? 'inline-block' : 'none';
+  document.getElementById('wrapContaDestino').style.display = ehTransf ? 'inline-block' : 'none';
+  document.getElementById('wrapFixoChk').style.display = ehTransf ? 'none' : 'flex';
+  document.getElementById('wrapLinhaExtra').style.display = ehTransf ? 'none' : 'flex';
+  document.getElementById('status').style.display = ehTransf ? 'none' : 'inline-block';
+  const desc = document.getElementById('descricao');
+  if(ehTransf && !desc.value) desc.placeholder = 'Descrição (opcional, ex: Reserva)';
+  else if(!ehTransf) desc.placeholder = 'Descrição (ex: Mercado, Salário)';
 }
 
 function contaAtivaFiltro(){ return document.getElementById('contaFiltro').value; }
@@ -1094,6 +1267,28 @@ async function adicionar(){
   const parcelas = Math.max(1, parseInt(document.getElementById('parcelas').value) || 1);
   const arquivoAnexo = document.getElementById('anexo').files[0];
   const tag = document.getElementById('tag').value.trim();
+
+  // transferência entre contas: não é receita nem gasto — gera dois lançamentos
+  // ligados por grupoTransferencia, um de saída na conta origem e um de entrada na
+  // conta destino. Ficam de fora de todos os KPIs por terem tipo próprio.
+  if(tipo === 'transferencia'){
+    const contaDestino = document.getElementById('contaDestino').value;
+    if(isNaN(valorTotal) || valorTotal <= 0){ alert('Informe um valor válido para a transferência.'); return; }
+    if(conta === contaDestino){ alert('Escolha contas diferentes para origem e destino.'); return; }
+    if(editandoId){ alert('Para alterar uma transferência, exclua e lance novamente.'); return; }
+    const grupo = uid();
+    const rotulo = desc || 'Transferência';
+    transacoes.unshift({ id: uid(), tipo:'transferencia', subtipo:'saida', desc:`${rotulo} → ${contaDestino}`, valor:valorTotal, categoria:'Transferência', conta, data:dataISO, status:'pago', grupoTransferencia:grupo, tag: tag||null });
+    transacoes.unshift({ id: uid()+1, tipo:'transferencia', subtipo:'entrada', desc:`${rotulo} ← ${conta}`, valor:valorTotal, categoria:'Transferência', conta:contaDestino, data:dataISO, status:'pago', grupoTransferencia:grupo, tag: tag||null });
+    document.getElementById('descricao').value = '';
+    document.getElementById('valor').value = '';
+    document.getElementById('tag').value = '';
+    salvarTx();
+    mesAtual = chaveMes(dataISO);
+    popularSeletorMes();
+    render();
+    return;
+  }
 
   if(!desc || isNaN(valorTotal) || valorTotal <= 0){ alert('Preencha a descrição e um valor válido.'); return; }
 
@@ -1136,6 +1331,72 @@ async function adicionar(){
   salvarTx();
   mesAtual = chaveMes(dataISO);
   popularSeletorMes();
+  render();
+}
+
+// palavras-chave → categoria, para o registro rápido adivinhar a categoria pela descrição.
+// primeira correspondência vence; sem correspondência cai em 'Outros'.
+const PALPITE_CATEGORIA = [
+  [/\b(ifood|rappi|mercado|supermerc|padaria|restaurante|lanche|pizza|hamburg|acai|feira|hortifrut|açougue|bar\b)/i, 'Alimentação'],
+  [/\b(uber|99|taxi|onibus|ônibus|metro|metrô|gasolina|combust|posto|estacion|pedagio|pedágio|passagem|bilhete)/i, 'Transporte'],
+  [/\b(aluguel|condominio|condomínio|iptu|luz|energia|agua|água|gas\b|internet|net\b|faxina|diarista)/i, 'Moradia'],
+  [/\b(netflix|spotify|prime|hbo|disney|youtube|assinatura|icloud|dropbox|chatgpt|notion)/i, 'Assinaturas'],
+  [/\b(farmacia|farmácia|drogaria|remedio|remédio|medico|médico|dentista|consulta|exame|hospital|plano de saude|academia|psicolog)/i, 'Saúde'],
+  [/\b(curso|faculdade|escola|livro|apostila|udemy|alura|mensalidade escolar)/i, 'Educação'],
+  [/\b(cinema|show|viagem|hotel|airbnb|passeio|bar\b|balada|jogo|steam|presente)/i, 'Lazer'],
+  [/\b(emprestimo|empréstimo|financiamento|parcela|consignado)/i, 'Empréstimos'],
+  [/\b(doacao|doação|dizimo|dízimo|oferta|vaquinha)/i, 'Doação'],
+];
+function palpitarCategoria(desc){
+  for(const [re, cat] of PALPITE_CATEGORIA){ if(re.test(desc)) return cat; }
+  return null;
+}
+
+let rapidoTipo = 'gasto';
+function abrirModalRapido(){
+  rapidoTipo = 'gasto';
+  rapidoSetTipo('gasto');
+  document.getElementById('rapValor').value = '';
+  document.getElementById('rapDesc').value = '';
+  document.getElementById('rapConta').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('rapCategoria').innerHTML = CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('rapPalpite').textContent = '';
+  document.getElementById('modalRapido').style.display = 'flex';
+  setTimeout(()=>document.getElementById('rapValor').focus(), 50);
+}
+function fecharModalRapido(){ document.getElementById('modalRapido').style.display = 'none'; }
+function rapidoSetTipo(t){
+  rapidoTipo = t;
+  document.getElementById('rapGasto').classList.toggle('active', t==='gasto');
+  document.getElementById('rapReceita').classList.toggle('active', t==='receita');
+  document.getElementById('rapCategoria').style.display = t==='gasto' ? 'block' : 'none';
+  rapidoAtualizarPalpite();
+}
+function rapidoAtualizarPalpite(){
+  const p = document.getElementById('rapPalpite');
+  if(rapidoTipo !== 'gasto'){ p.textContent = ''; return; }
+  const desc = document.getElementById('rapDesc').value.trim();
+  const palpite = desc ? palpitarCategoria(desc) : null;
+  if(palpite){
+    document.getElementById('rapCategoria').value = palpite;
+    p.textContent = `Categoria sugerida: ${palpite} (você pode trocar acima)`;
+  }else{
+    p.textContent = '';
+  }
+}
+function salvarRapido(){
+  const valor = parseFloat(document.getElementById('rapValor').value);
+  const desc = document.getElementById('rapDesc').value.trim();
+  if(isNaN(valor) || valor <= 0){ alert('Informe um valor válido.'); return; }
+  const conta = document.getElementById('rapConta').value;
+  const categoria = rapidoTipo === 'receita' ? 'Receita' : document.getElementById('rapCategoria').value;
+  const descFinal = desc || (rapidoTipo === 'receita' ? 'Receita' : categoria);
+  const dataISO = hojeISO();
+  transacoes.unshift({ id: uid(), tipo: rapidoTipo, desc: descFinal, valor, categoria, conta, data: dataISO, fixo:false, status:'pago', anexo:null, tag:null });
+  salvarTx();
+  mesAtual = chaveMes(dataISO);
+  popularSeletorMes();
+  fecharModalRapido();
   render();
 }
 
@@ -1189,6 +1450,15 @@ function remover(id){
     document.getElementById('modalExcluirParcelaTexto').textContent =
       `"${t.desc}" faz parte de um parcelamento com ${qtd} parcela(s). O que deseja excluir?`;
     document.getElementById('modalExcluirParcela').style.display = 'flex';
+    return;
+  }
+  if(t.grupoTransferencia){
+    if(!confirm(`Excluir esta transferência (${fmt(t.valor)})? Os dois lançamentos (saída e entrada) serão removidos. Pode ser desfeito em seguida.`)) return;
+    salvarSnapshot();
+    transacoes = transacoes.filter(x => x.grupoTransferencia !== t.grupoTransferencia);
+    salvarTx();
+    popularSeletorMes();
+    render();
     return;
   }
   if(!confirm(`Excluir o lançamento "${t.desc}" (${fmt(t.valor)})? Essa ação pode ser desfeita logo em seguida pelo botão "Desfazer".`)) return;
@@ -1613,28 +1883,31 @@ function render(){
     vazio.style.display = 'none';
     listaTabela.slice().sort((a,b)=>b.data.localeCompare(a.data)).forEach(t=>{
       const tr = document.createElement('tr');
-      const cor = t.tipo==='receita' ? 'green' : 'red';
-      const sinal = t.tipo==='receita' ? '+' : '-';
+      const ehTransf = t.tipo === 'transferencia';
+      const cor = ehTransf ? 'blue' : (t.tipo==='receita' ? 'green' : 'red');
+      const sinal = ehTransf ? (t.subtipo==='entrada' ? '⇄ +' : '⇄ −') : (t.tipo==='receita' ? '+' : '-');
       const [y,m,d] = t.data.split('-');
-      const corCat = CORES[t.categoria] || '#8b93a3';
+      const corCat = ehTransf ? '#4d9eff' : (CORES[t.categoria] || '#8b93a3');
       const statusEf = statusEfetivo(t);
-      const statusTag = statusEf === 'vencido'
+      const statusTag = ehTransf
+        ? '<span class="tag" style="background:var(--blue-bg);color:var(--blue)">transferência</span>'
+        : statusEf === 'vencido'
         ? '<span class="tag" style="background:var(--red-bg);color:var(--red)">vencido</span>'
         : statusEf === 'pendente'
           ? '<span class="tag" style="background:var(--amber-bg);color:var(--amber)">pendente</span>'
           : '<span class="tag" style="background:var(--green-bg);color:var(--green)">pago</span>';
       tr.innerHTML = `
-        <td class="editable-only"><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" ${statusEf==='pago'?'disabled':''}></td>
+        <td class="editable-only"><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" ${(statusEf==='pago'||ehTransf)?'disabled':''}></td>
         <td>${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
         <td><span class="tag" style="background:${corCat}22;color:${corCat}">${t.categoria}</span></td>
         <td style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
         <td>${statusTag}</td>
         <td class="${cor}" style="font-weight:600;">${sinal} ${fmt(t.valor)}</td>
         <td><div class="actions editable-only">
-          ${statusEf!=='pago' ? `<button class="iconbtn" style="color:var(--green)" onclick="marcarComoPago(${t.id})" title="Marcar como pago">✓</button>` : ''}
+          ${(!ehTransf && statusEf!=='pago') ? `<button class="iconbtn" style="color:var(--green)" onclick="marcarComoPago(${t.id})" title="Marcar como pago">✓</button>` : ''}
           ${t.anexo?`<button class="iconbtn" onclick="verAnexo(${t.id})" title="Ver comprovante">📎</button>`:''}
-          <button class="iconbtn" onclick="duplicarLancamento(${t.id})" title="Duplicar">⧉</button>
-          <button class="iconbtn" onclick="editar(${t.id})" title="Editar">✎</button>
+          ${!ehTransf ? `<button class="iconbtn" onclick="duplicarLancamento(${t.id})" title="Duplicar">⧉</button>
+          <button class="iconbtn" onclick="editar(${t.id})" title="Editar">✎</button>` : ''}
           <button class="iconbtn del" onclick="remover(${t.id})" title="Excluir">&times;</button>
         </div></td>
       `;
@@ -1646,6 +1919,8 @@ function render(){
   const porCat = {};
   gastos.forEach(t => porCat[t.categoria] = (porCat[t.categoria]||0) + t.valor);
 
+  renderLivreParaGastar();
+  renderSaldosContas();
   renderChartCat(porCat);
   renderChartMes(conta);
   renderChartSaldo(conta);
@@ -1725,7 +2000,7 @@ function renderChartSaldo(conta){
   // futura correspondente lançada ainda, então incluí-las aqui derruba a linha
   // artificialmente. O histórico real precisa parar em "agora".
   const hoje = hojeISO();
-  const base = transacoes.filter(t => (!conta || t.conta===conta) && t.data <= hoje).slice().sort((a,b)=>a.data.localeCompare(b.data));
+  const base = transacoes.filter(t => t.tipo!=='transferencia' && (!conta || t.conta===conta) && t.data <= hoje).slice().sort((a,b)=>a.data.localeCompare(b.data));
   let acumulado = 0;
   const pontos = [];
   base.forEach(t=>{
@@ -2039,6 +2314,110 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   el.innerHTML = alertas.map(a=>`<div class="alert ${a.tipo}"><span class="ico">${a.ico}</span><span>${a.html}</span></div>`).join('');
 }
 
+// "Livre para gastar": quanto sobra até o fim do mês corrente depois de descontar
+// do saldo de hoje os compromissos que ainda vão sair neste mês — contas em aberto
+// (pendentes/vencidas), parcelas futuras não pagas e recorrentes ainda não lançados.
+// Só faz sentido para o mês corrente; nos outros meses o card é escondido.
+function renderLivreParaGastar(){
+  const card = document.getElementById('livreCard');
+  const chaveCorrente = chaveMes(hojeISO());
+
+  // fora do mês atual não há "quanto posso gastar até o fim do mês" — esconde
+  if(mesAtual !== chaveCorrente){ card.style.display = 'none'; return; }
+  card.style.display = 'flex';
+
+  const hoje = new Date();
+  const hojeStr = hojeISO();
+  const [anoC, mesC] = chaveCorrente.split('-').map(Number);
+  const ultimoDia = ultimoDiaMes(anoC, mesC-1);
+  const diasRestantes = Math.max(1, ultimoDia - hoje.getDate() + 1);
+  const fimMesStr = `${anoC}-${String(mesC).padStart(2,'0')}-${String(ultimoDia).padStart(2,'0')}`;
+
+  // ponto de partida, em ordem de preferência:
+  //  1) soma dos saldos atuais das contas com saldo inicial informado (o mais preciso);
+  //  2) saldo total informado em Contas (saldoContas), ajustado pelos lançamentos desde a data;
+  //  3) sem nenhum dos dois: o resultado do mês até agora.
+  let saldoHoje, partidaReal;
+  const contasComSaldo = contas.filter(temSaldoInicial);
+  if(contasComSaldo.length > 0){
+    saldoHoje = contasComSaldo.reduce((s,nome)=>s+saldoAtualConta(nome), 0);
+    partidaReal = true;
+  }else if(saldoContas && typeof saldoContas.valor === 'number'){
+    const desde = saldoContas.em || hojeStr;
+    const ajuste = transacoes
+      .filter(t => t.tipo !== 'transferencia' && t.data > desde && t.data <= hojeStr)
+      .reduce((s,t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0);
+    saldoHoje = saldoContas.valor + ajuste;
+    partidaReal = true;
+  }else{
+    const recMes = somarPorTipoNoMes(transacoes, 'receita', chaveCorrente);
+    const gastoPagoMes = transacoes
+      .filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t)==='pago')
+      .reduce((s,t)=>s+t.valor,0);
+    saldoHoje = recMes - gastoPagoMes;
+    partidaReal = false;
+  }
+
+  // compromissos que ainda vão sair de hoje até o fim do mês
+  const gastosMes = transacoes.filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente);
+  const emAberto = gastosMes.filter(t => statusEfetivo(t) !== 'pago');
+  const parcelasAbertas = emAberto.filter(t => t.grupoParcela).reduce((s,t)=>s+t.valor,0);
+  const contasAbertas = emAberto.filter(t => !t.grupoParcela).reduce((s,t)=>s+t.valor,0);
+  const recorrentesFalta = recorrentes
+    .filter(r => r.tipo !== 'receita' && !recorrenteJaLancadoEm(r, transacoes, chaveCorrente))
+    .reduce((s,r)=>s+r.valor,0);
+
+  // receitas ainda não recebidas neste mês (status pendente) somam ao disponível
+  const receitaAReceber = transacoes
+    .filter(t => t.tipo==='receita' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t) !== 'pago')
+    .reduce((s,t)=>s+t.valor,0);
+
+  const compromissos = contasAbertas + parcelasAbertas + recorrentesFalta;
+  const livre = saldoHoje + receitaAReceber - compromissos;
+  const porDia = livre / diasRestantes;
+
+  card.classList.toggle('neg', livre < 0);
+  const [fy,fm,fd] = fimMesStr.split('-');
+  document.getElementById('livreTitulo').textContent = `Livre para gastar até ${fd}/${fm}`;
+  document.getElementById('livreValor').textContent = fmt(livre);
+  document.getElementById('livrePorDia').textContent = livre >= 0
+    ? `${fmt(porDia)} / dia nos próximos ${diasRestantes} dia(s)`
+    : `Faltam ${fmt(Math.abs(livre))} para cobrir os compromissos do mês`;
+
+  const linhas = [];
+  linhas.push(`<div class="lb-row"><span>${partidaReal ? 'Saldo das contas hoje' : 'Resultado do mês até agora'}</span><b>${fmt(saldoHoje)}</b></div>`);
+  if(receitaAReceber > 0) linhas.push(`<div class="lb-row"><span>+ Receitas a receber</span><b>${fmt(receitaAReceber)}</b></div>`);
+  if(contasAbertas > 0) linhas.push(`<div class="lb-row"><span>− Contas a vencer no mês</span><b>${fmt(contasAbertas)}</b></div>`);
+  if(parcelasAbertas > 0) linhas.push(`<div class="lb-row"><span>− Parcelas em aberto</span><b>${fmt(parcelasAbertas)}</b></div>`);
+  if(recorrentesFalta > 0) linhas.push(`<div class="lb-row"><span>− Fixos ainda não lançados</span><b>${fmt(recorrentesFalta)}</b></div>`);
+  linhas.push(`<div class="lb-row total"><span>= Livre</span><b>${fmt(livre)}</b></div>`);
+  if(!partidaReal) linhas.push(`<div class="lb-row" style="font-size:11px;opacity:.85;"><span>Informe o saldo real em <b style="text-decoration:underline;cursor:pointer" onclick="abrirModalContas()">Contas</b> para um número exato.</span></div>`);
+  document.getElementById('livreBreakdown').innerHTML = linhas.join('');
+}
+
+// mostra o saldo atual de cada conta que tem saldo inicial informado.
+// só aparece se pelo menos uma conta foi configurada — senão o card fica escondido.
+function renderSaldosContas(){
+  const card = document.getElementById('cardSaldosContas');
+  const lista = document.getElementById('listaSaldosContas');
+  const comSaldo = contas.filter(temSaldoInicial);
+  if(comSaldo.length === 0){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  lista.innerHTML = comSaldo.map(nome=>{
+    const atual = saldoAtualConta(nome);
+    const ini = saldosIniciais[nome];
+    const mov = atual - ini.valor;
+    const cor = atual >= 0 ? 'var(--green)' : 'var(--red)';
+    const det = contasDetalhes[nome];
+    const ehCartao = det && det.tipo === 'cartao';
+    return `<div class="saldo-conta">
+      <div class="nome">${nome}${ehCartao?' 💳':''}</div>
+      <div class="val" style="color:${cor}">${fmt(atual)}</div>
+      <div class="mov">${mov>=0?'+':'−'} ${fmt(Math.abs(mov))} desde o saldo inicial</div>
+    </div>`;
+  }).join('');
+}
+
 function renderProjecaoSaldo(){
   const textoEl = document.getElementById('projecaoTexto');
   const hoje = new Date();
@@ -2068,7 +2447,7 @@ function renderProjecaoSaldo(){
     const desde = saldoContas.em || hojeISO();
     const ate = hojeISO();
     const ajuste = transacoes
-      .filter(t => t.data > desde && t.data <= ate)
+      .filter(t => t.tipo !== 'transferencia' && t.data > desde && t.data <= ate)
       .reduce((s,t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0);
     saldoInicial = saldoContas.valor + ajuste;
     partidaReal = true;
@@ -2308,7 +2687,7 @@ function exportarPDF(){
   doMes.slice().sort((a,b)=>a.data.localeCompare(b.data)).forEach(t=>{
     if(y > 280){ doc.addPage(); y = 20; }
     const [ano,mes,dia] = t.data.split('-');
-    const sinal = t.tipo==='receita' ? '+' : '-';
+    const sinal = t.tipo==='transferencia' ? (t.subtipo==='entrada'?'~ +':'~ -') : (t.tipo==='receita' ? '+' : '-');
     doc.text(`${dia}/${mes}`, 14, y);
     doc.text(t.desc.substring(0,38), 38, y);
     doc.text(t.categoria, 110, y);
