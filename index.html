@@ -713,7 +713,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.1';
+const APP_VERSION = '2026-09-01.2';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1632,21 +1632,6 @@ function mesAnterior(chave){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
-// "o que sobrou de todos os meses anteriores ao selecionado": soma receita − gasto
-// de cada transação com mês < chave e >= HISTORICO_INICIO. Transferências têm tipo
-// próprio e já ficam de fora. É um resultado acumulado, não considera saldo inicial
-// de conta — serve só para a linha "vem de meses anteriores" no KPI Saldo.
-function saldoAcumuladoAntesDe(chave, conta){
-  return transacoes.reduce((s,t)=>{
-    const mes = chaveMes(t.data);
-    if(mes >= chave || mes < HISTORICO_INICIO) return s;
-    if(conta && t.conta !== conta) return s;
-    if(t.tipo === 'receita') return s + t.valor;
-    if(t.tipo === 'gasto') return s - t.valor;
-    return s;
-  }, 0);
-}
-
 function statusEfetivo(t){
   const status = t.status || 'pago';
   if(status === 'pendente' && t.data < hojeISO()) return 'vencido';
@@ -1779,14 +1764,14 @@ function render(){
   saldoEl.textContent = fmt(saldo);
   saldoEl.className = 'value ' + (saldo>=0?'blue':'red');
 
-  // linha "vem de meses anteriores": resultado acumulado de todos os meses antes do
-  // selecionado. Não mexe no KPI do mês — só mostra o total combinado embaixo.
-  const acumAnt = saldoAcumuladoAntesDe(mesAtual, conta);
+  // linha "saldo do mês anterior": o que sobrou (receita − gasto) só do mês
+  // imediatamente anterior ao selecionado. Não mexe no KPI do mês — só mostra
+  // o total combinado (mês anterior + mês atual) embaixo.
   const acumEl = document.getElementById('saldoAcumulado');
-  if(Math.round(acumAnt * 100) !== 0){
-    const total = acumAnt + saldo;
-    const sinal = acumAnt >= 0 ? '+' : '−';
-    acumEl.innerHTML = `${sinal} ${fmt(Math.abs(acumAnt))} de meses anteriores · <b style="color:var(--text)">total ${fmt(total)}</b>`;
+  if(Math.round(saldoAnt * 100) !== 0){
+    const total = saldoAnt + saldo;
+    const sinal = saldoAnt >= 0 ? '+' : '−';
+    acumEl.innerHTML = `saldo do mês anterior ${sinal} ${fmt(Math.abs(saldoAnt))} · <b style="color:var(--text)">total ${fmt(total)}</b>`;
     acumEl.style.display = 'block';
   }else{
     acumEl.style.display = 'none';
