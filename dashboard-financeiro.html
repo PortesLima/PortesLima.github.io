@@ -1072,7 +1072,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.11';
+const APP_VERSION = '2026-09-01.12';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1154,7 +1154,7 @@ function atualizarStatusGoogle(status){
   else if(status==='ok'){
     txt = '🟢 Sincronizado com Drive';
     const agora = new Date();
-    if(sync) sync.textContent = 'última sync: ' + agora.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    if(sync) sync.textContent = 'Última sync: ' + agora.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
   }
   else if(status==='erro') txt = '⚠️ Erro ao sincronizar';
   else if(status==='expirado') txt = '🔄 Sessão expirada, clique para reconectar';
@@ -2226,8 +2226,8 @@ function render(){
     const sinalMes = saldo >= 0 ? '+' : '−';
     const sinalAnt = saldoAnt >= 0 ? '+' : '−';
     acumEl.innerHTML =
-      `<div class="parcela"><span>resultado de ${fmtMesLabel(mesAtual)}</span><b>${sinalMes} ${fmt(Math.abs(saldo))}</b></div>` +
-      `<div class="parcela"><span>sobrou de ${fmtMesLabel(chaveAnt)}</span><b>${sinalAnt} ${fmt(Math.abs(saldoAnt))}</b></div>`;
+      `<div class="parcela"><span>Resultado de ${fmtMesLabel(mesAtual)}</span><b>${sinalMes} ${fmt(Math.abs(saldo))}</b></div>` +
+      `<div class="parcela"><span>Sobrou de ${fmtMesLabel(chaveAnt)}</span><b>${sinalAnt} ${fmt(Math.abs(saldoAnt))}</b></div>`;
     acumEl.style.display = 'block';
   }else{
     saldoLabelEl.textContent = 'Sobrou';
@@ -2240,9 +2240,9 @@ function render(){
   poupEl.textContent = taxaPoupanca + '%';
   poupEl.style.color = taxaPoupanca>=20 ? 'var(--green)' : taxaPoupanca>=0 ? 'var(--amber)' : 'var(--red)';
   document.getElementById('kpiPoupancaMsg').textContent =
-    totalReceita===0 ? 'sem receita lançada' :
-    taxaPoupanca>=20 ? 'no caminho certo (uma referência comum é 20%)' :
-    taxaPoupanca>=0 ? 'abaixo da referência de 20% — sem pressão, o hábito importa mais' : 'gastando mais do que ganha';
+    totalReceita===0 ? 'Sem receita lançada' :
+    taxaPoupanca>=20 ? 'No caminho certo (uma referência comum é 20%)' :
+    taxaPoupanca>=0 ? 'Abaixo da referência de 20% — sem pressão, o hábito importa mais' : 'Gastando mais do que ganha';
 
   // orçamento total
   const limiteTotal = Object.values(orcamentos).reduce((s,v)=>s+v,0);
@@ -2814,9 +2814,9 @@ function renderDobraSaldo(){
   const subEl = document.getElementById('dsSub');
   if(partidaReal){
     const n = contasComSaldo.length;
-    subEl.textContent = n === 1 ? 'em 1 conta' : `somando ${n} contas`;
+    subEl.textContent = n === 1 ? 'Em 1 conta' : `Somando ${n} contas`;
   }else{
-    subEl.innerHTML = 'estimado pelo mês — <a onclick="abrirModalContas()">informe o saldo das suas contas</a> para o número exato';
+    subEl.innerHTML = 'Estimado pelo mês — <a onclick="abrirModalContas()">informe o saldo das suas contas</a> para o número exato';
   }
 
   // frase de status: no ritmo de gasto atual, até quando o dinheiro dura
@@ -2952,15 +2952,15 @@ function renderLivreParaGastar(){
     ? `São ${fmt(porDia)} por dia até o fim do mês.`
     : `Sem contar isso, seu mês fecha no vermelho.`;
 
-  // breakdown: "você tem hoje" − "ainda falta pagar" = "sobra" / "falta"
+  // breakdown: "Você tem hoje" − "Ainda falta pagar" = "Sobra" / "Falta"
   const linhas = [];
   linhas.push(`<div class="lb-row"><span>${partidaReal ? 'Você tem hoje' : 'Resultado do mês até agora'}</span><b>${fmt(saldoHoje)}</b></div>`);
-  if(receitaAReceber > 0) linhas.push(`<div class="lb-row"><span>+ ainda vai receber</span><b>${fmt(receitaAReceber)}</b></div>`);
-  linhas.push(`<div class="lb-row"><span>− ainda falta pagar</span><b>${fmt(aindaFaltaPagar)}</b></div>`);
-  if(contasAbertas > 0) linhas.push(`<div class="lb-row sub"><span>contas a vencer</span><b>${fmt(contasAbertas)}</b></div>`);
-  if(parcelasAbertas > 0) linhas.push(`<div class="lb-row sub"><span>parcelas em aberto</span><b>${fmt(parcelasAbertas)}</b></div>`);
-  if(recorrentesFalta > 0) linhas.push(`<div class="lb-row sub"><span>fixos ainda não lançados</span><b>${fmt(recorrentesFalta)}</b></div>`);
-  linhas.push(`<div class="lb-row total"><span>= ${sobra ? 'sobra' : 'falta'}</span><b>${fmt(Math.abs(livre))}</b></div>`);
+  if(receitaAReceber > 0) linhas.push(`<div class="lb-row"><span>+ Ainda vai receber</span><b>${fmt(receitaAReceber)}</b></div>`);
+  linhas.push(`<div class="lb-row"><span>− Ainda falta pagar</span><b>${fmt(aindaFaltaPagar)}</b></div>`);
+  if(contasAbertas > 0) linhas.push(`<div class="lb-row sub"><span>Contas a vencer</span><b>${fmt(contasAbertas)}</b></div>`);
+  if(parcelasAbertas > 0) linhas.push(`<div class="lb-row sub"><span>Parcelas em aberto</span><b>${fmt(parcelasAbertas)}</b></div>`);
+  if(recorrentesFalta > 0) linhas.push(`<div class="lb-row sub"><span>Fixos ainda não lançados</span><b>${fmt(recorrentesFalta)}</b></div>`);
+  linhas.push(`<div class="lb-row total"><span>= ${sobra ? 'Sobra' : 'Falta'}</span><b>${fmt(Math.abs(livre))}</b></div>`);
   if(!partidaReal) linhas.push(`<div class="lb-row sub"><span>Informe o saldo das suas contas em <b style="text-decoration:underline;cursor:pointer" onclick="abrirModalContas()">Contas</b> para o número exato.</span></div>`);
   document.getElementById('livreBreakdown').innerHTML = linhas.join('');
 
@@ -3016,7 +3016,7 @@ function renderParaOnde(porCat){
     const pct = Math.round(restoValor/totalGasto*100);
     html += `<div class="po-row">
       <span class="po-dot" style="background:var(--muted2)"></span>
-      <span class="po-nome" style="color:var(--muted)">outras categorias</span>
+      <span class="po-nome" style="color:var(--muted)">Outras categorias</span>
       <span class="po-valor" style="color:var(--muted)">${fmt(restoValor)}</span>
       <span class="po-pct">${pct}%</span>
     </div>`;
