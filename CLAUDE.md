@@ -15,20 +15,29 @@ file**, in Portuguese. No build step, no package manager, no framework.
   OAuth client, GitHub Pages setup steps). Historical context, not authoritative for current
   app behavior — the code is the source of truth.
 
+Two planning documents (published as claude.ai Artifacts, not in the repo) drive the current
+direction:
+- **"Bolso Certo — Redesign"** — the UX redesign brief the 9-item round implemented against.
+- **"Bolso Certo — Assinatura"** — the monetization plan (15-day trial, R$ 20/mo, Mercado
+  Pago recommended, minimal Supabase backend, LGPD, phased roadmap). Fase 1 (trial + block,
+  no gateway) is done; Fase 2 (backend + gateway) and Fase 3 (Play Store via TWA) are open.
+Ask the user for the URLs if a future session needs them.
+
 ## Commands
 
-There is no build, lint, or test tooling — this is intentional (see Architecture). Workflow:
+There is no build or lint tooling — this is intentional (see Architecture). Workflow:
 
 ```bash
 # Syntax-check the inline <script> block after editing (Node has no HTML parser,
-# so extract the script content first):
+# so extract the script content first). On this machine /tmp resolves oddly under
+# Git Bash — write to a local scratch file instead:
 node -e "
 const fs = require('fs');
 const html = fs.readFileSync('index.html', 'utf8');
 const matches = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-fs.writeFileSync('/tmp/script_0.js', matches[0][1]);
+fs.writeFileSync('scratch_s.js', matches[0][1]);
 "
-node --check /tmp/script_0.js
+node --check scratch_s.js && rm scratch_s.js
 
 # Keep the mirror file in sync before every commit:
 cp index.html dashboard-financeiro.html
@@ -39,25 +48,48 @@ git commit -m "..."
 git push origin main
 ```
 
-To actually exercise a change (not just check syntax), open `index.html` in a headless browser
-and drive the UI — there's no test suite, so this is the only way to verify behavior. This
-machine has `playwright-core` (not full `playwright`) with the `msedge` channel working
-headless; load the app over `file://` and dismiss `#btnEntrarApp` then `#modalOnboarding`
-before interacting. `file://` disables CORS-dependent features (Google sign-in, the currency
-API) — those only work over `https://` on the published site. Script-scoped `let`s are
-reachable from `page.evaluate()` as bare globals (they're top-level in the one script block),
-so `montarEstado()` / `aplicarDadosImportados()` can be called directly to test the sync
-funnel. See the browser-test-harness memory for a ready scaffold.
+### Test suite (headless browser)
+
+There **is** a test suite now — a set of standalone Playwright scripts kept in the session
+scratchpad (not committed; they drive `index.html` over `file://`). They are the real
+verification that a change works, and every change in the UX rounds was gated on them staying
+green. As of the last round there are ~315 checks across:
+
+- `test-trial` — trial countdown, soft-block, `podeEditar()`, sub-modal state (Fase 1)
+- `test-saldo-anterior` — the "sobrou de meses anteriores" composition in the Saldo card
+- `test-toast` — confirmation toast + undo, `commitTransacoes()` funnel
+- `test-sync-undo` — Drive debounce vs. undo timing (fast undo absorbed, slow undo converges)
+- `test-dobra` — the "Você tem hoje" band + status phrase colour thresholds
+- `test-fimdomes` — the "Fim do mês" headline (sobra/falta), collapsible detail
+- `test-hierarquia` — Resumo/Análise sub-tabs, first-Análise chart sizing, nothing-lost checks
+- `test-microinteracoes` — number tweens only fire on real value change; skeleton lifecycle
+- `test-responsivo` — 3 breakpoints × tabs × themes, bottom bar, table→cards, max-density mobile
+- `test-a11y` — every text token ≥ 4.5:1 on every surface (both themes), touch targets ≥ 44px
+- `test-criterios-gerais` — "understand the balance without touching anything", "log a gasto in <5s"
+
+Harness notes: `playwright-core` (not full `playwright`) with the `msedge` channel works
+headless. Load over `file://`, then dismiss `#btnEntrarApp` and `#modalOnboarding`. `file://`
+disables CORS features (Google sign-in, currency API) — those only work on the deployed
+`https://` origin. Script-scoped `let`s are reachable from `page.evaluate()` as bare globals,
+so `montarEstado()` / `aplicarDadosImportados()` / `render()` can be called directly. Values
+that animate (`fmtValorAnimado`) need a ~300–600ms wait before reading `.textContent`, or read
+`el.dataset.valor` (the target). The bottom bar's `getBoundingClientRect().bottom` has a ~18px
+quirk in msedge headless — the bar renders flush; measure via `offsetHeight` / distance-from-
+bottom instead. See the browser-test-harness memory for a ready scaffold.
+
+**Currently in flux:** the app is being tested in daily use, so more UX changes are expected.
+Keep the antes/depois + "what doesn't change" + test-driven discipline that the UX rounds used.
 
 ## Architecture
 
 **Single HTML file, single `<script>` block, no modules.** All state lives in top-level `let`
 variables (`transacoes`, `orcamentos`, `contas`, `metas`, `recorrentes`, `contasDetalhes`,
-`saldosIniciais`, `moedaAtual`, etc.) mutated directly by event handlers, then persisted and
-re-rendered — there
-is no framework, no virtual DOM, no reactivity system. Every UI update goes through one
-function, `render()`, which recomputes everything (KPIs, charts, tables, alerts) from the
-in-memory state and month/period filters currently selected in the DOM.
+`saldosIniciais`, `assinatura`, `moedaAtual`, etc.) mutated directly by event handlers, then
+persisted and re-rendered — there is no framework, no virtual DOM, no reactivity system. Every
+UI update goes through one function, `render()`, which recomputes everything (KPIs, charts,
+tables, alerts) from the in-memory state and month/period filters currently selected in the
+DOM. `render()` is large and populates elements by id — moving an element between containers
+(even a hidden sub-tab) is safe as long as it stays in the DOM.
 
 ### Persistence: three layers, always in this order
 
@@ -82,8 +114,24 @@ key, the `getJSON` call in `carregar()`, `montarEstado()` (for Drive sync), and
 `aplicarDadosImportados()` (the single funnel both `driveSincronizarInicial()` and
 `importarBackupJSON()` go through — read + `setJSON` the field there). Missing one means the
 field silently doesn't survive a sync or an import — this has been the source of most
-cross-device bugs in this app. `saldosIniciais` is the most recent field wired this way
-(also persisted by `salvarContas()`).
+cross-device bugs in this app. `assinatura` (the trial state) is the most recent field wired
+this way; `saldosIniciais` before it (also persisted by `salvarContas()`).
+
+**UI-only state that must survive `render()` but not persist** (e.g. `subAbaGeral`,
+`detalheLivreAberto`) is a plain session `let` with an `aplicar…()` reapply function called
+at the end of the relevant render path — deliberately *not* in the funnel above.
+
+### Toast + undo funnel
+
+Mutations to `transacoes` go through `commitTransacoes(msgToast, {comUndo, irParaMes})`:
+`salvarSnapshot()` → `salvarTx()` → `popularSeletorMes()` → `render()` → `mostrarToast()`.
+`salvarSnapshot()` is now taken on **adds too** (not just deletes), so the toast's "Desfazer"
+covers logging and deleting. Deleting a *simple* transaction skips the old `confirm()` — the
+6s toast is the undo. Installments and transfers keep their modal/confirm (blind undo on
+multi-item is risky) and get a toast without "Desfazer". Two quick actions in a row: the
+second toast replaces the first (first undo is lost) — intentional, like Gmail. The old
+`#btnDesfazer` header button is gone; `desfazer()` and `snapshotAnterior` remain, called by
+the toast.
 
 ### Auth: token renewal without a backend
 
@@ -93,6 +141,85 @@ requests a new token with `prompt: ''` (no popup) whenever a 401 is hit or a ses
 50-minute proactive timer (`agendarRenovacaoToken`) does the same before expiry. Any new
 authenticated Drive call should go through `driveApi()`, which already handles the 401 →
 silent-renew → retry-once path — don't call `fetch` against the Drive API directly.
+
+### Subscription / trial (Fase 1 — no gateway yet)
+
+New state `assinatura` (`{status, trialInicio, assinouEm}`), wired through the full funnel
+(top-level `let`, `STORAGE_ASSINATURA`, `carregarAssinatura()` in `carregar()`, `montarEstado`,
+`aplicarDadosImportados`). 15-day free trial from first ever open; after that the app enters a
+**soft block**: `body.readonly` (reuses the pre-existing read-only mode + `.editable-only`
+class), the FAB and every write form hidden, an amber warning bar, and a "seu teste terminou"
+modal. Read/filter/export/Drive-sync all keep working. `avaliarAssinatura()` computes the
+effective status on boot; `podeEditar()` guards the three write entry points (`adicionar`,
+`abrirModalRapido`, `salvarRapido`). `aplicarDadosImportados` merges the **oldest** `trialInicio`
+between local and incoming — syncing across devices must not restart or extend the trial.
+
+This is deliberately a logic-only phase to validate whether people hit the wall and want to
+pay, before building a backend. **No gateway, no real charge** — the "Assinar" button just
+unblocks (`assinarProvisorio`). The billing plan (Mercado Pago recommended, backend on
+Supabase, LGPD, roadmap) is in the "Bolso Certo — Assinatura" artifact. Known limitation,
+accepted for now: trial state lives only in `localStorage`/Drive — a determined user can
+bypass it via DevTools. That closes only with the Fase 2 backend.
+
+### Visão Geral: Resumo / Análise sub-tabs
+
+`#secGeral` has two sub-tabs (`mudarSubAbaGeral('resumo'|'analise')`, `subAbaGeral` is a
+session `let` — always resets to `'resumo'` on boot; every viewer opens wanting the summary
+first). Same pattern as the Lançamentos/Dicas sub-tabs; the bottom bar stays at 4 tabs.
+
+- **Resumo** (`#geralResumo`) — the "am I OK?" layer: the "Você tem hoje" band
+  (`renderDobraSaldo`), the "Fim do mês" headline (`renderLivreParaGastar`), "Este mês"
+  (Entrou/Saiu/Sobrou — fuses the old Receitas/Gastos/Saldo KPIs; taxa de poupança is now a
+  sentence in the card footer, not its own KPI), alerts, "Orçamento em risco"
+  (`renderOrcamentoRisco` — only categories ≥ 80% of limit, tap → Lançamentos filtered),
+  "Para onde foi o dinheiro" (`renderParaOnde` — the category donut + top-3 slices as text),
+  "Saldo por conta", "Orçamento total", "Maiores gastos".
+- **Análise** (`#geralAnalise`) — investigation, one tap deeper: "Projeção de saldo" (moved
+  here from Lançamentos > Dicas), "Últimos 6 meses", "Evolução do saldo", "Contas fixas vs.
+  gastos do dia a dia", "Comparação anual" + a plain daily-average "Ritmo de gastos" line.
+
+**Chart.js measures a 0-size canvas inside `display:none`.** The Análise charts
+(`chartMes`, `chartSaldo`, `chartFixoVar`, `chartProjecao`) are only built when
+`subAbaGeral === 'analise'` — `render()` skips them otherwise, and `mudarSubAbaGeral('analise')`
+does `render()` + `requestAnimationFrame(() => chart.resize())` to cover the first activation
+of a session (canvas never had a real size). `renderProjecaoSaldo()` still runs its
+text/data path always (`renderDicas` needs the return value) but guards only the chart build.
+
+**Removed from Visão Geral this round** (documented, not lost): the standalone "Ritmo de
+gastos" card — "seu saldo aguenta N dias" is now the `renderDobraSaldo` status phrase, in
+plainer words; the raw daily average survives in the Análise tab. The 3 trend charts moved
+from the fold to the Análise tab.
+
+### Header + bottom bar (responsive)
+
+Breakpoints: base ≤ 599 (mobile), 600–1023 (tablet), 1024+ (desktop). `.wrap` max-width 1120.
+- **Desktop:** header shows Drive · Contas · Backup · theme · ⚙️; tabs are a normal row.
+- **≤ 1023:** header keeps only logo + month + ⚙️ (Drive/Contas/Backup/theme move into the
+  ⚙️ menu, `.so-mobile` / `.so-desktop` classes); the 4 main tabs become a **fixed bottom
+  bar** (`.tabs#navPrincipal`, `<button>`s with icon + label, ≥ 52px); `.wrap` gets
+  `padding-bottom`; the FAB and toast sit above it. The account filter lives on its own line
+  (`.linha-filtro-conta`, "Conta: [select]") at all sizes.
+- **≤ 599:** the Lançamentos table renders as cards (CSS grid on `<tr>`, `data-label` on
+  `<td>`, no JS change); the "Este mês" 3-up grid becomes a 1-column list.
+
+### Accessibility (WCAG-ish, this round)
+
+Every text token is ≥ 4.5:1 on card, card2 and bg in **both** themes — the light theme
+values were re-tuned (`--muted` `#5e646f`, `--amber` `#8a5808`, `--green` `#0b7a50`, `--red`
+`#c52520`, `--blue` `#1a60bd`, `--purple` `#6b4fc4`); dark already passed. `getThemeColors()`
+tick colour tracks `--muted`. Touch targets: `.iconbtn` ≥ 28px desktop / 44px in the mobile
+list; clickable `<span>`s got `role="button"` + `tabindex="0"` + a global Enter/Space handler;
+focus-visible outlines on tabs, sub-tabs, icon buttons, links.
+
+### Microinteractions
+
+`fmtValorAnimado(el, novoValor)` tweens a currency element ~260ms from its `dataset.valor` to
+the new value; used by the "Você tem hoje" band, the "Fim do mês" headline, and the 3 "Este
+mês" numbers. It has an internal guard: **only animates when the value actually changed**
+(`|old − new| ≥ 0.01`) — a re-render with the same value (e.g. Resumo↔Análise toggle) writes
+directly, no tween. Respects `prefers-reduced-motion` (writes final value immediately). The
+opening screen (`#telaInicial`) shows a shimmer skeleton (`.skel`) while `carregar()` runs;
+`#btnEntrarApp` is `visibility:hidden` until `atualizarResumoTelaInicial()` reveals it.
 
 ### Month/period filtering split
 
@@ -127,22 +254,41 @@ month-relative math.
   `receita?+:−` (the "saldo acumulado" chart) must still exclude `tipo==='transferencia'`
   explicitly — grep for `!== 'transferencia'`. Deleting either leg removes both.
 
-### "Livre para gastar" card + per-account balances
+### The fold: "Você tem hoje" band + "Fim do mês" headline
 
-`renderLivreParaGastar()` (top of Visão Geral, current month only) answers "how much can I
-spend until month-end": an anchor balance minus this month's still-open commitments (pending/
-overdue bills, open installments, not-yet-launched recurring expenses), plus pending income.
-Anchor: (1) sum of `saldoAtualConta()` for accounts with a `saldosIniciais` entry, else
-(2) month result so far. `partidaReal` tracks whether the anchor is a real balance.
+Two adjacent elements at the top of Resumo, both current-month-only (hidden otherwise):
+
+- **`renderDobraSaldo()`** — the "Você tem hoje" band: real account balance (sum of
+  `saldoAtualConta()` for accounts with a `saldosIniciais` entry; else the month result, and
+  `partidaReal` is false + a nudge to configure accounts) as one big blue number, plus a
+  **status phrase** answering "will it last?": green (lasts past month-end), amber (lasts but
+  tight, ≤ 5 days slack), red (runs out before month-end). **Early-month guard:** with < 5
+  days elapsed the daily burn rate is noise (one big purchase → "R$ X/day" → "runs out day 2"),
+  so alarmist branches are suppressed in favour of a calm "ainda é cedo para ter certeza".
+
+- **`renderLivreParaGastar()`** — the "Fim do mês" headline, written as a sentence: "Depois de
+  pagar as contas de {mês}, você fica com **R$ X**" (green) or "Para cobrir as contas de {mês},
+  faltam **R$ X**" (red). Same anchor as the band, minus this month's still-open commitments
+  (pending/overdue bills, open installments, not-yet-launched recurring), plus pending income.
+  The breakdown (você tem hoje / − ainda falta pagar / = sobra|falta, with sub-lines) is
+  collapsible on mobile (`detalheLivreAberto`, session `let`, "ver detalhe"), always expanded
+  on desktop.
+
+The two answer different questions on purpose (how much I *have* / how much *is left after
+paying what's due*) — kept visually distinct: band is blue, headline is green/red.
 `renderProjecaoSaldo()` uses the same two-step anchor.
+
+### Per-account balances
 
 `saldosIniciais` (`{nomeConta: {valor, em}}`) is per-account starting balance — set in the
 Contas modal, one value+date row per account (`editarSaldoInicialConta`). `saldoAtualConta(nome)`
 = that value + Σ of **effectivated** movements on the account since `em` (`efeitoNoSaldo()`:
 receita +, gasto −, transfer signed by `subtipo`) — **only** `status:'pago'` items and
 transfers count, so pending bills don't reduce the shown balance (they surface as commitments
-in the Livre card instead). `renderSaldosContas()` shows the "Saldo por conta" card, hidden
-unless at least one account has a starting balance.
+in the Livre card instead). `renderSaldosContas()` shows the "Saldo por conta" card (in Resumo), hidden
+unless at least one account has a starting balance. **This card is deliberately kept** even
+though the band shows a total — the sum hides the per-account picture (e.g. Nubank +5.000 and
+a credit-card account at −1.200 net to +3.800, but you need to see the card is negative).
 
 `saldoContas` (old single global-balance field) is **legacy**: the UI is gone; `carregar()`
 migrates any stored value into `saldosIniciais[contas[0]]` on first load and nulls it. It's
@@ -151,9 +297,12 @@ reads it.
 
 ### Top-bar ⚙️ menu
 
-The header keeps only Google Drive, Contas, Backup, theme, and ⚙️ visible; ⚙️ (`#menuConfig`,
-`toggleMenuConfig`) holds PIN, currency, notifications, read-only link. A document-level click
-handler closes it on outside click.
+On desktop the header keeps Google Drive, Contas, Backup, theme, and ⚙️ visible; ⚙️
+(`#menuConfig`, `toggleMenuConfig`) holds "Minha assinatura", PIN, currency, notifications,
+read-only link — plus, on mobile only (`.so-mobile`), the Drive/Contas/Backup/theme entries
+that leave the header. A document-level click handler closes it on outside click. `#btnTema`
+and `#btnGoogle` have menu twins (`#btnTemaMenu`, `#btnGoogleMenu`) kept in sync by
+`aplicarTema()` / `atualizarStatusGoogle()`.
 
 ### Registro rápido (FAB)
 
@@ -161,7 +310,9 @@ The floating `+` button (`#fab`) opens `#modalRapido` — a 2-field capture (val
 plus account/category selects and a Gasto/Receita toggle. `palpitarCategoria()` guesses the
 category from keywords in the description (`PALPITE_CATEGORIA` regex list). Entries are always
 `status:'pago'`, dated today. `salvarRapido()` is a thin path that does **not** go through
-`adicionar()` — no installments, no attachment, no fixo flag.
+`adicionar()` — no installments, no attachment, no fixo flag — but it does go through
+`commitTransacoes()` (toast + undo) and is guarded by `podeEditar()`. Measured: `+` tap to
+confirmation toast is ~1.2s.
 
 ### PWA
 
@@ -171,6 +322,10 @@ meta tags, so the site is installable ("Add to Home Screen", standalone display)
 the single-file constraint, and SW scripts can't be data/blob URLs. So the installed app is
 not offline-capable beyond what the browser HTTP cache happens to hold; `window.storage`
 (localStorage) is still the offline data layer.
+
+The monetization plan's Fase 2 accepts breaking the strict single-file rule *only* for
+extracting CSS/JS to hash-named files (the prerequisite for a real service worker), then Fase
+3 wraps the same PWA in a **TWA** (Bubblewrap) for the Play Store. Not started.
 
 ### Accounts vs. categories
 
@@ -203,12 +358,18 @@ data then, and earlier months had missing income that dragged projections down. 
 looks back N months clips the window to `>= HISTORICO_INICIO` and divides by the number of
 months **actually in the window**, not a fixed N: `renderProjecaoSaldo()`'s base average,
 `mediaCategoriaUltimosMeses()`, and `renderChartMes()` ("Últimos 6 meses" — shows fewer bars
-early on). If you add another look-back, clip it the same way.
+early on). If you add another look-back, clip it the same way. Note the current system date in
+the harness is 2026-09-01, so `diaHoje` is 1 — the early-month guard in `renderDobraSaldo`
+always fires in tests; the full "runs out day X" projection is only reachable past day 5.
 
-### Balance projection (Dicas tab)
+### Balance projection (Análise tab)
 
 `renderProjecaoSaldo()` draws a line chart projecting the running account balance from *now*
-to December of the current year (minimum 3 months). The line's anchor point is either:
+to December of the current year (minimum 3 months). It lives in the **Análise** sub-tab now
+(moved from Lançamentos > Dicas, which keeps only the textual tips + a pointer to Análise).
+The chart build is guarded by `subAbaGeral === 'analise'` (see the sub-tabs section); the
+text/data path always runs because `renderDicas()` consumes its return value. The line's
+anchor point is either:
 
 - **Sum of `saldoAtualConta()`** across accounts with a `saldosIniciais` entry, when any exist
   (see "Livre para gastar" section — only effectivated movements up to today count).
@@ -244,3 +405,15 @@ immediately** (not required for backend-only fixes with no visible behavior chan
 Client-side only (`STORAGE_PIN`), gates the UI (`telaPin` overlay) but not the underlying data —
 it does not encrypt `window.storage` or the Drive file. Treat it as a screen lock, not real
 access control.
+
+## Known pre-existing issues (candidates for a future round, not regressions)
+
+- **`#telaInicial` opening screen overflows ~39px horizontally.** Predates the whole UX round
+  (confirmed by stashing). It's the opening overlay, outside the app breakpoint tests.
+- **Pull-to-refresh** was scoped out of the microinteractions item (touch-event risk right
+  after stabilizing scroll/bottom-bar; benefit limited to Drive users). Would be its own
+  isolated item.
+- **Trial state is bypassable via DevTools** — only closes with the Fase 2 backend (by design
+  for Fase 1).
+- **No merge logic in Drive sync** (last-write-wins on the whole file). The couple/family mode
+  in the monetization plan needs per-item merge first.
