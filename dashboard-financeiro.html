@@ -56,12 +56,9 @@
     background:var(--card2); color:var(--text); font-size:13px;
   }
 
-  .grid4{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px;}
-  .kpi{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 16px; transition:border-color .15s ease, transform .15s ease;}
-  .kpi:hover{border-color:var(--muted2);}
-  .kpi .label{font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-bottom:6px;}
-  .kpi .value{font-size:21px; font-weight:600; letter-spacing:-.01em;}
-  .kpi .delta{font-size:11px; margin-top:4px;}
+  /* .value / .delta ainda usadas por classes utilitárias e pelo card "Este mês" */
+  .value{font-size:21px; font-weight:600; letter-spacing:-.01em;}
+  .delta{font-size:11px; margin-top:4px;}
   /* composição do Saldo: "deste mês" + "sobrou de antes", separado por um traço */
   .saldo-composicao{font-size:11px; color:var(--muted); margin-top:8px; padding-top:8px; border-top:1px solid var(--border); line-height:1.5;}
   .saldo-composicao .parcela{display:flex; justify-content:space-between; gap:8px;}
@@ -175,7 +172,6 @@
     #wrapLinhaExtra > *{ flex:1 1 auto !important; width:100%; }
     #wrapLinhaExtra label.chk{ justify-content:flex-start; }
     input[type=text], input[type=number], input[type=date], select{ font-size:16px; }
-    .grid4{ grid-template-columns:repeat(2,1fr); }
   }
 
   .card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px;}
@@ -261,6 +257,50 @@
   .tab .tab-ico{ font-size:13px; line-height:1; }
   .tab.active{background:var(--text); color:var(--btn-text); border-color:var(--text); font-weight:600;}
   .tab:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
+
+  /* sub-abas Resumo/Análise dentro da Visão geral (mesmo padrão de Lançamentos/Dicas) */
+  .subtabs{ display:flex; gap:4px; margin-bottom:14px; border-bottom:1px solid var(--border); }
+  .subtab{
+    padding:8px 14px; border:none; background:none; font-family:inherit; font-size:13px; font-weight:500;
+    color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .subtab.active{ color:var(--text); border-bottom-color:var(--blue); font-weight:600; }
+  .subtab:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; border-radius:4px; }
+
+  /* card "Este mês" — funde os antigos KPIs Receitas/Gastos/Saldo */
+  .mes-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .mes-item{ min-width:0; }
+  .mes-label{ font-size:12px; color:var(--muted); margin-bottom:3px; }
+  .mes-valor{ font-size:19px; font-weight:700; letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+  .mes-delta{ font-size:11px; margin-top:3px; }
+  .mes-poupanca{
+    display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    margin-top:12px; padding-top:10px; border-top:1px solid var(--border);
+    font-size:12px; color:var(--muted);
+  }
+  .mes-poupanca b{ color:var(--text); font-weight:600; }
+  /* mobile: 3 valores de moeda lado a lado não cabem em 390px — vira lista de 1 coluna */
+  @media(max-width:599px){
+    .mes-grid{ grid-template-columns:1fr; gap:0; }
+    .mes-item{
+      display:grid; grid-template-columns:1fr auto; align-items:baseline; column-gap:10px; row-gap:2px;
+      padding:9px 0; border-bottom:1px solid var(--border);
+    }
+    .mes-item:last-child{ border-bottom:none; }
+    .mes-label{ margin-bottom:0; grid-row:1; grid-column:1; }
+    .mes-valor{ font-size:17px; grid-row:1; grid-column:2; text-align:right; }
+    .mes-delta{ margin-top:0; grid-row:2; grid-column:1 / -1; }
+  }
+
+  /* "Para onde foi o dinheiro" — donut + 3 maiores em texto */
+  .para-onde{ display:flex; gap:20px; align-items:center; flex-wrap:wrap; }
+  .para-onde-lista{ flex:1; min-width:180px; display:flex; flex-direction:column; gap:8px; }
+  .po-row{ display:flex; align-items:center; gap:8px; font-size:13px; }
+  .po-dot{ width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+  .po-nome{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .po-valor{ font-weight:600; font-variant-numeric:tabular-nums; }
+  .po-pct{ color:var(--muted); font-size:11.5px; min-width:38px; text-align:right; }
+  @media(max-width:599px){ .para-onde{ gap:12px; } }
 
   /* linha do filtro de conta — em todos os tamanhos, logo abaixo do header */
   .linha-filtro-conta{
@@ -661,6 +701,13 @@
 
   <div id="secGeral">
 
+  <div class="subtabs" role="tablist" aria-label="Modo da visão geral">
+    <button class="subtab active" id="subtabResumo" role="tab" aria-selected="true" onclick="mudarSubAbaGeral('resumo')">Resumo</button>
+    <button class="subtab" id="subtabAnalise" role="tab" aria-selected="false" onclick="mudarSubAbaGeral('analise')">Análise</button>
+  </div>
+
+  <div id="geralResumo">
+
   <div class="dobra-saldo" id="dobraSaldo" style="display:none;">
     <div class="ds-topo">
       <div class="ds-label" id="dsLabel">Você tem hoje</div>
@@ -680,31 +727,46 @@
     <div class="livre-breakdown" id="livreBreakdown"></div>
   </div>
 
-  <div class="grid4">
-    <div class="kpi">
-      <div class="label">Receitas</div>
-      <div class="value green" id="kpiReceita">R$ 0,00</div>
-      <div class="delta" id="deltaReceita"></div>
+  <div class="card" id="cardEsteMes" style="margin-bottom:14px;">
+    <h2>Este mês</h2>
+    <div class="mes-grid">
+      <div class="mes-item">
+        <div class="mes-label">Entrou</div>
+        <div class="mes-valor green" id="kpiReceita">R$ 0,00</div>
+        <div class="mes-delta" id="deltaReceita"></div>
+      </div>
+      <div class="mes-item">
+        <div class="mes-label">Saiu</div>
+        <div class="mes-valor red" id="kpiGasto">R$ 0,00</div>
+        <div class="mes-delta" id="deltaGasto"></div>
+      </div>
+      <div class="mes-item">
+        <div class="mes-label" id="kpiSaldoLabel">Sobrou</div>
+        <div class="mes-valor blue" id="kpiSaldo">R$ 0,00</div>
+        <div class="mes-delta" id="deltaSaldo" style="color:var(--muted)"></div>
+      </div>
     </div>
-    <div class="kpi">
-      <div class="label">Gastos</div>
-      <div class="value red" id="kpiGasto">R$ 0,00</div>
-      <div class="delta" id="deltaGasto"></div>
-    </div>
-    <div class="kpi">
-      <div class="label" id="kpiSaldoLabel">Saldo</div>
-      <div class="value blue" id="kpiSaldo">R$ 0,00</div>
-      <div class="delta" id="deltaSaldo" style="color:var(--muted)"></div>
-      <div class="saldo-composicao" id="saldoAcumulado" style="display:none;"></div>
-    </div>
-    <div class="kpi">
-      <div class="label">Taxa de poupança</div>
-      <div class="value amber" id="kpiPoupanca">0%</div>
-      <div class="delta" id="kpiPoupancaMsg" style="color:var(--muted)"></div>
+    <div class="saldo-composicao" id="saldoAcumulado" style="display:none;"></div>
+    <div class="mes-poupanca" id="mesPoupanca">
+      <span>Você guardou <b id="kpiPoupanca">0%</b> do que ganhou</span>
+      <span id="kpiPoupancaMsg" style="color:var(--muted)"></span>
     </div>
   </div>
 
   <div class="alerts" id="alertas"></div>
+
+  <div class="card" id="cardOrcamentoRisco" style="display:none; margin-bottom:14px;">
+    <h2>Orçamento em risco <span class="small" role="button" tabindex="0" onclick="mudarAbaPrincipal('orcamento')">ver todos</span></h2>
+    <div id="listaOrcamentoRisco"></div>
+  </div>
+
+  <div class="card" id="cardParaOnde" style="margin-bottom:14px;">
+    <h2>Para onde foi o dinheiro<span class="help-icon" tabindex="0" data-tip="Soma dos gastos do mês selecionado, agrupados por categoria. Só considera gastos, não receitas.">?</span></h2>
+    <div class="para-onde">
+      <div class="chart-wrap" style="flex:0 0 200px; height:180px;"><canvas id="chartCat"></canvas><div class="empty-chart" id="chartCatVazio" style="display:none;">Nenhum gasto lançado neste mês ainda.</div></div>
+      <div id="paraOndeLista" class="para-onde-lista"></div>
+    </div>
+  </div>
 
   <div class="card" id="cardSaldosContas" style="display:none; margin-bottom:14px;">
     <h2>Saldo por conta <span class="small" role="button" tabindex="0" onclick="abrirModalContas()">gerenciar</span></h2>
@@ -716,16 +778,46 @@
     <div id="listaFaturas"></div>
   </div>
 
+  <div class="card" id="cardOrcTotal" style="margin-bottom:14px;">
+    <h2>Orçamento total do mês</h2>
+    <div class="orc-row" style="margin-bottom:2px;">
+      <div class="orc-track" style="height:10px;"><div class="orc-fill" id="orcTotalFill" style="height:100%;"></div></div>
+    </div>
+    <div class="meta-sub" id="orcTotalTexto"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <h2>Maiores gastos do mês</h2>
+    <div id="rankingGastos"></div>
+  </div>
+
+  </div><!-- /geralResumo -->
+
+  <div id="geralAnalise" style="display:none;">
+
+  <div class="card" style="margin-bottom:14px;">
+    <h2>Projeção de saldo<span class="help-icon" tabindex="0" data-tip="A linha parte do saldo atual das suas contas (calculado a partir do saldo inicial informado em Contas) — ou, se nenhuma conta foi configurada, do resultado do mês atual — e, para cada mês até dezembro, soma a sobra ou o rombo estimado: receita/gastos já lançados quando existem, senão a média dos meses fechados desde julho/2026 (até 3), mais parcelas e contas fixas já cadastradas. É uma projeção, não um extrato real.">?</span></h2>
+    <div class="cols2" style="margin-bottom:0; align-items:center;">
+      <div id="projecaoTexto" style="font-size:12.5px; color:var(--muted);"></div>
+      <div class="chart-wrap" style="height:160px;"><canvas id="chartProjecao"></canvas></div>
+    </div>
+    <div id="projecaoDetalhe" style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;"></div>
+  </div>
+
   <div class="cols2">
     <div class="card">
-      <h2>Orçamento total do mês</h2>
-      <div class="orc-row" style="margin-bottom:2px;">
-        <div class="orc-track" style="height:10px;"><div class="orc-fill" id="orcTotalFill" style="height:100%;"></div></div>
-      </div>
-      <div class="meta-sub" id="orcTotalTexto"></div>
+      <h2>Últimos 6 meses<span class="help-icon" tabindex="0" data-tip="Compara receitas e gastos totais de cada mês (incluindo o atual), lado a lado, para ver a tendência. O histórico do app começa em julho/2026, então no início aparecem menos de 6 barras.">?</span></h2>
+      <div class="chart-wrap"><canvas id="chartMes"></canvas></div>
     </div>
     <div class="card">
-      <h2>Fixos x variáveis<span class="help-icon" tabindex="0" data-tip="Proporção entre gastos marcados como 'fixo' no lançamento e os demais gastos do mês selecionado. Ajuda a ver quanto do seu orçamento já está comprometido de antemão.">?</span></h2>
+      <h2>Evolução do saldo<span class="help-icon" tabindex="0" data-tip="Cada ponto é uma transação já ocorrida (até hoje), na ordem cronológica — soma receitas e subtrai gastos. Mostra a tendência histórica real, não uma previsão. Datas repetidas no eixo indicam vários lançamentos no mesmo dia.">?</span></h2>
+      <div class="chart-wrap"><canvas id="chartSaldo"></canvas><div class="empty-chart" id="chartSaldoVazio" style="display:none;">Adicione seu primeiro lançamento para ver a evolução do saldo.</div></div>
+    </div>
+  </div>
+
+  <div class="cols2">
+    <div class="card">
+      <h2>Contas fixas vs. gastos do dia a dia<span class="help-icon" tabindex="0" data-tip="Proporção entre gastos marcados como 'fixo' no lançamento e os demais gastos do mês selecionado. Ajuda a ver quanto do seu orçamento já está comprometido de antemão.">?</span></h2>
       <div style="display:flex; align-items:center; gap:14px;">
         <div style="width:90px; height:90px; flex-shrink:0; position:relative;"><canvas id="chartFixoVar"></canvas></div>
         <div style="flex:1;">
@@ -736,39 +828,15 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="cols2">
-    <div class="card">
-      <h2>Ritmo de gastos</h2>
-      <div id="ritmoGastos" style="font-size:12.5px; color:var(--muted);"></div>
-    </div>
     <div class="card">
       <h2>Comparação anual</h2>
-      <div id="comparacaoAnual" style="font-size:12.5px; color:var(--muted);"></div>
+      <div id="comparacaoAnual" style="font-size:12.5px; color:var(--muted); margin-bottom:8px;"></div>
+      <div id="ritmoGastos" style="font-size:12.5px; color:var(--muted); padding-top:8px; border-top:1px solid var(--border);"></div>
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:14px;">
-    <h2>Maiores gastos do mês</h2>
-    <div id="rankingGastos"></div>
-  </div>
-
-  <div class="cols">
-    <div class="card">
-      <h2>Por categoria<span class="help-icon" tabindex="0" data-tip="Soma dos gastos do mês selecionado, agrupados por categoria. Só considera gastos, não receitas, e só o mês atual no topo da tela.">?</span></h2>
-      <div class="chart-wrap"><canvas id="chartCat"></canvas><div class="empty-chart" id="chartCatVazio" style="display:none;">Nenhum gasto lançado neste mês ainda.</div></div>
-    </div>
-    <div class="card">
-      <h2>Últimos 6 meses<span class="help-icon" tabindex="0" data-tip="Compara receitas e gastos totais de cada mês (incluindo o atual), lado a lado, para ver a tendência. O histórico do app começa em julho/2026, então no início aparecem menos de 6 barras.">?</span></h2>
-      <div class="chart-wrap"><canvas id="chartMes"></canvas></div>
-    </div>
-    <div class="card">
-      <h2>Saldo acumulado<span class="help-icon" tabindex="0" data-tip="Cada ponto é uma transação já ocorrida (até hoje), na ordem cronológica — soma receitas e subtrai gastos. Mostra a tendência histórica real, não uma previsão. Datas repetidas no eixo indicam vários lançamentos no mesmo dia.">?</span></h2>
-      <div class="chart-wrap"><canvas id="chartSaldo"></canvas><div class="empty-chart" id="chartSaldoVazio" style="display:none;">Adicione seu primeiro lançamento para ver a evolução do saldo.</div></div>
-    </div>
-  </div>
-  </div>
+  </div><!-- /geralAnalise -->
+  </div><!-- /secGeral -->
 
   <div id="secMetas" style="display:none;">
   <div class="cols2">
@@ -902,13 +970,9 @@
     </div>
 
     <div id="viewDicas" style="display:none;">
-      <div class="card" style="margin-bottom:14px;">
-        <h3 style="margin:0 0 8px;">Projeção de saldo<span class="help-icon" tabindex="0" data-tip="A linha parte do saldo atual das suas contas (calculado a partir do saldo inicial informado em Contas) — ou, se nenhuma conta foi configurada, do resultado do mês atual — e, para cada mês até dezembro, soma a sobra ou o rombo estimado: receita/gastos já lançados quando existem, senão a média dos meses fechados desde julho/2026 (até 3), mais parcelas e contas fixas já cadastradas. É uma projeção, não um extrato real.">?</span></h3>
-        <div class="cols2" style="margin-bottom:0; align-items:center;">
-          <div id="projecaoTexto" style="font-size:12.5px; color:var(--muted);"></div>
-          <div class="chart-wrap" style="height:160px;"><canvas id="chartProjecao"></canvas></div>
-        </div>
-        <div id="projecaoDetalhe" style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;"></div>
+      <div class="card" style="margin-bottom:14px; font-size:12.5px; color:var(--muted);">
+        Para ver a <b style="color:var(--text)">projeção de saldo</b> até dezembro e os gráficos de tendência,
+        abra <b style="color:var(--text)">Visão geral → Análise</b>.
       </div>
       <div id="listaDicas"></div>
     </div>
@@ -993,7 +1057,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.9';
+const APP_VERSION = '2026-09-01.10';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1386,6 +1450,7 @@ async function carregar(){
   popularSeletorMes();
   aplicarModoReadonly();
   avaliarAssinatura();
+  aplicarSubAbaGeral();
   render();
   verificarOnboarding();
   if('Notification' in window && Notification.permission === 'granted'){
@@ -1826,6 +1891,37 @@ function mudarAba(aba){
   document.getElementById('viewDicas').style.display = aba==='dicas' ? 'block' : 'none';
 }
 
+// sub-abas Resumo/Análise dentro da Visão geral. Estado de sessão (não persiste):
+// todo mundo abre o app querendo o resumo primeiro.
+let subAbaGeral = 'resumo';
+function mudarSubAbaGeral(aba){
+  subAbaGeral = aba;
+  aplicarSubAbaGeral();
+}
+function aplicarSubAbaGeral(){
+  const resumo = document.getElementById('geralResumo');
+  const analise = document.getElementById('geralAnalise');
+  const btnR = document.getElementById('subtabResumo');
+  const btnA = document.getElementById('subtabAnalise');
+  if(!resumo || !analise) return;
+  const emAnalise = subAbaGeral === 'analise';
+  resumo.style.display = emAnalise ? 'none' : 'block';
+  analise.style.display = emAnalise ? 'block' : 'none';
+  btnR.classList.toggle('active', !emAnalise);
+  btnA.classList.toggle('active', emAnalise);
+  btnR.setAttribute('aria-selected', String(!emAnalise));
+  btnA.setAttribute('aria-selected', String(emAnalise));
+  if(emAnalise){
+    // Chart.js não mede canvas em container display:none. Ao mostrar a aba,
+    // re-renderiza os gráficos com o layout agora real. render() cobre tudo;
+    // o resize extra garante a 1ª ativação da sessão (canvas nunca teve dimensão).
+    render();
+    requestAnimationFrame(() => {
+      [chartMes, chartSaldo, chartFixoVar, chartProjecao].forEach(c => { try{ c && c.resize(); }catch(e){} });
+    });
+  }
+}
+
 function toggleOrcEdit(){
   const el = document.getElementById('orcEdit');
   const abrir = el.style.display === 'none';
@@ -2105,9 +2201,9 @@ function render(){
   const deltaSaldoEl = document.getElementById('deltaSaldo');
   if(temSaldoAnterior){
     const total = saldoAnt + saldo;
-    saldoLabelEl.textContent = 'Saldo acumulado';
+    saldoLabelEl.textContent = 'Sobrou (com meses anteriores)';
     saldoEl.textContent = fmt(total);
-    saldoEl.className = 'value ' + (total>=0?'blue':'red');
+    saldoEl.className = 'mes-valor ' + (total>=0?'blue':'red');
     deltaSaldoEl.innerHTML = '';  // comparação "vs mês passado" fica implícita na composição abaixo
 
     const sinalMes = saldo >= 0 ? '+' : '−';
@@ -2117,19 +2213,19 @@ function render(){
       `<div class="parcela"><span>sobrou de ${fmtMesLabel(chaveAnt)}</span><b>${sinalAnt} ${fmt(Math.abs(saldoAnt))}</b></div>`;
     acumEl.style.display = 'block';
   }else{
-    saldoLabelEl.textContent = 'Saldo';
+    saldoLabelEl.textContent = 'Sobrou';
     saldoEl.textContent = fmt(saldo);
-    saldoEl.className = 'value ' + (saldo>=0?'blue':'red');
+    saldoEl.className = 'mes-valor ' + (saldo>=0?'blue':'red');
     deltaSaldoEl.innerHTML = deltaTxt(saldo, saldoAnt, false);
     acumEl.style.display = 'none';
   }
   const poupEl = document.getElementById('kpiPoupanca');
   poupEl.textContent = taxaPoupanca + '%';
-  poupEl.className = 'value ' + (taxaPoupanca>=20?'green':taxaPoupanca>=0?'amber':'red');
+  poupEl.style.color = taxaPoupanca>=20 ? 'var(--green)' : taxaPoupanca>=0 ? 'var(--amber)' : 'var(--red)';
   document.getElementById('kpiPoupancaMsg').textContent =
     totalReceita===0 ? 'sem receita lançada' :
-    taxaPoupanca>=20 ? 'saudável (meta: 20%+)' :
-    taxaPoupanca>=0 ? 'abaixo da meta de 20%' : 'gastando mais do que ganha';
+    taxaPoupanca>=20 ? 'no caminho certo (uma referência comum é 20%)' :
+    taxaPoupanca>=0 ? 'abaixo da referência de 20% — sem pressão, o hábito importa mais' : 'gastando mais do que ganha';
 
   // orçamento total
   const limiteTotal = Object.values(orcamentos).reduce((s,v)=>s+v,0);
@@ -2158,7 +2254,7 @@ function render(){
     fixoFill.style.width='0%';
     fixoTexto.textContent = 'Sem gastos lançados ainda.';
   }
-  renderChartFixoVar(gastoFixo, gastoVar);
+  if(subAbaGeral === 'analise') renderChartFixoVar(gastoFixo, gastoVar);
 
   // ritmo de gastos: média diária e projeção de quanto o saldo aguenta
   const ritmoEl = document.getElementById('ritmoGastos');
@@ -2266,15 +2362,21 @@ function render(){
   renderDobraSaldo();
   renderLivreParaGastar();
   renderSaldosContas();
+  renderParaOnde(porCat);
   renderChartCat(porCat);
-  renderChartMes(conta);
-  renderChartSaldo(conta);
+  renderOrcamentoRisco(porCat);
   renderFaturas();
   renderOrcamentos(porCat);
   renderMetas();
   renderRecorrentes();
   renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, todasDoMes, limiteTotal);
   renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca);
+  // gráficos da aba Análise: só renderiza quando ela está visível — Chart.js
+  // mede o canvas errado (tamanho 0) em container display:none.
+  if(subAbaGeral === 'analise'){
+    renderChartMes(conta);
+    renderChartSaldo(conta);
+  }
 }
 
 function renderChartFixoVar(gastoFixo, gastoVar){
@@ -2302,11 +2404,11 @@ function renderChartCat(porCat){
   }
   ctx.style.display = 'block';
   vazioEl.style.display = 'none';
-  const tc = getThemeColors();
   chartCat = new Chart(ctx, {
     type: 'doughnut',
     data: { labels, datasets:[{ data, backgroundColor: cores, borderWidth:0 }] },
-    options: { maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ color:tc.tick, boxWidth:10, font:{size:11} } } } }
+    // legenda desligada: as categorias aparecem como texto ao lado (#paraOndeLista)
+    options: { maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{ display:false }, tooltip:{ enabled:true } } }
   });
 }
 
@@ -2871,6 +2973,73 @@ function renderSaldosContas(){
   }).join('');
 }
 
+// "Para onde foi o dinheiro" — as 3 maiores categorias do mês, em texto ao lado do donut.
+function renderParaOnde(porCat){
+  const card = document.getElementById('cardParaOnde');
+  const lista = document.getElementById('paraOndeLista');
+  if(!card || !lista) return;
+  const entradas = Object.entries(porCat).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+  const totalGasto = entradas.reduce((s,[,v]) => s+v, 0);
+  if(entradas.length === 0){
+    lista.innerHTML = '<div style="font-size:12.5px;color:var(--muted)">Nenhum gasto lançado neste mês ainda.</div>';
+    return;
+  }
+  const top = entradas.slice(0, 3);
+  const restoValor = entradas.slice(3).reduce((s,[,v]) => s+v, 0);
+  let html = top.map(([cat,val]) => {
+    const pct = Math.round(val/totalGasto*100);
+    return `<div class="po-row">
+      <span class="po-dot" style="background:${CORES[cat]||'#8b93a3'}"></span>
+      <span class="po-nome">${cat}</span>
+      <span class="po-valor">${fmt(val)}</span>
+      <span class="po-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+  if(restoValor > 0){
+    const pct = Math.round(restoValor/totalGasto*100);
+    html += `<div class="po-row">
+      <span class="po-dot" style="background:var(--muted2)"></span>
+      <span class="po-nome" style="color:var(--muted)">outras categorias</span>
+      <span class="po-valor" style="color:var(--muted)">${fmt(restoValor)}</span>
+      <span class="po-pct">${pct}%</span>
+    </div>`;
+  }
+  lista.innerHTML = html;
+}
+
+// "Orçamento em risco" — só as categorias que já usaram >= 80% do limite, como lista.
+// As saudáveis ficam na aba Orçamento (link "ver todos").
+function renderOrcamentoRisco(porCat){
+  const card = document.getElementById('cardOrcamentoRisco');
+  const lista = document.getElementById('listaOrcamentoRisco');
+  if(!card || !lista) return;
+  const emRisco = Object.keys(orcamentos)
+    .map(cat => ({ cat, gasto: porCat[cat] || 0, limite: orcamentos[cat] }))
+    .filter(o => o.limite > 0 && o.gasto >= o.limite * 0.8)
+    .sort((a,b) => (b.gasto/b.limite) - (a.gasto/a.limite));
+  if(emRisco.length === 0){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  lista.innerHTML = emRisco.map(o => {
+    const pct = Math.round(o.gasto/o.limite*100);
+    const estourou = o.gasto >= o.limite;
+    const cor = estourou ? 'var(--red)' : 'var(--amber)';
+    return `<div class="orc-row" role="button" tabindex="0"
+              onclick="irParaCategoria('${o.cat.replace(/'/g,"\\'")}')"
+              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
+              style="cursor:pointer;">
+      <div class="orc-label" style="width:110px;">${o.cat}</div>
+      <div class="orc-track"><div class="orc-fill" style="width:${Math.min(100,pct)}%; background:${cor}"></div></div>
+      <div class="orc-val" style="color:${cor}">${estourou ? 'estourou' : pct+'%'} · ${fmt(o.gasto)} / ${fmt(o.limite)}</div>
+    </div>`;
+  }).join('');
+}
+// vai para Lançamentos filtrado por uma categoria
+function irParaCategoria(cat){
+  mudarAbaPrincipal('lancamentos');
+  const sel = document.getElementById('filtroCategoria');
+  if(sel){ sel.value = cat; render(); }
+}
+
 function renderProjecaoSaldo(){
   const textoEl = document.getElementById('projecaoTexto');
   const hoje = new Date();
@@ -2938,22 +3107,25 @@ function renderProjecaoSaldo(){
     };
   });
 
-  const ctx = document.getElementById('chartProjecao');
-  if(chartProjecao) chartProjecao.destroy();
-  const tc = getThemeColors();
-  // a linha começa no saldo de hoje (ponto âncora) e segue somando cada mês projetado
-  const labelsGrafico = ['hoje', ...pontos.map(p=>fmtMesLabel(p.mes))];
-  const dadosGrafico = [saldoInicial, ...pontos.map(p=>p.acumulado)];
-  chartProjecao = new Chart(ctx, {
-    type:'line',
-    data:{ labels: labelsGrafico, datasets:[
-      { label:'Saldo projetado', data:dadosGrafico, borderColor:'#4d9eff', backgroundColor:'rgba(77,158,255,.15)', fill:true, tension:.25, pointRadius:3 }
-    ]},
-    options:{ maintainAspectRatio:false,
-      scales:{ x:{ ticks:{color:tc.tick, font:{size:10}}, grid:{display:false} }, y:{ ticks:{color:tc.tick, font:{size:10}}, grid:{color:tc.grid} } },
-      plugins:{ legend:{display:false} }
-    }
-  });
+  // o gráfico só é montado quando a aba Análise está visível (Chart.js mede errado
+  // em container display:none). O texto e os dados abaixo sempre rodam — renderDicas usa.
+  if(subAbaGeral === 'analise'){
+    const ctx = document.getElementById('chartProjecao');
+    if(chartProjecao) chartProjecao.destroy();
+    const tc = getThemeColors();
+    const labelsGrafico = ['hoje', ...pontos.map(p=>fmtMesLabel(p.mes))];
+    const dadosGrafico = [saldoInicial, ...pontos.map(p=>p.acumulado)];
+    chartProjecao = new Chart(ctx, {
+      type:'line',
+      data:{ labels: labelsGrafico, datasets:[
+        { label:'Saldo projetado', data:dadosGrafico, borderColor:'#4d9eff', backgroundColor:'rgba(77,158,255,.15)', fill:true, tension:.25, pointRadius:3 }
+      ]},
+      options:{ maintainAspectRatio:false,
+        scales:{ x:{ ticks:{color:tc.tick, font:{size:10}}, grid:{display:false} }, y:{ ticks:{color:tc.tick, font:{size:10}}, grid:{color:tc.grid} } },
+        plugins:{ legend:{display:false} }
+      }
+    });
+  }
 
   const ultimo = pontos[pontos.length-1];
   const partida = partidaReal
