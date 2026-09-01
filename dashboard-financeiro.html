@@ -21,7 +21,7 @@
 <style>
   :root{
     --bg:#0f1115; --card:#171a21; --card2:#1d212b; --border:#282d38;
-    --text:#eef0f3; --muted:#8b93a3; --muted2:#6b7280;
+    --text:#eef0f3; --muted:#8b93a3; --muted2:#8a92a3; /* --muted2 >= 4.5:1 em card e card2 */
     --green:#22c98a; --green-bg:rgba(34,201,138,.12);
     --red:#ff5c5c; --red-bg:rgba(255,92,92,.12);
     --blue:#4d9eff; --blue-bg:rgba(77,158,255,.12);
@@ -31,7 +31,7 @@
   }
   [data-theme="light"]{
     --bg:#f4f5f7; --card:#ffffff; --card2:#f0f1f4; --border:#e1e3e9;
-    --text:#1c1e21; --muted:#6b7280; --muted2:#8b93a3;
+    --text:#1c1e21; --muted:#6b7280; --muted2:#5f6572; /* --muted2 >= 4.5:1 em card e card2 */
     --green:#0f9d68; --green-bg:rgba(15,157,104,.1);
     --red:#d8342f; --red-bg:rgba(216,52,47,.08);
     --blue:#1f6fd8; --blue-bg:rgba(31,111,216,.08);
@@ -44,7 +44,8 @@
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
     background:var(--bg); color:var(--text); padding:16px; line-height:1.5;
   }
-  .wrap{max-width:980px; margin:0 auto;}
+  /* breakpoints do redesign: base (<=599 mobile) · md (600-1023 tablet) · lg (1024+ desktop) */
+  .wrap{max-width:1120px; margin:0 auto;}
   .top{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;}
   h1{font-size:19px; font-weight:600; margin:0;}
   .sub{font-size:12px; color:var(--muted); margin-top:2px;}
@@ -116,7 +117,7 @@
   .livre-breakdown .lb-row{ display:flex; justify-content:space-between; gap:12px; color:var(--muted); }
   .livre-breakdown .lb-row b{ color:var(--text); font-weight:600; }
   .livre-breakdown .lb-row.total{ border-top:1px solid var(--border); padding-top:5px; margin-top:2px; color:var(--text); }
-  @media(max-width:560px){ .livre-value{ font-size:28px; } .livre-card{ padding:15px 16px; gap:14px; } }
+  @media(max-width:599px){ .livre-value{ font-size:28px; } .livre-card{ padding:15px 16px; gap:14px; } }
 
   .saldos-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
   .saldo-conta{ border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--card2); }
@@ -137,24 +138,29 @@
   .alert b{color:inherit;}
 
   .cols{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:14px;}
-  @media(max-width:820px){.cols{grid-template-columns:1fr;}}
+  @media(max-width:1023px){.cols{grid-template-columns:1fr 1fr;}}
+  @media(max-width:599px){.cols{grid-template-columns:1fr;}}
   .cols2{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;}
-  @media(max-width:720px){.cols2{grid-template-columns:1fr;}}
+  @media(max-width:599px){.cols2{grid-template-columns:1fr;}}
 
-  @media(max-width:480px){
+  @media(max-width:599px){
     body{ padding:10px; }
     h1{ font-size:16px; }
     .sub{ font-size:11px; }
     .top{ gap:8px; }
     .theme-toggle{ padding:6px 9px; font-size:11.5px; }
-    #mesSel, #contaFiltro{ padding:6px 8px; font-size:12px; flex:1; min-width:0; }
-    .tabs .tab{ padding:7px 10px; font-size:11.5px; flex:1; text-align:center; white-space:nowrap; }
+    #mesSel{ padding:6px 8px; font-size:12px; }
+    #contaFiltro{ padding:6px 8px; font-size:12px; flex:1; min-width:0; }
     .kpi{ padding:11px 12px; }
     .kpi .value{ font-size:17px; }
-    table{ display:block; overflow-x:auto; white-space:nowrap; }
-    thead, tbody{ display:table; width:100%; min-width:560px; }
     .card{ padding:12px; }
-    .row{ gap:6px; }
+    .row{ gap:8px; }
+    /* no mobile, o campo de descrição e a linha extra (parcelas/tag/comprovante)
+       ocupam a largura toda e quebram, em vez de se espremerem lado a lado */
+    #descricao{ flex:1 1 100% !important; }
+    #wrapLinhaExtra{ flex-direction:column; align-items:stretch; }
+    #wrapLinhaExtra > *{ flex:1 1 auto !important; width:100%; }
+    #wrapLinhaExtra label.chk{ justify-content:flex-start; }
     input[type=text], input[type=number], input[type=date], select{ font-size:16px; }
     .grid4{ grid-template-columns:repeat(2,1fr); }
   }
@@ -169,7 +175,10 @@
     font-size:13px; background:var(--card2); color:var(--text);
   }
   select{padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--card2); color:var(--text);}
-  label.chk{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); padding:0 4px;}
+  label.chk{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); padding:0 4px; min-width:0;}
+  /* inputs de arquivo têm largura mínima intrínseca (texto "Nenhum arquivo escolhido")
+     que ignora flex-shrink e causa overflow no mobile — forçar encolher */
+  input[type=file]{ min-width:0; max-width:100%; font-size:11.5px; }
   button{padding:9px 16px; border:none; border-radius:8px; background:var(--text); color:var(--btn-text); font-size:13px; font-weight:600; cursor:pointer;}
   button.secondary{background:var(--card2); color:var(--text); border:1px solid var(--border);}
   button.small{padding:5px 10px; font-size:12px;}
@@ -188,6 +197,31 @@
   .iconbtn.del{color:var(--red);}
   .empty{color:var(--muted); font-size:13px; text-align:center; padding:16px 0;}
 
+  /* ===== tabela de movimentações vira cartões no mobile (<=599) ===== */
+  @media(max-width:599px){
+    #corpoTabela, #corpoTabela tr, #corpoTabela td{ display:block; }
+    table thead{ display:none; }
+    table{ border-collapse:separate; }
+    #corpoTabela tr{
+      border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:10px;
+      background:var(--card2);
+      display:grid; grid-template-columns:1fr auto; column-gap:12px; row-gap:6px; align-items:baseline;
+    }
+    #corpoTabela td{ border:none; padding:0; }
+    #corpoTabela .col-check{ display:none; }         /* seleção em massa fica só no desktop */
+    #corpoTabela .col-desc{ grid-column:1; grid-row:1; font-weight:600; font-size:13.5px; }
+    #corpoTabela .col-valor{ grid-column:2; grid-row:1; text-align:right; font-size:14px; white-space:nowrap; }
+    #corpoTabela .col-cat{ grid-column:1; grid-row:2; }
+    #corpoTabela .col-status{ grid-column:2; grid-row:2; text-align:right; }
+    #corpoTabela .col-conta{
+      grid-column:1 / -1; grid-row:3; font-size:11px !important; color:var(--muted2) !important;
+    }
+    #corpoTabela .col-conta::before{ content:attr(data-label) ": "; }
+    #corpoTabela .col-acoes{ grid-column:1 / -1; grid-row:4; }
+    #corpoTabela .col-acoes .actions{ justify-content:flex-end; gap:2px; border-top:1px solid var(--border); padding-top:8px; margin-top:2px; }
+    #corpoTabela .col-acoes .iconbtn{ min-width:40px; min-height:40px; font-size:16px; display:inline-flex; align-items:center; justify-content:center; }
+  }
+
   .orc-row{display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:12.5px;}
   .orc-label{width:100px; flex-shrink:0; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .orc-track{flex:1; height:7px; background:var(--card2); border-radius:4px; overflow:hidden;}
@@ -195,15 +229,75 @@
   .orc-val{width:110px; text-align:right; flex-shrink:0; font-size:11.5px; color:var(--muted);}
 
   .tabs{display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap;}
-  .tab{padding:8px 14px; border-radius:8px; font-size:12.5px; cursor:pointer; border:1px solid var(--border); background:var(--card2); color:var(--muted);}
+  .tab{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:8px 14px; border-radius:8px; font-size:12.5px; font-family:inherit; cursor:pointer;
+    border:1px solid var(--border); background:var(--card2); color:var(--muted);
+  }
+  .tab .tab-ico{ font-size:13px; line-height:1; }
   .tab.active{background:var(--text); color:var(--btn-text); border-color:var(--text); font-weight:600;}
+  .tab:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
+
+  /* linha do filtro de conta — em todos os tamanhos, logo abaixo do header */
+  .linha-filtro-conta{
+    display:flex; align-items:center; gap:8px; margin:0 0 14px; font-size:12.5px; color:var(--muted);
+  }
+  .linha-filtro-conta select{ min-width:160px; }
+  .top-acoes{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+  .so-mobile{ display:none; }
+
+  /* ===== md e abaixo (<=1023): cabeçalho enxuto + bottom bar ===== */
+  @media(max-width:1023px){
+    .so-desktop{ display:none !important; }
+    .so-mobile{ display:block; }
+    #ultimaSync{ display:none; }
+
+    /* bottom bar: as abas viram navegação fixa no rodapé */
+    .tabs#navPrincipal{
+      position:fixed; left:0; right:0; bottom:0; z-index:700;
+      margin:0; gap:0; flex-wrap:nowrap;
+      background:var(--card); border-top:1px solid var(--border);
+      padding:4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
+      box-shadow:0 -2px 12px rgba(0,0,0,.16);
+    }
+    .tabs#navPrincipal .tab{
+      flex:1; flex-direction:column; gap:3px;
+      min-height:52px; padding:6px 2px; border:none; border-radius:10px;
+      background:transparent; color:var(--muted); font-size:10.5px; font-weight:500;
+      white-space:nowrap;
+    }
+    .tabs#navPrincipal .tab .tab-ico{ font-size:18px; }
+    .tabs#navPrincipal .tab.active{
+      background:var(--blue-bg); color:var(--blue); border:none; font-weight:600;
+    }
+    /* reserva o espaço da bottom bar para o conteúdo não ficar por baixo */
+    .wrap{ padding-bottom:76px; }
+  }
 
   canvas{max-height:200px;}
 
   .help-icon{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:var(--card2); border:1px solid var(--border); color:var(--muted); font-size:10.5px; font-weight:700; cursor:help; margin-left:5px; position:relative; vertical-align:middle; }
-  .help-icon::after{ content:attr(data-tip); position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:11.5px; font-weight:400; line-height:1.4; width:230px; white-space:normal; text-align:left; box-shadow:0 4px 16px rgba(0,0,0,.25); opacity:0; visibility:hidden; transition:opacity .15s ease; z-index:50; pointer-events:none; }
-  .help-icon:hover::after, .help-icon:focus::after{ opacity:1; visibility:visible; }
-  @media(max-width:480px){ .help-icon::after{ width:180px; left:auto; right:-10px; transform:none; } }
+  /* estado oculto: extensão ZERO (não contribui para scrollWidth). Só ao focar/hover
+     o balão ganha tamanho. Assim o tooltip nunca causa overflow horizontal. */
+  .help-icon::after{
+    content:attr(data-tip); position:absolute; bottom:calc(100% + 8px); left:50%;
+    background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:8px;
+    font-size:11.5px; font-weight:400; line-height:1.4; white-space:normal; text-align:left;
+    box-shadow:0 4px 16px rgba(0,0,0,.25); z-index:50; pointer-events:none;
+    width:0; max-width:0; padding:0; overflow:hidden; opacity:0;
+    transform:translateX(-50%); transition:opacity .15s ease;
+  }
+  .help-icon:hover::after, .help-icon:focus::after{
+    width:230px; max-width:230px; padding:8px 10px; overflow:visible; opacity:1;
+  }
+  /* abaixo de lg o balão centralizado vazaria pela lateral: ancora perto do ícone,
+     cresce para a direita, largura que cabe na menor viewport */
+  @media(max-width:1023px){
+    .help-icon:hover::after, .help-icon:focus::after{
+      left:-12px; transform:none; width:min(240px, calc(100vw - 40px)); max-width:min(240px, calc(100vw - 40px));
+    }
+  }
 
   @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
   .sec-fade{ animation: fadeIn .25s ease; }
@@ -261,7 +355,9 @@
   #fab:hover{ transform:scale(1.06); box-shadow:0 8px 26px rgba(77,158,255,.55); }
   #fab:active{ transform:scale(.96); }
   body.readonly #fab{ display:none; }
-  @media(max-width:480px){ #fab{ right:14px; bottom:14px; } }
+  @media(max-width:480px){ #fab{ right:14px; } }
+  /* no mobile/tablet o FAB sobe acima da bottom bar (fixa, ~62px de altura) */
+  @media(max-width:1023px){ #fab{ bottom:calc(76px + env(safe-area-inset-bottom, 0px)); } }
 
   /* toast de confirmação (rodapé, sai do caminho do FAB) */
   #toast{
@@ -282,7 +378,11 @@
     padding:11px 12px; margin:-11px -6px -11px 0; min-height:44px; cursor:pointer; flex-shrink:0;
   }
   #toast button:active{ opacity:.7; }
-  @media(max-width:480px){ #toast{ right:14px; left:14px; bottom:82px; transform:translateY(120%); width:auto; } #toast.show{ transform:translateY(0); } }
+  /* no mobile o toast sobe acima da bottom bar (~62px) e do FAB (bottom 76 + altura 56 = topo em ~132) */
+  @media(max-width:1023px){
+    #toast{ right:14px; left:14px; bottom:calc(144px + env(safe-area-inset-bottom, 0px)); transform:translateY(180%); width:auto; }
+    #toast.show{ transform:translateY(0); }
+  }
   @media(prefers-reduced-motion:reduce){ #toast{ transition:opacity .15s ease; } }
 
   .seg{ display:flex; gap:0; border:1px solid var(--border); border-radius:9px; overflow:hidden; }
@@ -483,18 +583,21 @@
         <div class="sub" id="subTitulo">Visão geral do mês</div>
       </div>
     </div>
-    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <select id="contaFiltro" onchange="render()"></select>
+    <div class="top-acoes">
       <select id="mesSel" onchange="render()"></select>
-      <button class="theme-toggle" id="btnGoogle" onclick="entrarGoogle()">🔗 Conectar Google Drive</button>
+      <button class="theme-toggle so-desktop" id="btnGoogle" onclick="entrarGoogle()">🔗 Conectar Google Drive</button>
       <span id="ultimaSync" style="font-size:11px; color:var(--muted);"></span>
-      <button class="theme-toggle editable-only" onclick="abrirModalContas()">💳 Contas</button>
-      <button class="theme-toggle editable-only" onclick="toggleMenuBackup()">💾 Backup</button>
-      <button class="theme-toggle" id="btnTema" onclick="alternarTema()">🌙 Escuro</button>
+      <button class="theme-toggle editable-only so-desktop" onclick="abrirModalContas()">💳 Contas</button>
+      <button class="theme-toggle editable-only so-desktop" onclick="toggleMenuBackup()">💾 Backup</button>
+      <button class="theme-toggle so-desktop" id="btnTema" onclick="alternarTema()">🌙 Escuro</button>
       <div class="menu-wrap">
-        <button class="theme-toggle" id="btnConfig" onclick="toggleMenuConfig()" aria-haspopup="true" title="Mais opções">⚙️</button>
+        <button class="theme-toggle" id="btnConfig" onclick="toggleMenuConfig()" aria-haspopup="true" title="Mais opções" aria-label="Mais opções">⚙️</button>
         <div id="menuConfig" class="menu-drop" style="display:none;">
           <button onclick="abrirMinhaAssinatura()">⭐ Minha assinatura</button>
+          <button class="so-mobile" id="btnGoogleMenu" onclick="entrarGoogle(); fecharMenuConfig()">🔗 Conectar Google Drive</button>
+          <button class="so-mobile editable-only" onclick="abrirModalContas(); fecharMenuConfig()">💳 Contas e cartões</button>
+          <button class="so-mobile editable-only" onclick="toggleMenuBackup(); fecharMenuConfig()">💾 Backup dos dados</button>
+          <button class="so-mobile" id="btnTemaMenu" onclick="alternarTema()">🌙 Tema escuro</button>
           <button onclick="configurarPin(); fecharMenuConfig()">🔒 PIN de acesso</button>
           <button id="btnMoeda" onclick="alternarMoeda()">💱 Moeda: BRL</button>
           <button id="btnNotif" onclick="ativarNotificacoes()">🔔 Notificações</button>
@@ -504,12 +607,17 @@
     </div>
   </div>
 
-  <div class="tabs" style="margin-bottom:18px;">
-    <div class="tab active" id="navGeral" onclick="mudarAbaPrincipal('geral')">📊 Visão geral</div>
-    <div class="tab" id="navLancamentos" onclick="mudarAbaPrincipal('lancamentos')">📝 Lançamentos</div>
-    <div class="tab" id="navOrcamento" onclick="mudarAbaPrincipal('orcamento')">🎯 Orçamento</div>
-    <div class="tab" id="navMetas" onclick="mudarAbaPrincipal('metas')">💰 Metas e fixos</div>
+  <div class="linha-filtro-conta">
+    <label for="contaFiltro">Conta:</label>
+    <select id="contaFiltro" onchange="render()"></select>
   </div>
+
+  <nav class="tabs" id="navPrincipal" aria-label="Seções do app" style="margin-bottom:18px;">
+    <button class="tab active" id="navGeral" onclick="mudarAbaPrincipal('geral')" aria-current="page"><span class="tab-ico" aria-hidden="true">📊</span><span class="tab-txt">Visão geral</span></button>
+    <button class="tab" id="navLancamentos" onclick="mudarAbaPrincipal('lancamentos')"><span class="tab-ico" aria-hidden="true">📝</span><span class="tab-txt">Lançamentos</span></button>
+    <button class="tab" id="navOrcamento" onclick="mudarAbaPrincipal('orcamento')"><span class="tab-ico" aria-hidden="true">🎯</span><span class="tab-txt">Orçamento</span></button>
+    <button class="tab" id="navMetas" onclick="mudarAbaPrincipal('metas')"><span class="tab-ico" aria-hidden="true">💰</span><span class="tab-txt">Metas e fixos</span></button>
+  </nav>
 
   <div id="barraTrial" class="barra-trial" style="display:none;"></div>
   <div id="avisoBloqueio" class="barra-trial urgente" style="display:none;">
@@ -860,7 +968,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.6';
+const APP_VERSION = '2026-09-01.7';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -934,17 +1042,21 @@ function agendarRenovacaoToken(){
 }
 function atualizarStatusGoogle(status){
   const btn = document.getElementById('btnGoogle');
+  const btnMenu = document.getElementById('btnGoogleMenu');
   const sync = document.getElementById('ultimaSync');
-  if(status==='conectando') btn.textContent = '⏳ Sincronizando...';
-  else if(status==='pendente') btn.textContent = '🟡 Alterações pendentes...';
+  let txt;
+  if(status==='conectando') txt = '⏳ Sincronizando...';
+  else if(status==='pendente') txt = '🟡 Alterações pendentes...';
   else if(status==='ok'){
-    btn.textContent = '🟢 Sincronizado com Drive';
+    txt = '🟢 Sincronizado com Drive';
     const agora = new Date();
     if(sync) sync.textContent = 'última sync: ' + agora.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
   }
-  else if(status==='erro') btn.textContent = '⚠️ Erro ao sincronizar';
-  else if(status==='expirado') btn.textContent = '🔄 Sessão expirada, clique para reconectar';
-  else btn.textContent = '🔗 Conectar Google Drive';
+  else if(status==='erro') txt = '⚠️ Erro ao sincronizar';
+  else if(status==='expirado') txt = '🔄 Sessão expirada, clique para reconectar';
+  else txt = '🔗 Conectar Google Drive';
+  btn.textContent = txt;
+  if(btnMenu) btnMenu.textContent = txt;
 }
 function montarEstado(){
   return {
@@ -1183,7 +1295,10 @@ async function carregarTema(){
 }
 function aplicarTema(tema){
   document.documentElement.setAttribute('data-theme', tema);
-  document.getElementById('btnTema').textContent = tema === 'dark' ? '🌙 Escuro' : '☀️ Claro';
+  const rotulo = tema === 'dark' ? '🌙 Escuro' : '☀️ Claro';
+  document.getElementById('btnTema').textContent = rotulo;
+  const menu = document.getElementById('btnTemaMenu');
+  if(menu) menu.textContent = tema === 'dark' ? '🌙 Tema escuro' : '☀️ Tema claro';
 }
 async function alternarTema(){
   const atual = document.documentElement.getAttribute('data-theme') || 'dark';
@@ -1664,13 +1779,18 @@ function mudarAbaPrincipal(aba){
   Object.entries(secoes).forEach(([k,id])=>{
     const el = document.getElementById(id);
     el.style.display = (k===aba) ? 'block' : 'none';
-    document.getElementById(navs[k]).classList.toggle('active', k===aba);
+    const nav = document.getElementById(navs[k]);
+    nav.classList.toggle('active', k===aba);
+    if(k===aba) nav.setAttribute('aria-current', 'page');
+    else nav.removeAttribute('aria-current');
     if(k===aba){
       el.classList.remove('sec-fade');
       void el.offsetWidth;
       el.classList.add('sec-fade');
     }
   });
+  // rola pro topo ao trocar de aba (a bottom bar fica fixa, então o contexto muda)
+  window.scrollTo({ top: 0, behavior: _prefereMenosMovimento ? 'auto' : 'smooth' });
 }
 
 function mudarAba(aba){
@@ -2095,13 +2215,13 @@ function render(){
           ? '<span class="tag" style="background:var(--amber-bg);color:var(--amber)">pendente</span>'
           : '<span class="tag" style="background:var(--green-bg);color:var(--green)">pago</span>';
       tr.innerHTML = `
-        <td class="editable-only"><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" ${(statusEf==='pago'||ehTransf)?'disabled':''}></td>
-        <td>${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
-        <td><span class="tag" style="background:${corCat}22;color:${corCat}">${t.categoria}</span></td>
-        <td style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
-        <td>${statusTag}</td>
-        <td class="${cor}" style="font-weight:600;">${sinal} ${fmt(t.valor)}</td>
-        <td><div class="actions editable-only">
+        <td class="col-check editable-only"><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" ${(statusEf==='pago'||ehTransf)?'disabled':''}></td>
+        <td class="col-desc">${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
+        <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corCat}">${t.categoria}</span></td>
+        <td class="col-conta" data-label="Conta" style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
+        <td class="col-status" data-label="Status">${statusTag}</td>
+        <td class="col-valor ${cor}" data-label="Valor" style="font-weight:600;">${sinal} ${fmt(t.valor)}</td>
+        <td class="col-acoes"><div class="actions editable-only">
           ${(!ehTransf && statusEf!=='pago') ? `<button class="iconbtn" style="color:var(--green)" onclick="marcarComoPago(${t.id})" title="Marcar como pago">✓</button>` : ''}
           ${t.anexo?`<button class="iconbtn" onclick="verAnexo(${t.id})" title="Ver comprovante">📎</button>`:''}
           ${!ehTransf ? `<button class="iconbtn" onclick="duplicarLancamento(${t.id})" title="Duplicar">⧉</button>
