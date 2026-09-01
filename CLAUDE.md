@@ -39,16 +39,21 @@ git commit -m "..."
 git push origin main
 ```
 
-To actually exercise a change (not just check syntax), open `index.html` locally with a
-headless browser (e.g. Playwright) and drive the UI — there's no test suite, so this is the
-only way to verify behavior. Opening via `file://` will fail CORS-dependent features (Google
-sign-in, the currency API); those only work over `https://` on the published site.
+To actually exercise a change (not just check syntax), open `index.html` in a headless browser
+and drive the UI — there's no test suite, so this is the only way to verify behavior. This
+machine has `playwright-core` (not full `playwright`) with the `msedge` channel working
+headless; load the app over `file://` and dismiss `#btnEntrarApp` then `#modalOnboarding`
+before interacting. `file://` disables CORS-dependent features (Google sign-in, the currency
+API) — those only work over `https://` on the published site. Script-scoped `let`s are
+reachable from `page.evaluate()` as bare globals (they're top-level in the one script block),
+so `montarEstado()` / `aplicarDadosImportados()` can be called directly to test the sync
+funnel. See the browser-test-harness memory for a ready scaffold.
 
 ## Architecture
 
 **Single HTML file, single `<script>` block, no modules.** All state lives in top-level `let`
 variables (`transacoes`, `orcamentos`, `contas`, `metas`, `recorrentes`, `contasDetalhes`,
-`saldoContas`, `moedaAtual`, etc.) mutated directly by event handlers, then persisted and
+`saldosIniciais`, `moedaAtual`, etc.) mutated directly by event handlers, then persisted and
 re-rendered — there
 is no framework, no virtual DOM, no reactivity system. Every UI update goes through one
 function, `render()`, which recomputes everything (KPIs, charts, tables, alerts) from the
