@@ -100,24 +100,36 @@
     .ds-status{ padding-left:0; border-left:none; padding-top:12px; border-top:1px solid var(--border); width:100%; }
   }
 
-  /* card "Livre para gastar" — a resposta principal da tela */
+  /* card "Fim do mês" — quanto sobra (verde) ou falta (vermelho) depois de pagar
+     tudo que ainda vence este mês. A resposta central do produto, escrita como frase. */
   .livre-card{
-    background:linear-gradient(135deg, var(--blue-bg), transparent 70%), var(--card);
+    background:linear-gradient(135deg, var(--green-bg), transparent 70%), var(--card);
     border:1px solid var(--border); border-radius:16px; padding:18px 20px; margin-bottom:16px;
-    display:flex; gap:22px; align-items:center; flex-wrap:wrap;
+    display:flex; gap:22px 28px; align-items:flex-start; flex-wrap:wrap;
     box-shadow:0 1px 3px rgba(0,0,0,.06);
   }
   .livre-card.neg{ background:linear-gradient(135deg, var(--red-bg), transparent 70%), var(--card); border-color:rgba(255,92,92,.35); }
-  .livre-main{ flex:0 0 auto; min-width:180px; }
-  .livre-label{ font-size:12.5px; color:var(--muted); margin-bottom:4px; }
-  .livre-value{ font-size:34px; font-weight:700; letter-spacing:-.02em; line-height:1.1; color:var(--blue); }
+  .livre-main{ flex:1 1 260px; min-width:0; }
+  .livre-label{ font-size:12.5px; color:var(--muted); margin-bottom:3px; line-height:1.4; }
+  .livre-value{ font-size:34px; font-weight:700; letter-spacing:-.02em; line-height:1.1; color:var(--green); font-variant-numeric:tabular-nums; }
   .livre-card.neg .livre-value{ color:var(--red); }
-  .livre-dia{ font-size:12px; color:var(--muted); margin-top:4px; }
-  .livre-breakdown{ flex:1; min-width:220px; display:flex; flex-direction:column; gap:5px; font-size:12px; }
+  .livre-dia{ font-size:12px; color:var(--muted); margin-top:5px; }
+  .livre-toggle{
+    display:none; margin-top:8px; padding:0; background:none; border:none;
+    color:var(--blue); font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline;
+  }
+  .livre-breakdown{ flex:1 1 220px; min-width:0; display:flex; flex-direction:column; gap:5px; font-size:12px; }
   .livre-breakdown .lb-row{ display:flex; justify-content:space-between; gap:12px; color:var(--muted); }
   .livre-breakdown .lb-row b{ color:var(--text); font-weight:600; }
   .livre-breakdown .lb-row.total{ border-top:1px solid var(--border); padding-top:5px; margin-top:2px; color:var(--text); }
-  @media(max-width:599px){ .livre-value{ font-size:28px; } .livre-card{ padding:15px 16px; gap:14px; } }
+  .livre-breakdown .lb-row.sub{ font-size:11px; color:var(--muted2); padding-left:10px; }
+  @media(max-width:599px){
+    .livre-value{ font-size:28px; }
+    .livre-card{ padding:15px 16px; gap:12px; }
+    /* no mobile o detalhe fica recolhido por padrão; o botão "ver detalhe" o expande */
+    .livre-toggle{ display:inline-block; }
+    .livre-card:not(.detalhe-aberto) .livre-breakdown{ display:none; }
+  }
 
   .saldos-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
   .saldo-conta{ border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--card2); }
@@ -651,6 +663,7 @@
       <div class="livre-label" id="livreTitulo">Livre para gastar</div>
       <div class="livre-value" id="livreValor">R$ 0,00</div>
       <div class="livre-dia" id="livrePorDia"></div>
+      <button type="button" class="livre-toggle" id="livreToggle" onclick="toggleDetalheLivre()" aria-expanded="false">ver detalhe</button>
     </div>
     <div class="livre-breakdown" id="livreBreakdown"></div>
   </div>
@@ -968,7 +981,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.7';
+const APP_VERSION = '2026-09-01.8';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -2686,6 +2699,11 @@ function renderDobraSaldo(){
     .filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente && (!conta || t.conta===conta))
     .reduce((s,t)=>s+t.valor,0);
   const mediaDiaria = diaHoje > 0 ? gastoMesAteAgora / diaHoje : 0;
+  // no começo do mês (< 5 dias) a média diária projeta mal — um gasto grande vira
+  // "R$ X/dia" e a frase soa alarmista. Nesses primeiros dias só avisamos de aperto
+  // se o dinheiro NÃO cobre nem o gasto já feito extrapolado de forma conservadora
+  // (mês inteiro no ritmo). Caso contrário, mostramos uma frase calma.
+  const amostraCurta = diaHoje < 5;
 
   let classe, ico, frase;
   if(saldoHoje <= 0){
@@ -2702,6 +2720,10 @@ function renderDobraSaldo(){
       frase = diasAteFimMes <= 0
         ? `No ritmo atual, seu dinheiro cobre o resto do mês com folga.`
         : `No ritmo atual (${fmt(mediaDiaria)}/dia), seu dinheiro <b>dura até o fim do mês</b> com folga.`;
+    }else if(amostraCurta){
+      // ainda pode estourar, mas com poucos dias de dados não cravamos "acaba dia X"
+      classe = 'aperto'; ico = '!';
+      frase = `Você já gastou <b>${fmt(gastoMesAteAgora)}</b> nos primeiros dias. Se mantiver esse ritmo, o mês fica apertado — mas ainda é cedo para ter certeza.`;
     }else{
       const folga = diasAteFimMes - diasQueDura;
       const diaTxt = diaQueAcaba <= ultimoDia ? `dia ${diaQueAcaba}` : `o fim do mês`;
@@ -2718,24 +2740,37 @@ function renderDobraSaldo(){
   statusEl.innerHTML = `<span class="ds-ico">${ico}</span><span>${frase}</span>`;
 }
 
-// "Livre para gastar": quanto sobra até o fim do mês corrente depois de descontar
-// do saldo de hoje os compromissos que ainda vão sair neste mês — contas em aberto
-// (pendentes/vencidas), parcelas futuras não pagas e recorrentes ainda não lançados.
+// estado de UI (não persiste em storage — preferência efêmera, mas sobrevive a render())
+let detalheLivreAberto = false;
+function toggleDetalheLivre(){
+  detalheLivreAberto = !detalheLivreAberto;
+  aplicarEstadoDetalheLivre();
+}
+function aplicarEstadoDetalheLivre(){
+  const card = document.getElementById('livreCard');
+  const btn = document.getElementById('livreToggle');
+  if(!card || !btn) return;
+  card.classList.toggle('detalhe-aberto', detalheLivreAberto);
+  btn.textContent = detalheLivreAberto ? 'ocultar detalhe' : 'ver detalhe';
+  btn.setAttribute('aria-expanded', String(detalheLivreAberto));
+}
+
+// "Fim do mês": quanto sobra (ou falta) depois de pagar tudo que ainda vence este mês —
+// contas em aberto (pendentes/vencidas), parcelas futuras não pagas e recorrentes ainda
+// não lançados, menos as receitas ainda a receber. Escrito como frase de resultado.
 // Só faz sentido para o mês corrente; nos outros meses o card é escondido.
 function renderLivreParaGastar(){
   const card = document.getElementById('livreCard');
   const chaveCorrente = chaveMes(hojeISO());
 
-  // fora do mês atual não há "quanto posso gastar até o fim do mês" — esconde
   if(mesAtual !== chaveCorrente){ card.style.display = 'none'; return; }
   card.style.display = 'flex';
 
   const hoje = new Date();
-  const hojeStr = hojeISO();
   const [anoC, mesC] = chaveCorrente.split('-').map(Number);
   const ultimoDia = ultimoDiaMes(anoC, mesC-1);
   const diasRestantes = Math.max(1, ultimoDia - hoje.getDate() + 1);
-  const fimMesStr = `${anoC}-${String(mesC).padStart(2,'0')}-${String(ultimoDia).padStart(2,'0')}`;
+  const nomeMes = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][mesC-1];
 
   // ponto de partida: soma dos saldos atuais das contas com saldo inicial informado
   // (o mais preciso). Sem nenhuma conta configurada, cai no resultado do mês até agora.
@@ -2762,32 +2797,42 @@ function renderLivreParaGastar(){
     .filter(r => r.tipo !== 'receita' && !recorrenteJaLancadoEm(r, transacoes, chaveCorrente))
     .reduce((s,r)=>s+r.valor,0);
 
-  // receitas ainda não recebidas neste mês (status pendente) somam ao disponível
   const receitaAReceber = transacoes
     .filter(t => t.tipo==='receita' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t) !== 'pago')
     .reduce((s,t)=>s+t.valor,0);
 
-  const compromissos = contasAbertas + parcelasAbertas + recorrentesFalta;
-  const livre = saldoHoje + receitaAReceber - compromissos;
+  const aindaFaltaPagar = contasAbertas + parcelasAbertas + recorrentesFalta;
+  const livre = saldoHoje + receitaAReceber - aindaFaltaPagar;
   const porDia = livre / diasRestantes;
 
-  card.classList.toggle('neg', livre < 0);
-  const [fy,fm,fd] = fimMesStr.split('-');
-  document.getElementById('livreTitulo').textContent = `Livre para gastar até ${fd}/${fm}`;
-  document.getElementById('livreValor').textContent = fmt(livre);
-  document.getElementById('livrePorDia').textContent = livre >= 0
-    ? `${fmt(porDia)} / dia nos próximos ${diasRestantes} dia(s)`
-    : `Faltam ${fmt(Math.abs(livre))} para cobrir os compromissos do mês`;
+  const sobra = livre >= 0;
+  card.classList.toggle('neg', !sobra);
 
+  // manchete: frase de resultado
+  document.getElementById('livreTitulo').textContent = sobra
+    ? `Depois de pagar as contas de ${nomeMes}, você fica com`
+    : `Para cobrir as contas de ${nomeMes}, faltam`;
+
+  const valEl = document.getElementById('livreValor');
+  fmtValorAnimado(valEl, Math.abs(livre));
+
+  document.getElementById('livrePorDia').textContent = sobra
+    ? `São ${fmt(porDia)} por dia até o fim do mês.`
+    : `Sem contar isso, seu mês fecha no vermelho.`;
+
+  // breakdown: "você tem hoje" − "ainda falta pagar" = "sobra" / "falta"
   const linhas = [];
-  linhas.push(`<div class="lb-row"><span>${partidaReal ? 'Saldo das contas hoje' : 'Resultado do mês até agora'}</span><b>${fmt(saldoHoje)}</b></div>`);
-  if(receitaAReceber > 0) linhas.push(`<div class="lb-row"><span>+ Receitas a receber</span><b>${fmt(receitaAReceber)}</b></div>`);
-  if(contasAbertas > 0) linhas.push(`<div class="lb-row"><span>− Contas a vencer no mês</span><b>${fmt(contasAbertas)}</b></div>`);
-  if(parcelasAbertas > 0) linhas.push(`<div class="lb-row"><span>− Parcelas em aberto</span><b>${fmt(parcelasAbertas)}</b></div>`);
-  if(recorrentesFalta > 0) linhas.push(`<div class="lb-row"><span>− Fixos ainda não lançados</span><b>${fmt(recorrentesFalta)}</b></div>`);
-  linhas.push(`<div class="lb-row total"><span>= Livre</span><b>${fmt(livre)}</b></div>`);
-  if(!partidaReal) linhas.push(`<div class="lb-row" style="font-size:11px;opacity:.85;"><span>Informe o saldo inicial das suas contas em <b style="text-decoration:underline;cursor:pointer" onclick="abrirModalContas()">Contas</b> para um número exato.</span></div>`);
+  linhas.push(`<div class="lb-row"><span>${partidaReal ? 'Você tem hoje' : 'Resultado do mês até agora'}</span><b>${fmt(saldoHoje)}</b></div>`);
+  if(receitaAReceber > 0) linhas.push(`<div class="lb-row"><span>+ ainda vai receber</span><b>${fmt(receitaAReceber)}</b></div>`);
+  linhas.push(`<div class="lb-row"><span>− ainda falta pagar</span><b>${fmt(aindaFaltaPagar)}</b></div>`);
+  if(contasAbertas > 0) linhas.push(`<div class="lb-row sub"><span>contas a vencer</span><b>${fmt(contasAbertas)}</b></div>`);
+  if(parcelasAbertas > 0) linhas.push(`<div class="lb-row sub"><span>parcelas em aberto</span><b>${fmt(parcelasAbertas)}</b></div>`);
+  if(recorrentesFalta > 0) linhas.push(`<div class="lb-row sub"><span>fixos ainda não lançados</span><b>${fmt(recorrentesFalta)}</b></div>`);
+  linhas.push(`<div class="lb-row total"><span>= ${sobra ? 'sobra' : 'falta'}</span><b>${fmt(Math.abs(livre))}</b></div>`);
+  if(!partidaReal) linhas.push(`<div class="lb-row sub"><span>Informe o saldo das suas contas em <b style="text-decoration:underline;cursor:pointer" onclick="abrirModalContas()">Contas</b> para o número exato.</span></div>`);
   document.getElementById('livreBreakdown').innerHTML = linhas.join('');
+
+  aplicarEstadoDetalheLivre();
 }
 
 // mostra o saldo atual de cada conta que tem saldo inicial informado.
