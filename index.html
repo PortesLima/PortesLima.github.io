@@ -65,6 +65,40 @@
   .saldo-composicao .parcela{display:flex; justify-content:space-between; gap:8px;}
   .saldo-composicao .parcela b{color:var(--text); font-weight:600;}
 
+  /* faixa da dobra: "quanto você tem hoje" + frase de status (só mês corrente, aba Visão geral) */
+  .dobra-saldo{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:18px 20px; margin-bottom:12px;
+    display:flex; gap:24px 32px; align-items:center; flex-wrap:wrap;
+  }
+  .ds-topo{ flex:0 0 auto; min-width:180px; }
+  .ds-label{ font-size:12.5px; color:var(--muted); margin-bottom:3px; }
+  .ds-valor{
+    font-size:38px; font-weight:700; letter-spacing:-.025em; line-height:1.05; color:var(--blue);
+    font-variant-numeric:tabular-nums;
+  }
+  .ds-valor.neg{ color:var(--red); }
+  .ds-sub{ font-size:12px; color:var(--muted); margin-top:5px; }
+  .ds-sub a{ color:var(--blue); text-decoration:underline; cursor:pointer; }
+  .ds-status{
+    flex:1; min-width:240px; display:flex; align-items:flex-start; gap:9px;
+    font-size:13.5px; line-height:1.45; color:var(--text);
+    padding-left:22px; border-left:3px solid var(--border);
+  }
+  .ds-status .ds-ico{ flex-shrink:0; font-size:15px; line-height:1.3; }
+  .ds-status.ok{ border-left-color:var(--green); }
+  .ds-status.ok .ds-ico{ color:var(--green); }
+  .ds-status.aperto{ border-left-color:var(--amber); }
+  .ds-status.aperto .ds-ico{ color:var(--amber); }
+  .ds-status.estoura{ border-left-color:var(--red); }
+  .ds-status.estoura .ds-ico{ color:var(--red); }
+  .ds-status b{ color:var(--text); font-weight:600; }
+  @media(max-width:560px){
+    .dobra-saldo{ padding:15px 16px; gap:14px; }
+    .ds-valor{ font-size:30px; }
+    .ds-status{ padding-left:0; border-left:none; padding-top:12px; border-top:1px solid var(--border); width:100%; }
+  }
+
   /* card "Livre para gastar" — a resposta principal da tela */
   .livre-card{
     background:linear-gradient(135deg, var(--blue-bg), transparent 70%), var(--card);
@@ -495,6 +529,15 @@
 
   <div id="secGeral">
 
+  <div class="dobra-saldo" id="dobraSaldo" style="display:none;">
+    <div class="ds-topo">
+      <div class="ds-label" id="dsLabel">Você tem hoje</div>
+      <div class="ds-valor" id="dsValor">R$ 0,00</div>
+      <div class="ds-sub" id="dsSub"></div>
+    </div>
+    <div class="ds-status" id="dsStatus"></div>
+  </div>
+
   <div class="livre-card" id="livreCard">
     <div class="livre-main">
       <div class="livre-label" id="livreTitulo">Livre para gastar</div>
@@ -817,7 +860,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.5';
+const APP_VERSION = '2026-09-01.6';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1070,6 +1113,26 @@ function fmt(v){
   const m = MOEDAS[moedaAtual] || MOEDAS.BRL;
   const valorConvertido = v * (taxasCambio[moedaAtual] || 1);
   return valorConvertido.toLocaleString(m.locale, {style:'currency', currency:moedaAtual});
+}
+// anima um elemento de texto do valor antigo (lido do dataset) até o novo, ~250ms.
+// respeita prefers-reduced-motion: nesse caso só escreve o valor final.
+const _prefereMenosMovimento = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function fmtValorAnimado(el, novoValor){
+  const anterior = parseFloat(el.dataset.valor);
+  el.dataset.valor = String(novoValor);
+  if(_prefereMenosMovimento || isNaN(anterior) || Math.abs(anterior - novoValor) < 0.01){
+    el.textContent = fmt(novoValor);
+    return;
+  }
+  const inicio = performance.now(), dur = 260;
+  cancelAnimationFrame(el._animId || 0);
+  const passo = (agora)=>{
+    const t = Math.min(1, (agora - inicio) / dur);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = fmt(anterior + (novoValor - anterior) * eased);
+    if(t < 1) el._animId = requestAnimationFrame(passo);
+  };
+  el._animId = requestAnimationFrame(passo);
 }
 async function carregarCotacoes(){
   let cache = null;
@@ -2054,6 +2117,7 @@ function render(){
   const porCat = {};
   gastos.forEach(t => porCat[t.categoria] = (porCat[t.categoria]||0) + t.valor);
 
+  renderDobraSaldo();
   renderLivreParaGastar();
   renderSaldosContas();
   renderChartCat(porCat);
@@ -2447,6 +2511,91 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   }
 
   el.innerHTML = alertas.map(a=>`<div class="alert ${a.tipo}"><span class="ico">${a.ico}</span><span>${a.html}</span></div>`).join('');
+}
+
+// Faixa da dobra: "quanto você tem hoje" (número grande) + frase de status sobre
+// quanto tempo esse dinheiro dura no ritmo atual. Só no mês corrente e na aba Visão geral;
+// fora disso a faixa é escondida (saldo-hoje e ritmo só fazem sentido para o mês atual).
+function renderDobraSaldo(){
+  const faixa = document.getElementById('dobraSaldo');
+  if(!faixa) return;
+  const chaveCorrente = chaveMes(hojeISO());
+  if(mesAtual !== chaveCorrente){ faixa.style.display = 'none'; return; }
+  faixa.style.display = 'flex';
+
+  const conta = contaAtivaFiltro();
+  const contasComSaldo = contas.filter(temSaldoInicial).filter(n => !conta || n === conta);
+
+  // ponto de partida (mesma regra do "Livre para gastar" e da projeção):
+  // (1) soma do saldo atual das contas com saldo inicial; senão (2) resultado do mês.
+  let saldoHoje, partidaReal;
+  if(contasComSaldo.length > 0){
+    saldoHoje = contasComSaldo.reduce((s,n)=>s+saldoAtualConta(n), 0);
+    partidaReal = true;
+  }else{
+    const rec = somarPorTipoNoMes(transacoes, 'receita', chaveCorrente);
+    const gastoPago = transacoes
+      .filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t)==='pago' && (!conta || t.conta===conta))
+      .reduce((s,t)=>s+t.valor,0);
+    saldoHoje = rec - gastoPago;
+    partidaReal = false;
+  }
+
+  document.getElementById('dsLabel').textContent = partidaReal ? 'Você tem hoje' : 'Resultado do mês até agora';
+  const valEl = document.getElementById('dsValor');
+  valEl.classList.toggle('neg', saldoHoje < 0);
+  fmtValorAnimado(valEl, saldoHoje);
+
+  const subEl = document.getElementById('dsSub');
+  if(partidaReal){
+    const n = contasComSaldo.length;
+    subEl.textContent = n === 1 ? 'em 1 conta' : `somando ${n} contas`;
+  }else{
+    subEl.innerHTML = 'estimado pelo mês — <a onclick="abrirModalContas()">informe o saldo das suas contas</a> para o número exato';
+  }
+
+  // frase de status: no ritmo de gasto atual, até quando o dinheiro dura
+  const statusEl = document.getElementById('dsStatus');
+  const hoje = new Date();
+  const diaHoje = hoje.getDate();
+  const [anoC, mesC] = chaveCorrente.split('-').map(Number);
+  const ultimoDia = ultimoDiaMes(anoC, mesC-1);
+  const diasAteFimMes = ultimoDia - diaHoje;
+
+  const gastoMesAteAgora = transacoes
+    .filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente && (!conta || t.conta===conta))
+    .reduce((s,t)=>s+t.valor,0);
+  const mediaDiaria = diaHoje > 0 ? gastoMesAteAgora / diaHoje : 0;
+
+  let classe, ico, frase;
+  if(saldoHoje <= 0){
+    classe = 'estoura'; ico = '▼';
+    frase = 'Seu saldo já está no vermelho este mês. Evite novos gastos até entrar receita.';
+  }else if(mediaDiaria <= 0){
+    classe = 'ok'; ico = '▸';
+    frase = `Você ainda não registrou gastos este mês. Com <b>${fmt(saldoHoje)}</b> em caixa, dá para planejar o mês com folga.`;
+  }else{
+    const diasQueDura = Math.floor(saldoHoje / mediaDiaria);
+    const diaQueAcaba = diaHoje + diasQueDura;
+    if(diasQueDura >= diasAteFimMes){
+      classe = 'ok'; ico = '▸';
+      frase = diasAteFimMes <= 0
+        ? `No ritmo atual, seu dinheiro cobre o resto do mês com folga.`
+        : `No ritmo atual (${fmt(mediaDiaria)}/dia), seu dinheiro <b>dura até o fim do mês</b> com folga.`;
+    }else{
+      const folga = diasAteFimMes - diasQueDura;
+      const diaTxt = diaQueAcaba <= ultimoDia ? `dia ${diaQueAcaba}` : `o fim do mês`;
+      if(folga <= 5){
+        classe = 'aperto'; ico = '!';
+        frase = `No ritmo atual, seu dinheiro dura até <b>${diaTxt}</b> — só ${folga} dia${folga===1?'':'s'} antes do fim do mês. Vai ficar apertado.`;
+      }else{
+        classe = 'estoura'; ico = '▼';
+        frase = `No ritmo atual (${fmt(mediaDiaria)}/dia), seu dinheiro <b>acaba ${diaTxt}</b> — ${folga} dias antes do fim do mês.`;
+      }
+    }
+  }
+  statusEl.className = 'ds-status ' + classe;
+  statusEl.innerHTML = `<span class="ds-ico">${ico}</span><span>${frase}</span>`;
 }
 
 // "Livre para gastar": quanto sobra até o fim do mês corrente depois de descontar
