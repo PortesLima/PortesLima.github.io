@@ -31,12 +31,13 @@
   }
   [data-theme="light"]{
     --bg:#f4f5f7; --card:#ffffff; --card2:#f0f1f4; --border:#e1e3e9;
-    --text:#1c1e21; --muted:#6b7280; --muted2:#5f6572; /* --muted2 >= 4.5:1 em card e card2 */
-    --green:#0f9d68; --green-bg:rgba(15,157,104,.1);
-    --red:#d8342f; --red-bg:rgba(216,52,47,.08);
-    --blue:#1f6fd8; --blue-bg:rgba(31,111,216,.08);
-    --amber:#b5730a; --amber-bg:rgba(181,115,10,.1);
-    --purple:#7c5cd6; --purple-bg:rgba(124,92,214,.08);
+    /* cores de texto ajustadas para >= 4.5:1 sobre card, card2 e bg (WCAG AA) */
+    --text:#1c1e21; --muted:#5e646f; --muted2:#5f6572;
+    --green:#0b7a50; --green-bg:rgba(11,122,80,.1);
+    --red:#c52520; --red-bg:rgba(197,37,32,.08);
+    --blue:#1a60bd; --blue-bg:rgba(26,96,189,.08);
+    --amber:#8a5808; --amber-bg:rgba(138,88,8,.1);
+    --purple:#6b4fc4; --purple-bg:rgba(107,79,196,.08);
     --btn-text:#ffffff;
   }
   *{box-sizing:border-box;}
@@ -179,7 +180,11 @@
 
   .card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px;}
   .card h2{font-size:14px; font-weight:600; margin:0 0 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;}
-  .card h2 span.small{font-size:11px; color:var(--muted); font-weight:400; cursor:pointer; text-decoration:underline;}
+  .card h2 span.small{
+    font-size:12px; color:var(--blue); font-weight:500; cursor:pointer; text-decoration:underline;
+    padding:6px 2px; display:inline-block;
+  }
+  .card h2 span.small:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
 
   .row{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;}
   input[type=text], input[type=number], input[type=date]{
@@ -205,7 +210,14 @@
   td{padding:8px 4px; border-bottom:1px solid var(--border); vertical-align:top;}
   .tag{font-size:10.5px; padding:2px 8px; border-radius:20px; font-weight:600; white-space:nowrap;}
   .actions{display:flex; gap:4px;}
-  .iconbtn{background:none; border:none; padding:2px 6px; font-size:14px; cursor:pointer; color:var(--muted);}
+  /* alvo de toque >= 24px (WCAG 2.5.8); no mobile as ações da lista sobem para 44px */
+  .iconbtn{
+    background:none; border:none; padding:4px 7px; font-size:14px; cursor:pointer; color:var(--muted);
+    min-width:28px; min-height:28px; border-radius:6px;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .iconbtn:hover{ background:var(--card2); color:var(--text); }
+  .iconbtn:focus-visible{ outline:2px solid var(--blue); outline-offset:1px; }
   .iconbtn.del{color:var(--red);}
   .empty{color:var(--muted); font-size:13px; text-align:center; padding:16px 0;}
 
@@ -231,7 +243,7 @@
     #corpoTabela .col-conta::before{ content:attr(data-label) ": "; }
     #corpoTabela .col-acoes{ grid-column:1 / -1; grid-row:4; }
     #corpoTabela .col-acoes .actions{ justify-content:flex-end; gap:2px; border-top:1px solid var(--border); padding-top:8px; margin-top:2px; }
-    #corpoTabela .col-acoes .iconbtn{ min-width:40px; min-height:40px; font-size:16px; display:inline-flex; align-items:center; justify-content:center; }
+    #corpoTabela .col-acoes .iconbtn{ min-width:44px; min-height:44px; font-size:16px; }
   }
 
   .orc-row{display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:12.5px;}
@@ -695,7 +707,7 @@
   <div class="alerts" id="alertas"></div>
 
   <div class="card" id="cardSaldosContas" style="display:none; margin-bottom:14px;">
-    <h2>Saldo por conta <span class="small" onclick="abrirModalContas()">gerenciar</span></h2>
+    <h2>Saldo por conta <span class="small" role="button" tabindex="0" onclick="abrirModalContas()">gerenciar</span></h2>
     <div id="listaSaldosContas" class="saldos-grid"></div>
   </div>
 
@@ -761,7 +773,7 @@
   <div id="secMetas" style="display:none;">
   <div class="cols2">
     <div class="card">
-      <h2>Metas de economia <span class="small editable-only" onclick="toggleNovaMeta()">+ nova meta</span></h2>
+      <h2>Metas de economia <span class="small editable-only" role="button" tabindex="0" onclick="toggleNovaMeta()">+ nova meta</span></h2>
       <div id="metas"></div>
       <div id="formMeta" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
         <div class="row">
@@ -776,7 +788,7 @@
       </div>
     </div>
     <div class="card">
-      <h2>Lançamentos fixos <span class="small editable-only" onclick="toggleNovoRecorrente()">+ novo fixo</span></h2>
+      <h2>Lançamentos fixos <span class="small editable-only" role="button" tabindex="0" onclick="toggleNovoRecorrente()">+ novo fixo</span></h2>
       <div id="recorrentes"></div>
       <div id="formRecorrente" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
         <div class="row">
@@ -808,7 +820,7 @@
 
   <div id="secOrcamento" style="display:none;">
   <div class="card" style="margin-bottom:14px;">
-    <h2>Orçamento por categoria <span class="small editable-only" onclick="toggleOrcEdit()">editar limites</span></h2>
+    <h2>Orçamento por categoria <span class="small editable-only" role="button" tabindex="0" onclick="toggleOrcEdit()">editar limites</span></h2>
     <div id="orcamentos"></div>
     <div id="orcEdit" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;"></div>
   </div>
@@ -981,7 +993,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.8';
+const APP_VERSION = '2026-09-01.9';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1323,7 +1335,8 @@ async function alternarTema(){
 }
 function getThemeColors(){
   const tema = document.documentElement.getAttribute('data-theme') || 'dark';
-  return tema === 'dark' ? { grid:'#282d38', tick:'#8b93a3' } : { grid:'#e1e3e9', tick:'#6b7280' };
+  // tick usa o mesmo cinza de texto secundário do tema (--muted)
+  return tema === 'dark' ? { grid:'#282d38', tick:'#8b93a3' } : { grid:'#e1e3e9', tick:'#5e646f' };
 }
 
 function popularSelectsEstaticos(){
@@ -3364,6 +3377,13 @@ function fecharMenuConfig(){ document.getElementById('menuConfig').style.display
 document.addEventListener('click', (e)=>{
   const wrap = e.target.closest('.menu-wrap');
   if(!wrap) fecharMenuConfig();
+});
+// Enter/Espaço aciona spans com role=button (links "gerenciar", "+ nova meta" etc.)
+document.addEventListener('keydown', (e)=>{
+  if((e.key === 'Enter' || e.key === ' ') && e.target.matches('span[role="button"]')){
+    e.preventDefault();
+    e.target.click();
+  }
 });
 
 // ---- Link somente leitura ----
