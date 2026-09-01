@@ -60,6 +60,10 @@
   .kpi .label{font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-bottom:6px;}
   .kpi .value{font-size:21px; font-weight:600; letter-spacing:-.01em;}
   .kpi .delta{font-size:11px; margin-top:4px;}
+  /* composição do Saldo: "deste mês" + "sobrou de antes", separado por um traço */
+  .saldo-composicao{font-size:11px; color:var(--muted); margin-top:8px; padding-top:8px; border-top:1px solid var(--border); line-height:1.5;}
+  .saldo-composicao .parcela{display:flex; justify-content:space-between; gap:8px;}
+  .saldo-composicao .parcela b{color:var(--text); font-weight:600;}
 
   /* card "Livre para gastar" — a resposta principal da tela */
   .livre-card{
@@ -422,10 +426,10 @@
       <div class="delta" id="deltaGasto"></div>
     </div>
     <div class="kpi">
-      <div class="label">Saldo</div>
+      <div class="label" id="kpiSaldoLabel">Saldo</div>
       <div class="value blue" id="kpiSaldo">R$ 0,00</div>
       <div class="delta" id="deltaSaldo" style="color:var(--muted)"></div>
-      <div class="delta" id="saldoAcumulado" style="color:var(--muted); display:none;"></div>
+      <div class="saldo-composicao" id="saldoAcumulado" style="display:none;"></div>
     </div>
     <div class="kpi">
       <div class="label">Taxa de poupança</div>
@@ -713,7 +717,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.2';
+const APP_VERSION = '2026-09-01.3';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1756,24 +1760,37 @@ function render(){
   }
   document.getElementById('deltaReceita').innerHTML = deltaTxt(totalReceita, receitaAnt, false);
   document.getElementById('deltaGasto').innerHTML = deltaTxt(totalGasto, gastoAnt, true);
-  document.getElementById('deltaSaldo').innerHTML = deltaTxt(saldo, saldoAnt, false);
 
   document.getElementById('kpiReceita').textContent = fmt(totalReceita);
   document.getElementById('kpiGasto').textContent = fmt(totalGasto);
+  // Card "Saldo": quando o mês anterior deixou saldo, o número grande passa a ser o
+  // TOTAL acumulado (o que sobrou de antes + o resultado deste mês) — é o número que
+  // realmente responde "quanto eu tenho". A composição (deste mês / veio de antes)
+  // fica detalhada logo abaixo. Sem saldo anterior, o card mostra só o mês, como antes.
   const saldoEl = document.getElementById('kpiSaldo');
-  saldoEl.textContent = fmt(saldo);
-  saldoEl.className = 'value ' + (saldo>=0?'blue':'red');
-
-  // linha "saldo do mês anterior": o que sobrou (receita − gasto) só do mês
-  // imediatamente anterior ao selecionado. Não mexe no KPI do mês — só mostra
-  // o total combinado (mês anterior + mês atual) embaixo.
+  const saldoLabelEl = document.getElementById('kpiSaldoLabel');
   const acumEl = document.getElementById('saldoAcumulado');
-  if(Math.round(saldoAnt * 100) !== 0){
+  const temSaldoAnterior = Math.round(saldoAnt * 100) !== 0;
+
+  const deltaSaldoEl = document.getElementById('deltaSaldo');
+  if(temSaldoAnterior){
     const total = saldoAnt + saldo;
-    const sinal = saldoAnt >= 0 ? '+' : '−';
-    acumEl.innerHTML = `saldo do mês anterior ${sinal} ${fmt(Math.abs(saldoAnt))} · <b style="color:var(--text)">total ${fmt(total)}</b>`;
+    saldoLabelEl.textContent = 'Saldo acumulado';
+    saldoEl.textContent = fmt(total);
+    saldoEl.className = 'value ' + (total>=0?'blue':'red');
+    deltaSaldoEl.innerHTML = '';  // comparação "vs mês passado" fica implícita na composição abaixo
+
+    const sinalMes = saldo >= 0 ? '+' : '−';
+    const sinalAnt = saldoAnt >= 0 ? '+' : '−';
+    acumEl.innerHTML =
+      `<div class="parcela"><span>resultado de ${fmtMesLabel(mesAtual)}</span><b>${sinalMes} ${fmt(Math.abs(saldo))}</b></div>` +
+      `<div class="parcela"><span>sobrou de ${fmtMesLabel(chaveAnt)}</span><b>${sinalAnt} ${fmt(Math.abs(saldoAnt))}</b></div>`;
     acumEl.style.display = 'block';
   }else{
+    saldoLabelEl.textContent = 'Saldo';
+    saldoEl.textContent = fmt(saldo);
+    saldoEl.className = 'value ' + (saldo>=0?'blue':'red');
+    deltaSaldoEl.innerHTML = deltaTxt(saldo, saldoAnt, false);
     acumEl.style.display = 'none';
   }
   const poupEl = document.getElementById('kpiPoupanca');
