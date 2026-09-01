@@ -59,6 +59,18 @@
   /* .value / .delta ainda usadas por classes utilitárias e pelo card "Este mês" */
   .value{font-size:21px; font-weight:600; letter-spacing:-.01em;}
   .delta{font-size:11px; margin-top:4px;}
+
+  /* skeleton de carregamento (tela de abertura, enquanto carregar() roda) */
+  .skel{ background:var(--card2); border-radius:6px; position:relative; overflow:hidden; }
+  .skel::after{
+    content:""; position:absolute; inset:0;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
+    animation:skel-shimmer 1.3s ease-in-out infinite;
+  }
+  .skel-line{ height:13px; margin-bottom:8px; }
+  .skel-line:last-child{ margin-bottom:0; }
+  @keyframes skel-shimmer{ 0%{ transform:translateX(-100%); } 100%{ transform:translateX(100%); } }
+  @media(prefers-reduced-motion:reduce){ .skel::after{ animation:none; } }
   /* composição do Saldo: "deste mês" + "sobrou de antes", separado por um traço */
   .saldo-composicao{font-size:11px; color:var(--muted); margin-top:8px; padding-top:8px; border-top:1px solid var(--border); line-height:1.5;}
   .saldo-composicao .parcela{display:flex; justify-content:space-between; gap:8px;}
@@ -481,8 +493,11 @@
     <h1 style="font-size:24px; margin:0 0 6px;">Bolso Certo</h1>
     <p style="font-size:13.5px; color:var(--muted); margin:0 0 24px;">Suas finanças pessoais organizadas num só lugar.</p>
     <div class="card" style="padding:20px; text-align:left;">
-      <div id="telaInicialResumo" style="font-size:13px; color:var(--muted); margin-bottom:16px;">Carregando seus dados…</div>
-      <button id="btnEntrarApp" onclick="entrarNoApp()" style="width:100%; padding:12px;">Entrar nos registros</button>
+      <div id="telaInicialResumo" style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+        <div class="skel skel-line" style="width:70%;"></div>
+        <div class="skel skel-line" style="width:45%;"></div>
+      </div>
+      <button id="btnEntrarApp" onclick="entrarNoApp()" style="width:100%; padding:12px; visibility:hidden;">Entrar nos registros</button>
     </div>
     <p style="font-size:11px; color:var(--muted2); margin-top:16px;">Seus dados ficam no seu navegador e, se conectar, no seu Google Drive.</p>
   </div>
@@ -1057,7 +1072,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.10';
+const APP_VERSION = '2026-09-01.11';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -2187,8 +2202,10 @@ function render(){
   document.getElementById('deltaReceita').innerHTML = deltaTxt(totalReceita, receitaAnt, false);
   document.getElementById('deltaGasto').innerHTML = deltaTxt(totalGasto, gastoAnt, true);
 
-  document.getElementById('kpiReceita').textContent = fmt(totalReceita);
-  document.getElementById('kpiGasto').textContent = fmt(totalGasto);
+  // "Este mês": números animam ao trocar de mês/conta. fmtValorAnimado só faz o tween
+  // quando o valor realmente muda (guarda interna) — re-render sem mudança escreve direto.
+  fmtValorAnimado(document.getElementById('kpiReceita'), totalReceita);
+  fmtValorAnimado(document.getElementById('kpiGasto'), totalGasto);
   // Card "Saldo": quando o mês anterior deixou saldo, o número grande passa a ser o
   // TOTAL acumulado (o que sobrou de antes + o resultado deste mês) — é o número que
   // realmente responde "quanto eu tenho". A composição (deste mês / veio de antes)
@@ -2202,8 +2219,8 @@ function render(){
   if(temSaldoAnterior){
     const total = saldoAnt + saldo;
     saldoLabelEl.textContent = 'Sobrou (com meses anteriores)';
-    saldoEl.textContent = fmt(total);
     saldoEl.className = 'mes-valor ' + (total>=0?'blue':'red');
+    fmtValorAnimado(saldoEl, total);
     deltaSaldoEl.innerHTML = '';  // comparação "vs mês passado" fica implícita na composição abaixo
 
     const sinalMes = saldo >= 0 ? '+' : '−';
@@ -2214,8 +2231,8 @@ function render(){
     acumEl.style.display = 'block';
   }else{
     saldoLabelEl.textContent = 'Sobrou';
-    saldoEl.textContent = fmt(saldo);
     saldoEl.className = 'mes-valor ' + (saldo>=0?'blue':'red');
+    fmtValorAnimado(saldoEl, saldo);
     deltaSaldoEl.innerHTML = deltaTxt(saldo, saldoAnt, false);
     acumEl.style.display = 'none';
   }
@@ -3383,6 +3400,9 @@ function exportarPDFAnual(){
 function atualizarResumoTelaInicial(){
   const el = document.getElementById('telaInicialResumo');
   if(!el) return;
+  // dados carregados: revela o botão de entrar (estava escondido durante o skeleton)
+  const btn = document.getElementById('btnEntrarApp');
+  if(btn) btn.style.visibility = 'visible';
   const chaveHoje = chaveMes(hojeISO());
   const receita = somarPorTipoNoMes(transacoes, 'receita', chaveHoje);
   const gasto = somarPorTipoNoMes(transacoes, 'gasto', chaveHoje);
