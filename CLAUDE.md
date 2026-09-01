@@ -119,8 +119,7 @@ month-relative math.
   'Transferência'`. The distinct `tipo` is deliberate: every existing `t.tipo==='receita'` /
   `'gasto'` check ignores transfers automatically, so they stay out of all income/expense KPIs
   with no per-site filtering. Places that iterate *all* transactions and sign by
-  `receita?+:−` (the "saldo acumulado" chart, the `saldoContas` adjustment in
-  `renderLivreParaGastar`/`renderProjecaoSaldo`) must still exclude `tipo==='transferencia'`
+  `receita?+:−` (the "saldo acumulado" chart) must still exclude `tipo==='transferencia'`
   explicitly — grep for `!== 'transferencia'`. Deleting either leg removes both.
 
 ### "Livre para gastar" card + per-account balances
@@ -128,16 +127,28 @@ month-relative math.
 `renderLivreParaGastar()` (top of Visão Geral, current month only) answers "how much can I
 spend until month-end": an anchor balance minus this month's still-open commitments (pending/
 overdue bills, open installments, not-yet-launched recurring expenses), plus pending income.
-Anchor preference order: (1) sum of `saldoAtualConta()` for accounts with a `saldosIniciais`
-entry; (2) the global `saldoContas`; (3) month result so far. `partidaReal` tracks whether
-the anchor is a real balance.
+Anchor: (1) sum of `saldoAtualConta()` for accounts with a `saldosIniciais` entry, else
+(2) month result so far. `partidaReal` tracks whether the anchor is a real balance.
+`renderProjecaoSaldo()` uses the same two-step anchor.
 
-`saldosIniciais` (`{nomeConta: {valor, em}}`) is per-account starting balance. `saldoAtualConta(nome)`
+`saldosIniciais` (`{nomeConta: {valor, em}}`) is per-account starting balance — set in the
+Contas modal, one value+date row per account (`editarSaldoInicialConta`). `saldoAtualConta(nome)`
 = that value + Σ of **effectivated** movements on the account since `em` (`efeitoNoSaldo()`:
 receita +, gasto −, transfer signed by `subtipo`) — **only** `status:'pago'` items and
 transfers count, so pending bills don't reduce the shown balance (they surface as commitments
 in the Livre card instead). `renderSaldosContas()` shows the "Saldo por conta" card, hidden
 unless at least one account has a starting balance.
+
+`saldoContas` (old single global-balance field) is **legacy**: the UI is gone; `carregar()`
+migrates any stored value into `saldosIniciais[contas[0]]` on first load and nulls it. It's
+still in `montarEstado()`/storage only so old backups/Drive files don't error — no new code
+reads it.
+
+### Top-bar ⚙️ menu
+
+The header keeps only Google Drive, Contas, Backup, theme, and ⚙️ visible; ⚙️ (`#menuConfig`,
+`toggleMenuConfig`) holds PIN, currency, notifications, read-only link. A document-level click
+handler closes it on outside click.
 
 ### Registro rápido (FAB)
 
@@ -194,13 +205,11 @@ early on). If you add another look-back, clip it the same way.
 `renderProjecaoSaldo()` draws a line chart projecting the running account balance from *now*
 to December of the current year (minimum 3 months). The line's anchor point is either:
 
-- **`saldoContas`** (`{valor, em}` — a total-account-balance figure the user types once in the
-  *Contas* modal, stamped with the date entered; `parseValorBR()` accepts `5970`, `5.970,00`,
-  `R$ 5.970,00`), adjusted by transactions dated between `em` and today. Future transactions
-  are excluded from that adjustment — they're already counted in the projected months ahead,
-  so including them would double-count. `partidaReal` is true.
-- If `saldoContas` is null: the current real month's `receita − gasto` result. `partidaReal`
-  is false, and the summary text nudges the user to enter their real balance.
+- **Sum of `saldoAtualConta()`** across accounts with a `saldosIniciais` entry, when any exist
+  (see "Livre para gastar" section — only effectivated movements up to today count).
+  `partidaReal` is true.
+- Otherwise: the current real month's `receita − gasto` result. `partidaReal` is false, and
+  the summary text nudges the user to enter their per-account starting balances.
 
 Each projected month adds its estimated surplus/deficit: posted income/expenses when present,
 otherwise the base average (up to 3 closed months since `HISTORICO_INICIO`, divided by how
