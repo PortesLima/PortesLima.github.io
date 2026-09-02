@@ -1087,7 +1087,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.1';
+const APP_VERSION = '2026-09-02.2';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1344,6 +1344,11 @@ function fmt(v){
   const m = MOEDAS[moedaAtual] || MOEDAS.BRL;
   const valorConvertido = v * (taxasCambio[moedaAtual] || 1);
   return valorConvertido.toLocaleString(m.locale, {style:'currency', currency:moedaAtual});
+}
+// sempre em BRL, sem conversão de moeda — usado nos exports (CSV/PDF), pelo mesmo motivo
+// do CSV: um arquivo baixado não deve depender da moeda de exibição escolhida na hora.
+function fmtBRL(v){
+  return v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 }
 // anima um elemento de texto do valor antigo (lido do dataset) até o novo, ~250ms.
 // respeita prefers-reduced-motion: nesse caso só escreve o valor final.
@@ -3360,41 +3365,220 @@ function verAnexo(id){
   win.document.write(`<title>${t.desc}</title><body style="margin:0; background:#111; display:flex; align-items:center; justify-content:center; height:100vh;"><img src="${t.anexo}" style="max-width:100%; max-height:100%;"></body>`);
 }
 
+// ---- Sistema visual compartilhado dos PDFs (mesmos tokens do app) ----
+const PDF_COR = {
+  texto:   [28, 30, 33],    // ~ --text (impresso em branco, escurecido)
+  muted:   [94, 100, 111],  // ~ --muted light
+  azul:    [77, 158, 255],  // --blue
+  verde:   [11, 122, 80],   // --green tema claro (>= contraste em papel)
+  vermelho:[197, 37, 32],   // --red tema claro
+  ambar:   [138, 88, 8],    // --amber tema claro
+  linha:   [225, 228, 233], // borda sutil
+  zebra:   [247, 248, 250], // fundo de linha alternada
+  chipBg:  [237, 240, 244], // fundo neutro (header da tabela)
+};
+function pdfHexRgb(hex){
+  const h = (hex||'').replace('#','');
+  if(h.length !== 6) return PDF_COR.muted.slice();
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+// desenha o cofrinho da marca (mesma silhueta do favicon) em vetor jsPDF
+function pdfLogo(doc, x, y){
+  const cx = x + 4, cy = y + 4;
+  doc.setDrawColor(...PDF_COR.azul); doc.setFillColor(...PDF_COR.azul);
+  doc.setLineWidth(0.7);
+  doc.circle(cx, cy, 4, 'S');                    // corpo (contorno)
+  doc.circle(cx, cy - 3.4, 0.85, 'F');           // moeda entrando pelo topo
+  doc.setLineWidth(0.9);
+  doc.line(cx - 2.4, cy + 0.6, cx + 2.4, cy + 0.6); // fenda
+}
+// trunca um texto com reticências para caber em maxW (mm) na fonte/tamanho atuais
+function pdfTruncar(doc, texto, maxW){
+  texto = String(texto || '');
+  if(doc.getTextWidth(texto) <= maxW) return texto;
+  while(texto.length > 1 && doc.getTextWidth(texto + '…') > maxW) texto = texto.slice(0, -1);
+  return texto.replace(/\s+$/, '') + '…';
+}
+// cabeçalho de página (marca + referência + data de geração); retorna o Y após ele
+function pdfCabecalho(doc, titulo, referencia){
+  const M = 14, W = doc.internal.pageSize.getWidth();
+  pdfLogo(doc, M, 12);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...PDF_COR.texto);
+  doc.text('Bolso Certo', M + 11, 18);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...PDF_COR.muted);
+  doc.text(titulo, M + 11, 23);
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...PDF_COR.azul);
+  doc.text(referencia, W - M, 18, { align: 'right' });
+  const agora = new Date();
+  const ger = `Gerado em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+  doc.text(ger, W - M, 23, { align: 'right' });
+
+  doc.setDrawColor(...PDF_COR.azul); doc.setLineWidth(0.6);
+  doc.line(M, 27, W - M, 27);
+  return 36;
+}
+// rodapé em todas as páginas: "Bolso Certo — {ref}" à esquerda, "Página X de Y" à direita
+function pdfRodape(doc, referencia){
+  const M = 14, W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
+  const total = doc.internal.getNumberOfPages();
+  for(let p = 1; p <= total; p++){
+    doc.setPage(p);
+    doc.setDrawColor(...PDF_COR.linha); doc.setLineWidth(0.4);
+    doc.line(M, Hp - 12, W - M, Hp - 12);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...PDF_COR.muted);
+    doc.text(`Bolso Certo — ${referencia}`, M, Hp - 8);
+    doc.text(`Página ${p} de ${total}`, W - M, Hp - 8, { align: 'right' });
+  }
+}
+// bloco de resumo com hierarquia: número-herói (Resultado) + frase humana + Entrou/Saiu +
+// linha do "sobrou/faltou do mês anterior" quando existe. Retorna o Y após o bloco.
+function pdfResumoMes(doc, y, refLabel, receitas, gastos, saldoAnt){
+  const M = 14, W = doc.internal.pageSize.getWidth();
+  const saldo = receitas - gastos;
+  const positivo = saldo >= 0;
+  const corSaldo = positivo ? PDF_COR.verde : PDF_COR.vermelho;
+
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...PDF_COR.muted);
+  doc.text(`Resultado de ${refLabel}`, M, y);
+  y += 9;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(26); doc.setTextColor(...corSaldo);
+  doc.text(`${positivo ? '' : '- '}${fmtBRL(Math.abs(saldo))}`, M, y);
+  y += 7;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...PDF_COR.texto);
+  const frase = (receitas === 0 && gastos === 0)
+    ? `Nenhum lançamento em ${refLabel}.`
+    : positivo
+      ? `Você fechou ${refLabel} no positivo — sobrou ${fmtBRL(saldo)}.`
+      : `Em ${refLabel} você gastou ${fmtBRL(Math.abs(saldo))} a mais do que ganhou.`;
+  doc.text(frase, M, y);
+  y += 9;
+
+  // Entrou / Saiu — secundários, lado a lado
+  const col2 = M + 70;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+  doc.text('Entrou', M, y); doc.text('Saiu', col2, y);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+  doc.setTextColor(...PDF_COR.verde);    doc.text(fmtBRL(receitas), M, y + 6);
+  doc.setTextColor(...PDF_COR.vermelho); doc.text(fmtBRL(gastos), col2, y + 6);
+  y += 12;
+
+  // taxa de poupança como nota (só com receita)
+  if(receitas > 0){
+    const taxa = Math.round((saldo / receitas) * 100);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...PDF_COR.muted);
+    doc.text(`Você guardou ${taxa}% do que ganhou neste mês.`, M, y);
+    y += 7;
+  }
+
+  // "sobrou/faltou do mês anterior" — mesma voz do card "Este mês"
+  if(saldoAnt !== null && Math.round(saldoAnt * 100) !== 0){
+    const verbo = saldoAnt >= 0 ? 'sobrou' : 'faltou';
+    const total = saldo + saldoAnt;
+    const chAnt = mesAnterior(mesAtual);
+    doc.setFillColor(...PDF_COR.zebra);
+    doc.roundedRect(M, y, W - M - M, 15, 1.5, 1.5, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...PDF_COR.texto);
+    doc.text(`Somando o que ${verbo} de ${fmtMesLabel(chAnt)} (${fmtBRL(Math.abs(saldoAnt))}), você tem`, M + 4, y + 6);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.setTextColor(...(total >= 0 ? PDF_COR.verde : PDF_COR.vermelho));
+    doc.text(`${total >= 0 ? '' : '- '}${fmtBRL(Math.abs(total))} de ${fmtMesLabel(mesAtual)}`, M + 4, y + 12);
+    y += 20;
+  }
+
+  return y + 2;
+}
+// cabeçalho da tabela de lançamentos; retorna o Y após ele
+function pdfTabelaHeader(doc, y, colX){
+  const M = 14, W = doc.internal.pageSize.getWidth();
+  doc.setFillColor(...PDF_COR.chipBg);
+  doc.rect(M, y - 4, W - M - M, 7, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+  doc.text('DIA', colX.dia, y);
+  doc.text('DESCRIÇÃO', colX.desc, y);
+  doc.text('CATEGORIA', colX.cat, y);
+  doc.text('VALOR', colX.val, y, { align: 'right' });
+  return y + 7;
+}
+// uma linha da tabela (zebra + chip de categoria + valor colorido). Retorna o próximo Y.
+function pdfLinhaLancamento(doc, t, y, i, colX){
+  const M = 14, W = doc.internal.pageSize.getWidth();
+  if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
+
+  const [ , mes, dia] = t.data.split('-');
+  const ehTransf = t.tipo === 'transferencia';
+  const ehReceita = t.tipo === 'receita' || (ehTransf && t.subtipo === 'entrada');
+  const sinal = ehTransf ? '~ ' : (ehReceita ? '+ ' : '- ');
+  const corVal = ehTransf ? PDF_COR.muted : (ehReceita ? PDF_COR.verde : PDF_COR.vermelho);
+
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.texto);
+  doc.text(`${dia}/${mes}`, colX.dia, y);
+  doc.text(pdfTruncar(doc, t.desc, colX.cat - colX.desc - 4), colX.desc, y);
+
+  // categoria como chip colorido (fundo claro da cor + texto na cor)
+  const cor = ehTransf ? PDF_COR.azul : pdfHexRgb(CORES[t.categoria]);
+  const cat = (t.categoria || '').substring(0, 16);
+  doc.setFontSize(7.5);
+  const chipW = doc.getTextWidth(cat) + 4;
+  const temG = typeof doc.GState === 'function';
+  doc.setFillColor(cor[0], cor[1], cor[2]);
+  if(temG) doc.setGState(new doc.GState({ opacity: 0.15 }));
+  doc.roundedRect(colX.cat, y - 3.3, chipW, 4.6, 1, 1, 'F');
+  if(temG) doc.setGState(new doc.GState({ opacity: 1 }));
+  doc.setTextColor(cor[0], cor[1], cor[2]);
+  doc.text(cat, colX.cat + 2, y);
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...corVal);
+  doc.text(`${sinal}${fmtBRL(t.valor)}`, colX.val, y, { align: 'right' });
+
+  return y + 6.5;
+}
+
 function exportarPDF(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
+  const M = 14, W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
+  const refLabel = fmtMesLabel(mesAtual);
+
   const doMes = transacoes.filter(t => chaveMes(t.data) === mesAtual);
   const receitas = somarPorTipo(doMes, 'receita');
   const gastos = somarPorTipo(doMes, 'gasto');
 
-  doc.setFontSize(16);
-  doc.text(`Relatório financeiro — ${fmtMesLabel(mesAtual)}`, 14, 18);
-  doc.setFontSize(11);
-  doc.text(`Receitas: ${fmt(receitas)}`, 14, 30);
-  doc.text(`Gastos: ${fmt(gastos)}`, 14, 37);
-  doc.text(`Saldo: ${fmt(receitas-gastos)}`, 14, 44);
+  // "sobrou/faltou do mês anterior" — mesma conta do card "Este mês" (inclui pendentes)
+  const chAnt = mesAnterior(mesAtual);
+  const doMesAnt = transacoes.filter(t => chaveMes(t.data) === chAnt);
+  const saldoAnt = somarPorTipo(doMesAnt, 'receita') - somarPorTipo(doMesAnt, 'gasto');
 
-  let y = 58;
-  doc.setFontSize(12);
-  doc.text('Lançamentos', 14, y);
-  y += 8;
-  doc.setFontSize(9);
-  doc.text('Data', 14, y); doc.text('Descrição', 38, y); doc.text('Categoria', 110, y); doc.text('Valor', 175, y);
-  y += 5;
-  doc.line(14, y, 196, y);
-  y += 5;
+  let y = pdfCabecalho(doc, 'Relatório mensal', refLabel);
+  y = pdfResumoMes(doc, y, refLabel, receitas, gastos, saldoAnt);
 
-  doMes.slice().sort((a,b)=>a.data.localeCompare(b.data)).forEach(t=>{
-    if(y > 280){ doc.addPage(); y = 20; }
-    const [ano,mes,dia] = t.data.split('-');
-    const sinal = t.tipo==='transferencia' ? (t.subtipo==='entrada'?'~ +':'~ -') : (t.tipo==='receita' ? '+' : '-');
-    doc.text(`${dia}/${mes}`, 14, y);
-    doc.text(t.desc.substring(0,38), 38, y);
-    doc.text(t.categoria, 110, y);
-    doc.text(`${sinal} ${fmt(t.valor)}`, 175, y);
-    y += 6;
-  });
+  // ---- Lançamentos ----
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...PDF_COR.texto);
+  doc.text('Lançamentos', M, y);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...PDF_COR.muted);
+  doc.text(`${doMes.length} no mês`, W - M, y, { align: 'right' });
+  y += 6;
 
+  const colX = { dia: M, desc: M + 14, cat: M + 96, val: W - M };
+  const linhas = doMes.slice().sort((a,b)=>a.data.localeCompare(b.data));
+
+  if(linhas.length === 0){
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor(...PDF_COR.muted);
+    doc.text('Nenhum lançamento neste mês.', M, y + 4);
+  }else{
+    y = pdfTabelaHeader(doc, y + 4, colX);
+    linhas.forEach((t, i) => {
+      if(y > Hp - 20){
+        doc.addPage();
+        y = pdfCabecalho(doc, 'Relatório mensal', refLabel) + 2;
+        y = pdfTabelaHeader(doc, y, colX);
+      }
+      y = pdfLinhaLancamento(doc, t, y, i, colX);
+    });
+  }
+
+  pdfRodape(doc, refLabel);
   doc.save(`relatorio-${mesAtual}.pdf`);
 }
 
@@ -3403,61 +3587,93 @@ function exportarPDFAnual(){
   const doAno = transacoes.filter(t => t.data.slice(0,4) === ano);
   const receitasAno = somarPorTipo(doAno, 'receita');
   const gastosAno = somarPorTipo(doAno, 'gasto');
+  const saldoAno = receitasAno - gastosAno;
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
+  const M = 14, W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
 
-  doc.setFontSize(16);
-  doc.text(`Relatório financeiro — ${ano}`, 14, 18);
-  doc.setFontSize(11);
-  doc.text(`Receitas do ano: ${fmt(receitasAno)}`, 14, 30);
-  doc.text(`Gastos do ano: ${fmt(gastosAno)}`, 14, 37);
-  doc.text(`Saldo do ano: ${fmt(receitasAno-gastosAno)}`, 14, 44);
+  let y = pdfCabecalho(doc, 'Relatório anual', ano);
 
-  let y = 58;
-  doc.setFontSize(12);
-  doc.text('Resumo por mês', 14, y);
+  // resumo do ano: saldo como número-herói
+  const positivo = saldoAno >= 0;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...PDF_COR.muted);
+  doc.text(`Resultado de ${ano}`, M, y);
+  y += 9;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(24);
+  doc.setTextColor(...(positivo ? PDF_COR.verde : PDF_COR.vermelho));
+  doc.text(`${positivo ? '' : '- '}${fmtBRL(Math.abs(saldoAno))}`, M, y);
   y += 8;
-  doc.setFontSize(9);
-  doc.text('Mês', 14, y); doc.text('Receitas', 60, y); doc.text('Gastos', 105, y); doc.text('Saldo', 150, y);
-  y += 5;
-  doc.line(14, y, 196, y);
-  y += 5;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+  doc.text('Entrou no ano', M, y); doc.text('Saiu no ano', M + 70, y);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+  doc.setTextColor(...PDF_COR.verde);    doc.text(fmtBRL(receitasAno), M, y + 6);
+  doc.setTextColor(...PDF_COR.vermelho); doc.text(fmtBRL(gastosAno), M + 70, y + 6);
+  y += 16;
 
-  for(let m=1; m<=12; m++){
+  // ---- Resumo por mês ----
+  const colM = { mes: M, rec: M + 55, gas: M + 100, sal: W - M };
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...PDF_COR.texto);
+  doc.text('Resumo por mês', M, y);
+  y += 6;
+  doc.setFillColor(...PDF_COR.chipBg); doc.rect(M, y - 4, W - M - M, 7, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+  doc.text('MÊS', colM.mes, y); doc.text('ENTROU', colM.rec, y);
+  doc.text('SAIU', colM.gas, y); doc.text('RESULTADO', colM.sal, y, { align: 'right' });
+  y += 7;
+
+  let linhaIdx = 0;
+  for(let m = 1; m <= 12; m++){
     const chave = `${ano}-${String(m).padStart(2,'0')}`;
-    const doMes = doAno.filter(t=>chaveMes(t.data)===chave);
-    if(doMes.length===0) continue;
+    const doMes = doAno.filter(t => chaveMes(t.data) === chave);
+    if(doMes.length === 0) continue;
     const rec = somarPorTipo(doMes, 'receita');
     const gas = somarPorTipo(doMes, 'gasto');
-    if(y > 270){ doc.addPage(); y = 20; }
-    doc.text(fmtMesLabel(chave), 14, y);
-    doc.text(fmt(rec), 60, y);
-    doc.text(fmt(gas), 105, y);
-    doc.text(fmt(rec-gas), 150, y);
-    y += 6;
+    const sal = rec - gas;
+    if(y > Hp - 20){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano) + 2; }
+    if(linhaIdx % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.texto);
+    doc.text(fmtMesLabel(chave), colM.mes, y);
+    doc.setTextColor(...PDF_COR.verde);    doc.text(fmtBRL(rec), colM.rec, y);
+    doc.setTextColor(...PDF_COR.vermelho); doc.text(fmtBRL(gas), colM.gas, y);
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(...(sal >= 0 ? PDF_COR.verde : PDF_COR.vermelho));
+    doc.text(`${sal >= 0 ? '' : '- '}${fmtBRL(Math.abs(sal))}`, colM.sal, y, { align: 'right' });
+    y += 6.5;
+    linhaIdx++;
   }
 
-  y += 10;
-  if(y > 260){ doc.addPage(); y = 20; }
-  doc.setFontSize(12);
-  doc.text('Gastos por categoria no ano', 14, y);
+  // ---- Gastos por categoria no ano ----
   y += 8;
-  doc.setFontSize(9);
-  doc.text('Categoria', 14, y); doc.text('Total', 120, y);
-  y += 5;
-  doc.line(14, y, 196, y);
-  y += 5;
+  if(y > Hp - 30){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano) + 2; }
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...PDF_COR.texto);
+  doc.text('Gastos por categoria no ano', M, y);
+  y += 6;
+  doc.setFillColor(...PDF_COR.chipBg); doc.rect(M, y - 4, W - M - M, 7, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+  doc.text('CATEGORIA', M, y); doc.text('TOTAL', W - M, y, { align: 'right' });
+  y += 7;
 
   const porCategoria = {};
-  doAno.filter(t=>t.tipo==='gasto').forEach(t => porCategoria[t.categoria] = (porCategoria[t.categoria]||0) + t.valor);
-  Object.entries(porCategoria).sort((a,b)=>b[1]-a[1]).forEach(([cat,total])=>{
-    if(y > 280){ doc.addPage(); y = 20; }
-    doc.text(cat, 14, y);
-    doc.text(fmt(total), 120, y);
-    y += 6;
+  doAno.filter(t => t.tipo === 'gasto').forEach(t => porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor);
+  Object.entries(porCategoria).sort((a,b) => b[1] - a[1]).forEach(([cat, total], i) => {
+    if(y > Hp - 20){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano) + 2; }
+    if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
+    const cor = pdfHexRgb(CORES[cat]);
+    doc.setFontSize(7.5);
+    const chipW = doc.getTextWidth(cat) + 4;
+    const temG = typeof doc.GState === 'function';
+    doc.setFillColor(cor[0], cor[1], cor[2]);
+    if(temG) doc.setGState(new doc.GState({ opacity: 0.15 }));
+    doc.roundedRect(M, y - 3.3, chipW, 4.6, 1, 1, 'F');
+    if(temG) doc.setGState(new doc.GState({ opacity: 1 }));
+    doc.setTextColor(cor[0], cor[1], cor[2]); doc.text(cat, M + 2, y);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.vermelho);
+    doc.text(`- ${fmtBRL(total)}`, W - M, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    y += 6.5;
   });
 
+  pdfRodape(doc, `Ano ${ano}`);
   doc.save(`relatorio-anual-${ano}.pdf`);
 }
 

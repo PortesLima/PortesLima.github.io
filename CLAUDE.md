@@ -67,6 +67,8 @@ green. As of the last round there are ~315 checks across:
 - `test-responsivo` — 3 breakpoints × tabs × themes, bottom bar, table→cards, max-density mobile
 - `test-a11y` — every text token ≥ 4.5:1 on every surface (both themes), touch targets ≥ 44px
 - `test-criterios-gerais` — "understand the balance without touching anything", "log a gasto in <5s"
+- `test-pdf` — `exportarPDF`/`exportarPDFAnual` via construtor-spy: 1 pág / N págs / mês vazio /
+  anual, marca + rodapé + "sobrou do mês anterior" presentes, arquivo leve
 
 Harness notes: `playwright-core` (not full `playwright`) with the `msedge` channel works
 headless. Load over `file://`, then dismiss `#btnEntrarApp` and `#modalOnboarding`. `file://`
@@ -404,8 +406,27 @@ Every amount is entered and stored in BRL. `moedaAtual` only affects `fmt()`, wh
 by `taxasCambio[moedaAtual]` before formatting — it does not touch stored data. Rates come from
 `frankfurter.app` (no API key, cached 24h in `window.storage` under `cambioCache`), fetched in
 `carregarCotacoes()`. This call is CORS-blocked when the file is opened via `file://`; it only
-succeeds on the deployed `https://` origin. CSV export intentionally always writes raw BRL
-values regardless of `moedaAtual`, to avoid ambiguous exported files.
+succeeds on the deployed `https://` origin. CSV **and PDF** exports intentionally always write
+raw BRL values regardless of `moedaAtual`, to avoid ambiguous exported files — they call
+`fmtBRL()` (not `fmt()`).
+
+### Relatórios PDF (mensal + anual)
+
+`exportarPDF()` / `exportarPDFAnual()` — jsPDF 2.5.1 UMD, **no autoTable plugin** (tabela é
+desenhada à mão). Sistema visual compartilhado que espelha os tokens do app: `PDF_COR`
+(azul/verde/vermelho/âmbar nas versões de contraste-em-papel), `pdfLogo()` (cofrinho da marca
+em vetor), `pdfCabecalho()` (marca + referência + "Gerado em"), `pdfRodape()` (numeração
+"Página X de Y" em todas as páginas, aplicada no fim via `getNumberOfPages()` + `setPage()`),
+`pdfResumoMes()` (Resultado como número-herói colorido + frase humana + Entrou/Saiu
+secundários + taxa de poupança + a linha "somando o que sobrou/faltou de {mês ant.}" na mesma
+voz do card "Este mês"), `pdfTabelaHeader()` / `pdfLinhaLancamento()` (zebra, chip de
+categoria com `CORES[cat]` a 15% via `GState`, valor colorido por tipo), `pdfTruncar()`
+(reticências por largura real). Quebra de página re-imprime cabeçalho + header da tabela.
+`jspdf.jsPDF.prototype.save` **não** intercepta nos testes — `save` é own-property da
+instância em 2.5.1; o `test-pdf` faz spy no construtor. Arquivos ficam leves (~15 KB mês
+típico, ~75 KB com 50 lançamentos) porque não há fonte embutida — Helvetica com
+peso/tamanho/cor para hierarquia. `test-pdf` (25 checks): 1 página / múltiplas páginas /
+mês vazio / anual, marca e rodapé presentes, tamanho.
 
 ### Cache-busting
 
