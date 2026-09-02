@@ -417,6 +417,27 @@
   .modal-box .passo{ display:flex; gap:10px; margin-bottom:12px; font-size:13px; }
   .modal-box .passo .n{ background:var(--blue-bg); color:var(--blue); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0; }
 
+  /* modal de importação de extrato */
+  #modalImportar .modal-box{ max-width:560px; display:flex; flex-direction:column; max-height:88vh; }
+  #importTopo{ font-size:13px; color:var(--muted); margin-bottom:12px; }
+  #importLista{ overflow-y:auto; flex:1; margin:0 -6px; padding:0 6px; }
+  .import-item{ border-bottom:1px solid var(--border); padding:8px 0; }
+  .import-item.suspeita{ background:var(--amber-bg); border-radius:8px; padding:8px; margin:2px 0; }
+  .import-linha{ display:flex; align-items:center; gap:9px; cursor:pointer; }
+  .import-linha input[type=checkbox]{ width:17px; height:17px; flex-shrink:0; }
+  .import-data{ font-size:11.5px; color:var(--muted2); font-variant-numeric:tabular-nums; flex-shrink:0; width:38px; }
+  .import-desc{ font-size:12.5px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .import-valor{ font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .import-cat{ margin-top:5px; padding-left:26px; }
+  .import-cat select{ font-size:11.5px; padding:4px 6px; max-width:180px; }
+  .import-dup{ margin-top:6px; padding-left:26px; font-size:11px; color:var(--amber); line-height:1.45; }
+  .import-dup-acoes{ display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; }
+  .import-dup-acoes button{ padding:4px 9px; font-size:11px; }
+  #importRodape{ display:flex; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--border); }
+  .conta-card-acoes{ margin-top:8px; }
+  .btn-importar-extrato{ position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card2); color:var(--text); cursor:pointer; }
+  .btn-importar-extrato input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; font-size:0; }
+
   body.readonly .editable-only{ display:none !important; }
 
   /* barra de teste grátis / bloqueio pós-teste */
@@ -592,6 +613,17 @@
           <button class="secondary" onclick="fecharModalContas()">Fechar</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="modalImportar" class="modal-bg" style="display:none;">
+    <div class="modal-box">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;">Importar extrato
+        <button class="iconbtn" style="font-size:20px;" onclick="fecharModalImportar()" title="Fechar">&times;</button>
+      </h2>
+      <div id="importTopo"></div>
+      <div id="importLista"></div>
+      <div id="importRodape"></div>
     </div>
   </div>
 
@@ -1113,7 +1145,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.3';
+const APP_VERSION = '2026-09-02.4';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1680,6 +1712,11 @@ function renderListaContas(){
         <label class="chk">Fecha dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaFechamento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${esc}','diaFechamento',this.value)"></label>
         <label class="chk">Vence dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaVencimento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${esc}','diaVencimento',this.value)"></label>
       </div>` : ''}
+      <div class="conta-card-acoes">
+        <label class="btn-importar-extrato">📄 Importar extrato (OFX/CSV)
+          <input type="file" accept=".ofx,.csv,text/*" onchange="iniciarImportacao('${esc}', this.files[0]); this.value='';">
+        </label>
+      </div>
     </div>`;
   }).join('');
 }
@@ -3898,6 +3935,299 @@ async function importarBackupJSON(arquivo){
   }catch(e){
     alert('Não foi possível ler esse arquivo de backup.');
   }
+}
+
+// ==================== Importação de extrato (OFX / CSV) ====================
+// Lançamentos importados são transações NORMAIS, criadas pelo mesmo caminho de adicionar():
+// salvarSnapshot() → transacoes.unshift(...) → salvarTx()+render(). Nada de estrutura paralela.
+// O campo t.fitid (id único do banco, quando o OFX traz) viaja no sync de graça porque
+// montarEstado() serializa transacoes inteiro.
+
+function escHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// um campo de dentro de um bloco OFX; tolerante a tag não fechada (OFX 1.x SGML)
+function ofxCampo(bloco, tag){
+  const m = bloco.match(new RegExp('<' + tag + '>\\s*([^<\\r\\n]+)', 'i'));
+  return m ? m[1].trim() : '';
+}
+// 'YYYYMMDD...' → 'YYYY-MM-DD' (ignora hora/timezone que alguns bancos anexam)
+function ofxData(bruto){
+  const m = String(bruto).match(/(\d{4})(\d{2})(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : '';
+}
+// parseOFX(texto) → { transacoes:[{data,desc,valor,fitid}], erro? }  (valor com sinal do banco)
+function parseOFX(texto){
+  const t = String(texto || '');
+  // OFX 1.x (SGML) não fecha tags; OFX 2.x (XML) fecha. Fatiar em <STMTTRN> e parar cada
+  // bloco no próximo <STMTTRN>, num </STMTTRN>, ou no fim da lista de transações.
+  const partes = t.split(/<STMTTRN>/i).slice(1);
+  const blocos = partes.map(p => p.split(/<\/STMTTRN>|<\/BANKTRANLIST>|<STMTTRN>/i)[0]);
+  if(blocos.length === 0){
+    if(!/<OFX>/i.test(t)) return { transacoes: [], erro: 'formato-nao-reconhecido' };
+    return { transacoes: [] }; // OFX válido, mas sem movimento no período
+  }
+  const out = [];
+  for(const bloco of blocos){
+    const data = ofxData(ofxCampo(bloco, 'DTPOSTED'));
+    const valor = parseValorBR(ofxCampo(bloco, 'TRNAMT'));
+    if(!data || isNaN(valor)) continue;
+    const nome = ofxCampo(bloco, 'NAME');
+    const memo = ofxCampo(bloco, 'MEMO');
+    let desc;
+    if(nome && memo && nome.toLowerCase() !== memo.toLowerCase() && (nome + ' ' + memo).length <= 80) desc = `${nome} · ${memo}`;
+    else desc = nome || memo || 'Lançamento importado';
+    desc = desc.replace(/\s+/g, ' ').trim();
+    out.push({ data, desc, valor, fitid: ofxCampo(bloco, 'FITID') || null });
+  }
+  return { transacoes: out };
+}
+// divide uma linha CSV com separador ';' e aspas ("" = aspa literal)
+function csvLinha(linha){
+  const campos = []; let atual = '', dentro = false;
+  for(let i = 0; i < linha.length; i++){
+    const c = linha[i];
+    if(c === '"'){
+      if(dentro && linha[i+1] === '"'){ atual += '"'; i++; }
+      else dentro = !dentro;
+    }else if(c === ';' && !dentro){ campos.push(atual); atual = ''; }
+    else atual += c;
+  }
+  campos.push(atual);
+  return campos;
+}
+// parseCSVBolsoCerto(texto) → { transacoes, erro? } — só o formato que exportarCSV gera
+function parseCSVBolsoCerto(texto){
+  const linhas = String(texto || '').replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim() !== '');
+  if(linhas.length < 2) return { transacoes: [], erro: 'csv-vazio' };
+  const cab = csvLinha(linhas[0]).map(s => s.trim().toLowerCase());
+  const iData = cab.indexOf('data'), iTipo = cab.indexOf('tipo'), iDesc = cab.indexOf('descrição'), iVal = cab.indexOf('valor');
+  if(iData < 0 || iDesc < 0 || iVal < 0) return { transacoes: [], erro: 'csv-formato' };
+  const out = [];
+  for(let i = 1; i < linhas.length; i++){
+    const c = csvLinha(linhas[i]);
+    const data = (c[iData] || '').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(data)) continue;
+    let valor = parseValorBR(c[iVal]);
+    if(isNaN(valor)) continue;
+    const tipo = (iTipo >= 0 ? c[iTipo] : '').trim().toLowerCase();
+    if(tipo === 'gasto' || tipo === 'transferencia') valor = -Math.abs(valor);
+    else if(tipo === 'receita') valor = Math.abs(valor);
+    // sem tipo: mantém o sinal do próprio campo Valor
+    out.push({ data, desc: (c[iDesc] || 'Lançamento importado').replace(/\s+/g, ' ').trim(), valor, fitid: null });
+  }
+  return { transacoes: out };
+}
+// normaliza descrição p/ comparação: minúscula, sem acento, sem pontuação, espaços colapsados
+function normDesc(s){
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function descSimilar(a, b){
+  const na = normDesc(a), nb = normDesc(b);
+  if(!na || !nb) return false;
+  if(na.includes(nb) || nb.includes(na)) return true;
+  const ta = new Set(na.split(' ').filter(w => w.length > 2));
+  const tb = nb.split(' ').filter(w => w.length > 2);
+  if(ta.size === 0 || tb.length === 0) return false;
+  const comuns = tb.filter(w => ta.has(w)).length;
+  return comuns / Math.max(ta.size, tb.length) >= 0.6;
+}
+// conciliarImportacao(novas, conta) → [{ nova, status:'exata'|'suspeita'|'nova', existente? }]
+function conciliarImportacao(novas, conta){
+  const daConta = transacoes.filter(t => t.conta === conta);
+  const aceitos = []; // novas já aceitas nesta rodada (dedup dentro do próprio arquivo)
+  const resultado = [];
+  for(const nova of novas){
+    const tipoNova = nova.valor < 0 ? 'gasto' : 'receita';
+    const valCent = Math.round(Math.abs(nova.valor) * 100);
+    // 1) FITID exato contra o que já está no app
+    if(nova.fitid && daConta.some(t => t.fitid && t.fitid === nova.fitid)){
+      resultado.push({ nova, status: 'exata' });
+      continue;
+    }
+    // 2) aproximada contra o app (data ±1, valor, tipo, descrição parecida)
+    const casaApp = daConta.find(t =>
+      Math.abs(diasEntre(t.data, nova.data)) <= 1 &&
+      Math.round(t.valor * 100) === valCent &&
+      t.tipo === tipoNova &&
+      descSimilar(t.desc, nova.desc));
+    if(casaApp){
+      resultado.push({ nova, status: 'suspeita', existente: casaApp });
+      continue;
+    }
+    // 3) aproximada contra outra linha do MESMO arquivo
+    const casaArquivo = aceitos.find(a =>
+      (a.fitid && nova.fitid && a.fitid === nova.fitid) ||
+      (Math.abs(diasEntre(a.data, nova.data)) <= 1 &&
+       Math.round(Math.abs(a.valor) * 100) === valCent &&
+       (a.valor < 0) === (nova.valor < 0) &&
+       descSimilar(a.desc, nova.desc)));
+    if(casaArquivo){
+      resultado.push({ nova, status: 'suspeita', existente: { data: casaArquivo.data, desc: casaArquivo.desc, valor: Math.abs(casaArquivo.valor), tipo: casaArquivo.valor < 0 ? 'gasto' : 'receita', _doArquivo: true } });
+      continue;
+    }
+    aceitos.push(nova);
+    resultado.push({ nova, status: 'nova' });
+  }
+  return resultado;
+}
+
+let importacaoPendente = null; // { conta, formato, itens:[{nova,status,existente?,marcado,categoria,substituir?}] }
+
+async function iniciarImportacao(conta, arquivo){
+  if(!arquivo) return;
+  if(!podeEditar()) return;
+  let texto;
+  try{ texto = await arquivo.text(); }
+  catch(e){ alert('Não foi possível abrir esse arquivo.'); return; }
+  // OFX às vezes vem em windows-1252; se o UTF-8 gerou caractere de substituição, tenta de novo
+  if(texto.includes('�')){
+    try{ texto = new TextDecoder('windows-1252').decode(await arquivo.arrayBuffer()); }catch(e){}
+  }
+  const ehOFX = /\.ofx$/i.test(arquivo.name || '') || /<OFX>/i.test(texto) || /<STMTTRN>/i.test(texto);
+  const formato = ehOFX ? 'ofx' : 'csv';
+  const res = ehOFX ? parseOFX(texto) : parseCSVBolsoCerto(texto);
+  if(res.erro){
+    const msg = {
+      'formato-nao-reconhecido': 'Não conseguimos ler este arquivo. Confirme que é um extrato OFX exportado do seu banco.',
+      'csv-vazio': 'Este arquivo CSV está vazio.',
+      'csv-formato': 'Esse CSV não está no formato do Bolso Certo. Use um arquivo exportado pelo próprio app, ou um extrato OFX do seu banco.',
+    }[res.erro] || 'Não conseguimos ler este arquivo.';
+    alert(msg);
+    return;
+  }
+  const conciliado = conciliarImportacao(res.transacoes, conta).filter(r => r.status !== 'exata');
+  const jaImportados = res.transacoes.length - conciliado.length;
+  importacaoPendente = {
+    conta, formato,
+    jaImportados,
+    itens: conciliado.map(r => {
+      const tipoNova = r.nova.valor < 0 ? 'gasto' : 'receita';
+      return {
+        ...r,
+        marcado: r.status === 'nova',
+        categoria: tipoNova === 'receita' ? 'Receita' : (palpitarCategoria(r.nova.desc) || 'Outros'),
+        substituir: null,
+      };
+    }),
+  };
+  document.getElementById('modalContas').style.display = 'none';
+  document.getElementById('modalImportar').style.display = 'flex';
+  renderModalImportar();
+}
+
+function renderModalImportar(){
+  const p = importacaoPendente;
+  if(!p) return;
+  const topo = document.getElementById('importTopo');
+  const lista = document.getElementById('importLista');
+  const rodape = document.getElementById('importRodape');
+
+  if(p.itens.length === 0){
+    topo.textContent = p.jaImportados > 0
+      ? `Extrato de ${p.conta}: todos os ${p.jaImportados} lançamentos deste arquivo já estão no app.`
+      : `Extrato de ${p.conta}: nenhum lançamento encontrado. Confira se você exportou o intervalo certo no seu banco.`;
+    lista.innerHTML = '';
+    rodape.innerHTML = `<button class="secondary" onclick="fecharModalImportar()" style="width:100%;">Fechar</button>`;
+    return;
+  }
+
+  const datas = p.itens.map(i => i.nova.data).sort();
+  topo.innerHTML = `Extrato de <b>${escHtml(p.conta)}</b> · ${p.itens.length} lançamento${p.itens.length===1?'':'s'} para revisar`
+    + `<div style="font-size:11px; color:var(--muted2); margin-top:2px;">${fmtDataBR(datas[0])} a ${fmtDataBR(datas[datas.length-1])}`
+    + (p.jaImportados > 0 ? ` · ${p.jaImportados} já estava(m) no app` : '') + `</div>`;
+
+  const opcoesCat = [...CATEGORIAS, 'Receita'].map(c => `<option value="${c}">${c}</option>`).join('');
+  lista.innerHTML = p.itens.map((it, idx) => {
+    const ehReceita = it.nova.valor >= 0;
+    const cor = ehReceita ? 'var(--green)' : 'var(--red)';
+    const sinal = ehReceita ? '+' : '−';
+    const susp = it.status === 'suspeita';
+    return `<div class="import-item${susp ? ' suspeita' : ''}">
+      <label class="import-linha">
+        <input type="checkbox" ${it.marcado ? 'checked' : ''} onchange="importToggle(${idx}, this.checked)">
+        <span class="import-data">${it.nova.data.slice(8,10)}/${it.nova.data.slice(5,7)}</span>
+        <span class="import-desc">${escHtml(it.nova.desc)}</span>
+        <span class="import-valor" style="color:${cor}">${sinal} ${fmt(Math.abs(it.nova.valor))}</span>
+      </label>
+      <div class="import-cat">
+        <select onchange="importSetCat(${idx}, this.value)" ${ehReceita ? 'disabled' : ''}>${opcoesCat}</select>
+      </div>
+      ${susp ? `<div class="import-dup">
+        <span>⚠ possível duplicata${it.existente._doArquivo ? ' (repetida neste arquivo)' : ''} — já existe: ${it.existente.data.slice(8,10)}/${it.existente.data.slice(5,7)} "${escHtml(it.existente.desc)}" ${it.existente.tipo==='receita'?'+':'−'} ${fmt(it.existente.valor)}</span>
+        <div class="import-dup-acoes">
+          <button type="button" class="small secondary" onclick="importDupAcao(${idx}, 'ambos')">manter os dois</button>
+          <button type="button" class="small secondary" onclick="importDupAcao(${idx}, 'ignorar')">ignorar novo</button>
+          ${it.existente._doArquivo ? '' : `<button type="button" class="small secondary" onclick="importDupAcao(${idx}, 'substituir')">substituir</button>`}
+        </div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  p.itens.forEach((it, idx) => {
+    const sel = lista.querySelectorAll('.import-cat select')[idx];
+    if(sel) sel.value = it.categoria;
+  });
+
+  const n = p.itens.filter(i => i.marcado).length;
+  rodape.innerHTML =
+    `<button onclick="confirmarImportacao()" ${n===0?'disabled':''} style="flex:1;">Importar ${n} selecionado${n===1?'':'s'}</button>`
+    + `<button class="secondary" onclick="fecharModalImportar()">Cancelar</button>`;
+}
+function importToggle(idx, marcado){
+  importacaoPendente.itens[idx].marcado = marcado;
+  renderModalImportar();
+}
+function importSetCat(idx, cat){ importacaoPendente.itens[idx].categoria = cat; }
+function importDupAcao(idx, acao){
+  const it = importacaoPendente.itens[idx];
+  if(acao === 'ambos'){ it.marcado = true; it.substituir = null; }
+  else if(acao === 'ignorar'){ it.marcado = false; it.substituir = null; }
+  else if(acao === 'substituir'){
+    // it.existente é a própria transação do app (conciliarImportacao guarda o objeto)
+    it.marcado = true;
+    it.substituir = (it.existente && it.existente.id) || null;
+  }
+  renderModalImportar();
+}
+function fecharModalImportar(){
+  document.getElementById('modalImportar').style.display = 'none';
+  importacaoPendente = null;
+}
+function confirmarImportacao(){
+  const p = importacaoPendente;
+  if(!p || !podeEditar()) return;
+  const marcados = p.itens.filter(i => i.marcado);
+  if(marcados.length === 0) return;
+  salvarSnapshot();
+  const idsRemover = marcados.map(i => i.substituir).filter(Boolean);
+  if(idsRemover.length) transacoes = transacoes.filter(t => !idsRemover.includes(t.id));
+  let mesMaisRecente = '';
+  marcados.forEach((it, i) => {
+    const ehReceita = it.nova.valor >= 0;
+    transacoes.unshift({
+      id: uid() + i,
+      tipo: ehReceita ? 'receita' : 'gasto',
+      desc: it.nova.desc,
+      valor: Math.abs(it.nova.valor),
+      categoria: ehReceita ? 'Receita' : it.categoria,
+      conta: p.conta,
+      data: it.nova.data,
+      fixo: false,
+      status: 'pago',
+      anexo: null,
+      tag: null,
+      fitid: it.nova.fitid || null,
+      importadoEm: hojeISO(),
+    });
+    if(it.nova.data > mesMaisRecente) mesMaisRecente = it.nova.data;
+  });
+  rastrear('extrato_importado', { via: p.formato });
+  fecharModalImportar();
+  commitTransacoes(`${marcados.length} lançamento${marcados.length===1?'':'s'} importado${marcados.length===1?'':'s'} em ${p.conta}`, {
+    comUndo: true,
+    irParaMes: mesMaisRecente ? chaveMes(mesMaisRecente) : null,
+  });
 }
 function toggleMenuBackup(){
   const el = document.getElementById('painelBackup');

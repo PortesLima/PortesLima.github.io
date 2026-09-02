@@ -72,6 +72,10 @@ green. As of the last round there are ~315 checks across:
 - `test-telemetria` — `rastrear()` via stub do PostHog: cada evento dispara no ponto certo e
   1x só quando deve, payload sem dado financeiro/pessoal, `?readonly=1` não rastreia, falha
   silenciosa sem PostHog
+- `test-importar` — `parseOFX` (2 bancos: tags abertas/fechadas, ponto/vírgula, NAME/MEMO),
+  `parseCSVBolsoCerto`, `conciliarImportacao` (FITID exato, aproximada ±1 dia, dedup no
+  arquivo, não concilia entre contas), fluxo completo entra no funil, reimport não duplica,
+  substituir, arquivo vazio/corrompido, guard de trial
 
 Harness notes: `playwright-core` (not full `playwright`) with the `msedge` channel works
 headless. Load over `file://`, then dismiss `#btnEntrarApp` and `#modalOnboarding`. `file://`
@@ -139,6 +143,40 @@ second toast replaces the first (first undo is lost) — intentional, like Gmail
 `#btnDesfazer` header button is gone; `desfazer()` and `snapshotAnterior` remain, called by
 the toast.
 
+### Importação de extrato (OFX / CSV)
+
+Botão "📄 Importar extrato (OFX/CSV)" **por conta** dentro do modal `#modalContas`
+(`renderListaContas`) — a conta entra pré-selecionada. Lançamentos importados são transações
+**normais**: `iniciarImportacao()` → `#modalImportar` de pré-visualização →
+`confirmarImportacao()` → `salvarSnapshot()` + `transacoes.unshift(...)` +
+`commitTransacoes()`. **Não** passa por `aplicarDadosImportados()` (essa substitui o estado
+inteiro). Novo campo por-transação `t.fitid` (id único do banco, do `<FITID>` do OFX) +
+`t.importadoEm` — viajam no sync de graça porque `montarEstado` serializa `transacoes`
+inteiro; nada a fazer no funil de estado.
+
+- **`parseOFX(texto)`** → `{transacoes:[{data,desc,valor,fitid}], erro?}`. Sem biblioteca, sem
+  `DOMParser` (OFX 1.x SGML não fecha tags). Fatia em `<STMTTRN>`, para cada bloco no próximo
+  `<STMTTRN>` / `</STMTTRN>` / `</BANKTRANLIST>`. `ofxCampo()` lê campo tolerante a tag aberta
+  (`/<TAG>\s*([^<\r\n]+)/`). `DTPOSTED` → pega `YYYYMMDD` (ignora hora/TZ). `TRNAMT` via
+  `parseValorBR` (BR e US). Descrição: `NAME` ou `MEMO`. Encoding: se `arquivo.text()` gerou
+  `�`, retenta com `TextDecoder('windows-1252')`. Erro só se não há `<STMTTRN>` **e** não há
+  `<OFX>`; `<OFX>` sem transação → `{transacoes:[]}` (fluxo trata "vazio" à parte).
+- **`parseCSVBolsoCerto(texto)`** — só o formato que `exportarCSV` gera
+  (`Data;Tipo;Descrição;…`, `;`, aspas `""`, BOM opcional). `Tipo` dá o sinal.
+- **`conciliarImportacao(novas, conta)`** → `[{nova, status:'exata'|'suspeita'|'nova', existente?}]`,
+  comparando **só contra transações da mesma conta**: (1) `fitid` igual → `exata` (filtrada,
+  nem aparece); (2) data ±1 dia (`diasEntre`) + valor + tipo + `descSimilar()` (normaliza sem
+  acento/pontuação, testa inclusão ou ≥60% de tokens em comum) → `suspeita` com o lançamento
+  existente ao lado; (3) senão `nova`. Também dedup **dentro do próprio arquivo**.
+- **`#modalImportar`**: lista rolável; `nova` vem marcada, `suspeita` vem **desmarcada** em
+  âmbar com [manter os dois]/[ignorar novo]/[substituir]. Select de categoria por item
+  (pré-preenchido por `palpitarCategoria`; travado em "Receita" para receitas). Descrições
+  vêm de arquivo → renderizadas com `escHtml()`. Estado `importacaoPendente` (session `let`,
+  não persiste). `podeEditar()` barra em trial bloqueado. Evento telemetria
+  `extrato_importado` (`via: 'ofx'|'csv'`). Testado em `test-importar` (38 checks).
+
+CSV de banco arbitrário (colunas variando, mapeador de colunas) fica para entrega futura.
+
 ### Auth: token renewal without a backend
 
 Google Identity Services (`google.accounts.oauth2.initTokenClient`) issues short-lived
@@ -191,7 +229,8 @@ Eventos e onde disparam: `sessao_iniciada` (fim de `carregar()`), `trial_iniciad
 `localStorage` `bc_tel_expirado`, **fora** do funil de sync, 1x por aparelho),
 `assinar_clicado` (`assinarProvisorio()`), `continuar_consultando_clicado`
 (`continuarSoConsultando()`), `lancamento_criado` (`adicionar()` não-edição, transferência, e
-`salvarRapido()` — só o fato, com `via`).
+`salvarRapido()` — só o fato, com `via`), `extrato_importado` (`confirmarImportacao()`,
+`via: 'ofx'|'csv'`).
 
 Linha de privacidade adicionada ao `#modalOnboarding` e ao `#modalPlanos`. **Não existe
 documento formal de política de privacidade** — pendência registrada. Painel: posthog.com →
