@@ -1051,6 +1051,7 @@
         <button class="secondary" onclick="exportarPDF()">Relatório PDF do mês</button>
         <select id="anoRelatorio" style="flex:none; width:90px;"></select>
         <button class="secondary" onclick="exportarPDFAnual()">Relatório PDF do ano</button>
+        <button class="secondary" onclick="exportarPDFIR()">Relatório para IR</button>
       </div>
       <div class="row">
         <label class="chk" style="font-size:11.5px; color:var(--muted);">De: <input type="date" id="periodoDe" onchange="render()" style="width:150px; flex:none;"></label>
@@ -1162,7 +1163,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.6';
+const APP_VERSION = '2026-09-02.7';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -1446,6 +1447,21 @@ function saldoAtualConta(nome){
               && (t.tipo === 'transferencia' || statusEfetivo(t) === 'pago'))
     .reduce((s,t) => s + efeitoNoSaldo(t), 0);
   return base + mov;
+}
+// saldo de uma conta NUMA data passada (usado no relatório de IR — "saldo em 31/12/{ano}").
+//   undefined = a conta não tem saldo inicial informado (app não sabe o valor absoluto)
+//   null      = o saldo inicial foi ancorado DEPOIS da data pedida (conta não existia nesse ano)
+//   número    = saldo inicial + movimentos efetivados (status 'pago' + transferências) até a data
+function saldoContaEm(nome, dataISO){
+  const ini = saldosIniciais[nome];
+  if(!ini || typeof ini.valor !== 'number') return undefined;
+  if(ini.em && ini.em > dataISO) return null;
+  const desde = ini.em || '0000-00-00';
+  const mov = transacoes
+    .filter(t => t.conta === nome && t.data >= desde && t.data <= dataISO
+              && (t.tipo === 'transferencia' || (t.status || 'pago') === 'pago'))
+    .reduce((s,t) => s + efeitoNoSaldo(t), 0);
+  return ini.valor + mov;
 }
 function temSaldoInicial(nome){
   return saldosIniciais[nome] && typeof saldosIniciais[nome].valor === 'number';
@@ -3842,6 +3858,153 @@ function exportarPDFAnual(){
 
   pdfRodape(doc, `Ano ${ano}`);
   doc.save(`relatorio-anual-${ano}.pdf`);
+}
+
+// Relatório de APOIO para a declaração de IR. NÃO é documento fiscal, NÃO classifica
+// tributabilidade, NÃO calcula imposto — só organiza o que o app sabe (saldo por conta em
+// 31/12, gastos por categoria, entradas que podem ser rendimento) com avisos claros.
+function exportarPDFIR(){
+  const ano = document.getElementById('anoRelatorio').value;
+  const fim = `${ano}-12-31`;
+  const doAno = transacoes.filter(t => t.data.slice(0,4) === ano);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const M = 14, W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
+  // quebra de página: se não cabe mais `min` mm, abre página nova e devolve o Y após o cabeçalho
+  const quebra = (yAtual, min = 20) => yAtual > Hp - min
+    ? pdfCabecalho(doc, 'Apoio para declaração de IR', ano) + 2
+    : yAtual;
+
+  let y = pdfCabecalho(doc, 'Apoio para declaração de IR', ano);
+
+  // ---- aviso legal em destaque ----
+  doc.setFillColor(...PDF_COR.zebra);
+  doc.roundedRect(M, y, W - M - M, 18, 1.5, 1.5, 'F');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...PDF_COR.texto);
+  const aviso = doc.splitTextToSize('Este documento organiza seus dados do Bolso Certo para facilitar o preenchimento da sua declaração de Imposto de Renda. Não é um documento fiscal oficial e não substitui a orientação de um contador.', W - M - M - 8);
+  doc.text(aviso, M + 4, y + 5);
+  y += 24;
+
+  // ---- 1) saldo por conta em 31/12 ----
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...PDF_COR.texto);
+  doc.text(`Saldo em cada conta em 31/12/${ano}`, M, y);
+  y += 6;
+  doc.setFillColor(...PDF_COR.chipBg); doc.rect(M, y - 4, W - M - M, 7, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+  doc.text('CONTA', M, y); doc.text('SALDO', W - M, y, { align: 'right' });
+  y += 7;
+
+  let totalSaldo = 0, temAlgumSaldo = false;
+  contas.forEach((nome, i) => {
+    y = quebra(y);
+    if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.texto);
+    doc.text(pdfTruncar(doc, nome, 90), M, y);
+    const s = saldoContaEm(nome, fim);
+    if(typeof s === 'number'){
+      totalSaldo += s; temAlgumSaldo = true;
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(...(s >= 0 ? PDF_COR.verde : PDF_COR.vermelho));
+      doc.text(`${s >= 0 ? '' : '- '}${fmtBRL(Math.abs(s))}`, W - M, y, { align: 'right' });
+    }else{
+      doc.setFontSize(7.5); doc.setTextColor(...PDF_COR.muted);
+      const nota = s === null
+        ? `você só passou a usar esta conta depois de 31/12/${ano}`
+        : 'informe o saldo inicial em Contas para incluir aqui';
+      doc.text(nota, W - M, y, { align: 'right' });
+    }
+    y += 6.5;
+  });
+  if(temAlgumSaldo){
+    y = quebra(y);
+    doc.setDrawColor(...PDF_COR.linha); doc.line(M, y - 3, W - M, y - 3);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...PDF_COR.texto);
+    doc.text('Total nas contas com saldo informado', M, y + 1);
+    doc.setTextColor(...(totalSaldo >= 0 ? PDF_COR.verde : PDF_COR.vermelho));
+    doc.text(`${totalSaldo >= 0 ? '' : '- '}${fmtBRL(Math.abs(totalSaldo))}`, W - M, y + 1, { align: 'right' });
+    y += 8;
+  }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...PDF_COR.muted);
+  doc.text('Guarde este número junto do saldo de 31/12 do ano anterior para a ficha Bens e Direitos.', M, y + 2);
+  y += 12;
+
+  // ---- 2) gastos por categoria no ano ----
+  y = quebra(y, 30);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...PDF_COR.texto);
+  doc.text(`Gastos por categoria em ${ano}`, M, y);
+  y += 6;
+  doc.setFillColor(...PDF_COR.chipBg); doc.rect(M, y - 4, W - M - M, 7, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+  doc.text('CATEGORIA', M, y); doc.text('TOTAL', W - M, y, { align: 'right' });
+  y += 7;
+  const porCat = {};
+  doAno.filter(t => t.tipo === 'gasto').forEach(t => porCat[t.categoria] = (porCat[t.categoria] || 0) + t.valor);
+  const catsOrd = Object.entries(porCat).sort((a,b) => b[1] - a[1]);
+  if(catsOrd.length === 0){
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(...PDF_COR.muted);
+    doc.text('Nenhum gasto lançado neste ano.', M, y + 1); y += 8;
+  }else{
+    catsOrd.forEach(([cat, total], i) => {
+      y = quebra(y);
+      if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
+      const cor = pdfHexRgb(CORES[cat]);
+      doc.setFontSize(7.5);
+      const chipW = doc.getTextWidth(cat) + 4;
+      const temG = typeof doc.GState === 'function';
+      doc.setFillColor(cor[0], cor[1], cor[2]);
+      if(temG) doc.setGState(new doc.GState({ opacity: 0.15 }));
+      doc.roundedRect(M, y - 3.3, chipW, 4.6, 1, 1, 'F');
+      if(temG) doc.setGState(new doc.GState({ opacity: 1 }));
+      doc.setTextColor(cor[0], cor[1], cor[2]); doc.text(cat, M + 2, y);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.vermelho);
+      doc.text(`- ${fmtBRL(total)}`, W - M, y, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      y += 6.5;
+    });
+  }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...PDF_COR.muted);
+  doc.text('Despesas de saúde e educação podem ser dedutíveis — confirme quais e como lançar com seu contador.', M, y + 2);
+  y += 12;
+
+  // ---- 3) entradas que podem ser rendimento ----
+  const receitas = doAno.filter(t => t.tipo === 'receita');
+  if(receitas.length > 0){
+    y = quebra(y, 30);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...PDF_COR.texto);
+    doc.text(`Entradas que podem ser rendimento em ${ano}`, M, y);
+    y += 6;
+    doc.setFillColor(...PDF_COR.chipBg); doc.rect(M, y - 4, W - M - M, 7, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+    doc.text('DESCRIÇÃO', M, y); doc.text('TOTAL NO ANO', W - M, y, { align: 'right' });
+    y += 7;
+    const porDesc = {};
+    receitas.forEach(t => porDesc[t.desc || 'Sem descrição'] = (porDesc[t.desc || 'Sem descrição'] || 0) + t.valor);
+    const descsOrd = Object.entries(porDesc).sort((a,b) => b[1] - a[1]);
+    const topo = descsOrd.slice(0, 8);
+    const outras = descsOrd.slice(8).reduce((s, [,v]) => s + v, 0);
+    topo.forEach(([d, total], i) => {
+      y = quebra(y);
+      if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.texto);
+      doc.text(pdfTruncar(doc, d, 110), M, y);
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(...PDF_COR.verde);
+      doc.text(`+ ${fmtBRL(total)}`, W - M, y, { align: 'right' });
+      y += 6.5;
+    });
+    if(outras > 0){
+      y = quebra(y);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.muted);
+      doc.text('outras entradas', M, y);
+      doc.text(`+ ${fmtBRL(outras)}`, W - M, y, { align: 'right' });
+      y += 6.5;
+    }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...PDF_COR.muted);
+    const notaR = doc.splitTextToSize('O Bolso Certo não sabe se cada entrada é rendimento tributável, isento ou já tributado na fonte, nem se veio de trabalho, aluguel ou outra origem. Leve esta lista ao seu contador.', W - M - M);
+    doc.text(notaR, M, y + 2);
+  }
+
+  pdfRodape(doc, `IR ${ano}`);
+  doc.save(`relatorio-ir-${ano}.pdf`);
 }
 
 // ---- Tela inicial (abertura) ----
