@@ -87,9 +87,20 @@ green. As of the last round there are ~315 checks across:
   (`47,90`→`47.9`, `1.234,56`, `47.90` US) em todos os pontos; `type`/`inputmode` corretos;
   `editar()` abre pt-BR; 7 gráficos com `role="img"` + `aria-label` com números reais; Dicas em
   2 blocos; rótulos novos das telas secundárias; `recTipo`/`recDesc` não vazam
+- `test-ir` — `exportarPDFIR`: `saldoContaEm` nos 3 casos (número / `undefined` sem saldo
+  inicial / `null` conta ancorada depois da data); PDF com aviso legal, saldo por conta em
+  31/12, gastos por categoria, entradas-que-podem-ser-rendimento; ano parcial; ano sem receita
+- `test-onboarding` — wizard de 3 passos: 1ª abertura mostra passo 1; criar conta (vírgula
+  aceita) → passo 2 abre o `#modalRapido`; lançar gasto OU fechar pelo × → passo 3 (sem estado
+  preso); "Começar a usar" → `onboardingVisto` + aba Visão Geral; "pular este passo" / "pular
+  tudo"; 2ª abertura não mostra nada
 
 Harness notes: `playwright-core` (not full `playwright`) with the `msedge` channel works
-headless. Load over `file://`, then dismiss `#btnEntrarApp` and `#modalOnboarding`. `file://`
+headless. Load over `file://`, click `#btnEntrarApp`, then dispensar `#modalOnboarding` —
+o novo wizard só aparece **depois** do `#btnEntrarApp` (disparado em `entrarNoApp()`), e o
+1º `<button>` dele é "Adicionar e continuar" (exige nome). Dispensar via
+`.onb-rodape [onclick*="concluirOnboarding"]` ("pular tudo"), ou pré-setar
+`localStorage bc_onboardingVisto = 'true'` no `addInitScript`. `file://`
 disables CORS features (Google sign-in, currency API) — those only work on the deployed
 `https://` origin. Script-scoped `let`s are reachable from `page.evaluate()` as bare globals,
 so `montarEstado()` / `aplicarDadosImportados()` / `render()` can be called directly. Values
@@ -448,6 +459,29 @@ category from keywords in the description (`PALPITE_CATEGORIA` regex list). Entr
 `adicionar()` — no installments, no attachment, no fixo flag — but it does go through
 `commitTransacoes()` (toast + undo) and is guarded by `podeEditar()`. Measured: `+` tap to
 confirmation toast is ~1.2s.
+
+### Onboarding guiado
+
+`#modalOnboarding` é um wizard de 3 passos que **faz** em vez de só ler. Disparado no fim de
+`entrarNoApp()` (não mais em `carregar()` — o app precisa estar visível atrás do modal, e
+`#telaInicial` z 1000 cobria o modal z 900). `onbPasso` (1-3) + `onbAtivo` (flag) são session
+`let`. `renderOnboarding()` troca o conteúdo de `#onbConteudo`:
+- **Passo 1** — 2 campos inline (`#onbContaNome` + `#onbContaSaldo`, `parseValorBR`) →
+  `onbCriarConta()`: `contas.push` + `saldosIniciais` + `salvarContas()`, sem abrir o
+  `#modalContas` por cima.
+- **Passo 2** — esconde o wizard, abre o **`#modalRapido` existente** (`onbIrParaGasto()`,
+  troca o texto do rodapé). **`fecharModalRapido()` é onboarding-aware:** enquanto
+  `onbAtivo && onbPasso===2`, QUALQUER forma de fechar o rápido (×, `salvarRapido`) chama
+  `onbVoltarModal()` → passo 3. Nunca fica preso sem modal.
+- **Passo 3** — texto sobre a Visão Geral → `concluirOnboarding(via)`:
+  `setJSON(STORAGE_ONBOARDING, true)`, `mudarAbaPrincipal('geral')`, evento
+  `onboarding_concluido` (`via: 'completo'|'pulado'`).
+- Rodapé sempre: "pular este passo" (some no passo 3) + "pular tudo" (→ `concluirOnboarding`).
+
+Flag: `STORAGE_ONBOARDING` (`onboardingVisto`) — a mesma de sempre; quem viu o onboarding
+antigo tem `true` e nunca vê o novo. **Os testes que clicam `#btnEntrarApp` disparam o
+wizard** — o helper de dispensa deles clica `.onb-rodape [onclick*="concluirOnboarding"]`
+(pular tudo) antes de tentar um `button`. `test-onboarding` (24 checks).
 
 ### PWA / Service worker
 

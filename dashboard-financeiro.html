@@ -428,6 +428,16 @@
   .modal-box .passo{ display:flex; gap:10px; margin-bottom:12px; font-size:13px; }
   .modal-box .passo .n{ background:var(--blue-bg); color:var(--blue); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0; }
 
+  /* onboarding guiado — wizard de 3 passos */
+  #onbConteudo h2{ margin:0 0 4px; }
+  #onbConteudo .onb-sub{ font-size:12.5px; color:var(--muted); margin:0 0 14px; }
+  #onbConteudo .onb-campos{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+  #onbConteudo .onb-campos input{ width:100%; }
+  #onbConteudo .onb-visao{ background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:14px; font-size:12.5px; color:var(--muted); margin-bottom:12px; }
+  .onb-rodape{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:11px; color:var(--muted2); }
+  .onb-rodape [role="button"]{ color:var(--muted); text-decoration:underline; cursor:pointer; }
+  .onb-rodape [role="button"]:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
+
   /* modal de importação de extrato */
   #modalImportar .modal-box{ max-width:560px; display:flex; flex-direction:column; max-height:88vh; }
   #importTopo{ font-size:13px; color:var(--muted); margin-bottom:12px; }
@@ -669,14 +679,17 @@
 
   <div id="modalOnboarding" class="modal-bg" style="display:none;">
     <div class="modal-box">
-      <h2>Bem-vindo ao Bolso Certo</h2>
-      <div class="passo"><div class="n">1</div><div>Toque no botão <b>+</b> (canto inferior direito) para um registro rápido, ou use a aba <b>Lançamentos</b> para o formulário completo (parcelas, comprovante, transferência entre contas).</div></div>
-      <div class="passo"><div class="n">2</div><div>Em <b>Contas</b> (topo), informe o <b>saldo inicial</b> de cada conta para ver o saldo atual de cada uma e quanto <b>sobra no fim do mês</b> depois de pagar as contas.</div></div>
-      <div class="passo"><div class="n">3</div><div>Em <b>Orçamento</b> defina limites por categoria; em <b>Metas e fixos</b>, metas de economia e contas fixas recorrentes.</div></div>
-      <div class="passo"><div class="n">4</div><div>Conecte sua conta Google (botão no topo) para sincronizar os dados entre celular e computador.</div></div>
-      <button onclick="fecharOnboarding()" style="width:100%; margin-top:6px;">Entendi, vamos lá</button>
+      <div id="onbConteudo"></div>
+      <div class="onb-rodape">
+        <span id="onbPassoLabel"></span>
+        <span>
+          <span id="onbPularPasso" role="button" tabindex="0" onclick="onbPularEste()">pular este passo</span>
+          <span style="opacity:.4;"> · </span>
+          <span role="button" tabindex="0" onclick="concluirOnboarding('pulado')">pular tudo</span>
+        </span>
+      </div>
       <p style="font-size:11px; color:var(--muted2); margin:12px 0 0; text-align:center;">
-        Coletamos apenas dados de uso anônimos e agregados (quantas pessoas usam cada função) para melhorar o app. Seus lançamentos, valores e dados pessoais nunca saem do seu aparelho e do seu Google Drive.
+        Coletamos apenas dados de uso anônimos e agregados para melhorar o app. Seus lançamentos, valores e dados pessoais nunca saem do seu aparelho e do seu Google Drive.
       </p>
     </div>
   </div>
@@ -1163,7 +1176,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.7';
+const APP_VERSION = '2026-09-02.8';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -1621,7 +1634,7 @@ async function carregar(){
   rastrear('sessao_iniciada', { via: assinatura.status });
   aplicarSubAbaGeral();
   render();
-  verificarOnboarding();
+  // o onboarding guiado é disparado no fim de entrarNoApp() (app já visível atrás do modal)
   if('Notification' in window && Notification.permission === 'granted'){
     document.getElementById('btnNotif').textContent = '🔔 Ativadas';
   }
@@ -1918,7 +1931,12 @@ function abrirModalRapido(){
   document.getElementById('modalRapido').style.display = 'flex';
   setTimeout(()=>document.getElementById('rapValor').focus(), 50);
 }
-function fecharModalRapido(){ document.getElementById('modalRapido').style.display = 'none'; }
+function fecharModalRapido(){
+  document.getElementById('modalRapido').style.display = 'none';
+  // durante o onboarding, QUALQUER forma de fechar o rápido (×, salvarRapido, etc.)
+  // avança pro passo 3 — nunca deixa a pessoa presa sem modal nenhum.
+  if(onbAtivo && onbPasso === 2) onbVoltarModal();
+}
 function rapidoSetTipo(t){
   rapidoTipo = t;
   document.getElementById('rapGasto').classList.toggle('active', t==='gasto');
@@ -4032,6 +4050,7 @@ async function entrarNoApp(){
   // se não há PIN, verificarPinInicial já mostrou o app — vai direto para os registros
   if(document.getElementById('conteudoApp').style.display !== 'none'){
     mudarAbaPrincipal('lancamentos');
+    verificarOnboarding(); // wizard guiado, com o app já visível atrás do modal
   }
 }
 async function verificarPinInicial(){
@@ -4641,15 +4660,84 @@ function podeEditar(){
 }
 
 // ---- Onboarding ----
+// ---- Onboarding guiado (wizard de 3 passos: adicionar conta -> primeiro gasto -> ver a Visão Geral) ----
+// Chamado no fim de entrarNoApp() (app já visível atrás do modal). A flag é a mesma de sempre
+// (STORAGE_ONBOARDING) — quem já viu o onboarding antigo tem true e nunca vê o novo.
+let onbPasso = 1;
+let onbAtivo = false; // ligado enquanto o wizard roda; faz fecharModalRapido() voltar ao passo 3
 async function verificarOnboarding(){
   const visto = await getJSON(STORAGE_ONBOARDING, false);
-  if(!visto){
-    document.getElementById('modalOnboarding').style.display = 'flex';
+  if(visto) return;
+  onbPasso = 1;
+  onbAtivo = true;
+  renderOnboarding();
+  document.getElementById('modalOnboarding').style.display = 'flex';
+}
+function renderOnboarding(){
+  const el = document.getElementById('onbConteudo');
+  const label = document.getElementById('onbPassoLabel');
+  const pularEste = document.getElementById('onbPularPasso');
+  if(!el) return;
+  label.textContent = `Passo ${Math.min(onbPasso,3)} de 3`;
+  pularEste.style.display = onbPasso === 3 ? 'none' : '';
+
+  if(onbPasso === 1){
+    el.innerHTML = `
+      <h2>Adicione sua primeira conta</h2>
+      <p class="onb-sub">Onde seu dinheiro fica — Nubank, carteira, poupança. O saldo é opcional, mas ajuda o app a mostrar quanto você tem de verdade.</p>
+      <div class="onb-campos">
+        <input type="text" id="onbContaNome" placeholder="Nome da conta (ex: Nubank)">
+        <input type="text" id="onbContaSaldo" inputmode="decimal" placeholder="Quanto tem aí hoje? (opcional)">
+      </div>
+      <button onclick="onbCriarConta()" style="width:100%;">Adicionar e continuar</button>`;
+    setTimeout(() => { const i = document.getElementById('onbContaNome'); if(i) i.focus(); }, 50);
+  }else if(onbPasso === 3){
+    el.innerHTML = `
+      <h2>Pronto — você já está usando</h2>
+      <p class="onb-sub">O que você acabou de cadastrar já aparece aqui.</p>
+      <div class="onb-visao">Esta é a <b>Visão Geral</b>. Ela sempre responde <b>quanto você tem hoje</b> e <b>como o mês vai fechar</b> — sem você precisar mexer em nada.</div>
+      <button onclick="concluirOnboarding('completo')" style="width:100%;">Começar a usar</button>`;
   }
 }
-async function fecharOnboarding(){
+function onbCriarConta(){
+  const nome = document.getElementById('onbContaNome').value.trim();
+  if(!nome){ alert('Dê um nome para a conta.'); return; }
+  if(!contas.includes(nome)) contas.push(nome);
+  const saldoTxt = document.getElementById('onbContaSaldo').value.trim();
+  if(saldoTxt !== ''){
+    const v = parseValorBR(saldoTxt);
+    if(!isNaN(v)) saldosIniciais[nome] = { valor: v, em: hojeISO() };
+  }
+  salvarContas();
+  popularSelectsEstaticos();
+  render();
+  onbPasso = 2;
+  onbIrParaGasto();
+}
+function onbPularEste(){
+  if(onbPasso === 1){ onbPasso = 2; onbIrParaGasto(); }
+  else if(onbPasso === 2){ onbPasso = 3; onbVoltarModal(); }
+}
+function onbIrParaGasto(){
+  // passo 2: esconde o wizard e abre o registro rápido já existente
+  document.getElementById('modalOnboarding').style.display = 'none';
+  abrirModalRapido();
+  const nota = document.querySelector('#modalRapido .modal-box > div:last-child');
+  if(nota) nota.textContent = 'É o 2º passo do onboarding — pode ser um cafezinho, você ajusta depois.';
+}
+function onbVoltarModal(){
+  // volta pro wizard no passo 3 (vindo do registro rápido, por qualquer via de fechamento)
+  onbPasso = 3;
+  renderOnboarding();
+  document.getElementById('modalOnboarding').style.display = 'flex';
+}
+async function concluirOnboarding(via){
+  onbAtivo = false;
   document.getElementById('modalOnboarding').style.display = 'none';
   await setJSON(STORAGE_ONBOARDING, true);
+  rastrear('onboarding_concluido', { via: via || 'completo' });
+  mudarAbaPrincipal('geral');
+  render();
 }
 
 // ---- Enter para salvar lançamento ----
