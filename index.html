@@ -772,6 +772,7 @@
     <span>Seu teste terminou — você pode consultar e exportar, mas não lançar. <b>Assine por R$ 20/mês</b> para voltar.</span>
     <button class="small" onclick="abrirPlanos()">Assinar</button>
   </div>
+  <div id="barraAtualizar" class="barra-trial" style="display:none;"></div>
 
   <div id="painelBackup" class="card editable-only" style="display:none; margin-bottom:14px;">
     <h2>Backup dos dados</h2>
@@ -1081,6 +1082,10 @@ if(!window.storage){
     set: async (k, v) => { try{ localStorage.setItem('bc_'+k, v); }catch(e){} },
     remove: async (k) => { try{ localStorage.removeItem('bc_'+k); }catch(e){} }
   };
+}else{
+  // window.storage já existia = estamos dentro do runtime dos Artifacts (iframe). Marca a
+  // flag pra NÃO registrar o service worker aí (sw.js não existe nesse contexto).
+  window.__ARTIFACT_RUNTIME = true;
 }
 
 const STORAGE_TX = 'transacoes';
@@ -1145,9 +1150,12 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.4';
+const APP_VERSION = '2026-09-02.5';
 (function garantirVersaoAtual(){
   try{
+    // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
+    // vem sempre fresco — o hack do ?v=timestamp fica redundante e só atrapalharia.
+    if(navigator.serviceWorker && navigator.serviceWorker.controller) return;
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
       sessionStorage.setItem('bolsoCertoVersao', APP_VERSION);
       const params = new URLSearchParams(location.search);
@@ -4460,6 +4468,46 @@ function verificarNotificacoesPendentes(forcarMsg){
   if(forcarMsg && vencidos.length===0 && aVencerHoje.length===0){
     new Notification('Tudo em dia', {body:'Nenhuma conta vencida ou vencendo hoje.'});
   }
+}
+
+// ---- Service worker (só no site publicado: https + fora do runtime dos Artifacts) ----
+// O SW cuida só de cache de arquivo estático (offline). Nunca toca em dado do usuário.
+function mostrarFaixaAtualizar(reg){
+  const b = document.getElementById('barraAtualizar');
+  if(!b) return;
+  b.innerHTML = '<span>✨ <b>Nova versão disponível</b></span>'
+    + '<button class="small" id="btnAtualizarApp">Atualizar</button>';
+  b.style.display = 'flex';
+  document.getElementById('btnAtualizarApp').onclick = () => {
+    const alvo = reg.waiting || reg.installing;
+    if(alvo) alvo.postMessage('skip-waiting');
+    // o listener de 'controllerchange' abaixo faz o reload quando o SW novo assume
+  };
+}
+if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') && !window.__ARTIFACT_RUNTIME){
+  // só recarrega no controllerchange se JÁ havia um controller (= atualização de verdade);
+  // no primeiro registro de sempre o clients.claim() também dispara controllerchange, e aí
+  // não se recarrega (evita um reload à toa na 1ª visita).
+  const tinhaControllerNoBoot = !!navigator.serviceWorker.controller;
+  let jaRecarregou = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(jaRecarregou || !tinhaControllerNoBoot) return;
+    jaRecarregou = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    // já há um SW novo esperando de uma aba anterior?
+    if(reg.waiting && navigator.serviceWorker.controller) mostrarFaixaAtualizar(reg);
+    reg.addEventListener('updatefound', () => {
+      const novo = reg.installing;
+      if(!novo) return;
+      novo.addEventListener('statechange', () => {
+        if(novo.state === 'installed' && navigator.serviceWorker.controller){
+          mostrarFaixaAtualizar(reg);
+        }
+      });
+    });
+  }).catch(() => {}); // falha de registro nunca quebra o app
 }
 
 // a tela inicial (telaInicial) já está visível e gateia a entrada; verificarPinInicial()

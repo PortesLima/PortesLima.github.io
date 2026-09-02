@@ -43,10 +43,14 @@ node --check scratch_s.js && rm scratch_s.js
 cp index.html dashboard-financeiro.html
 
 # Publish: commit + push to main — GitHub Pages redeploys automatically (~1-2 min)
-git add dashboard-financeiro.html index.html
+git add dashboard-financeiro.html index.html sw.js
 git commit -m "..."
 git push origin main
 ```
+
+Repo root: `index.html` (app), `dashboard-financeiro.html` (mirror), `sw.js` (service worker —
+a única exceção ao arquivo único; ver "PWA / Service worker"), `.nojekyll`, `CLAUDE.md`,
+`contexto-projeto-bolso-certo.md`.
 
 ### Test suite (headless browser)
 
@@ -76,6 +80,9 @@ green. As of the last round there are ~315 checks across:
   `parseCSVBolsoCerto`, `conciliarImportacao` (FITID exato, aproximada ±1 dia, dedup no
   arquivo, não concilia entre contas), fluxo completo entra no funil, reimport não duplica,
   substituir, arquivo vazio/corrompido, guard de trial
+- `test-sw` — sobe servidor `http://localhost` real: SW registra, precache do shell, offline
+  serve o app, CDNs fora do cache, guard do `?v=`, faixa de atualização aparece e o clique em
+  Atualizar troca o cache
 
 Harness notes: `playwright-core` (not full `playwright`) with the `msedge` channel works
 headless. Load over `file://`, then dismiss `#btnEntrarApp` and `#modalOnboarding`. `file://`
@@ -405,18 +412,50 @@ category from keywords in the description (`PALPITE_CATEGORIA` regex list). Entr
 `commitTransacoes()` (toast + undo) and is guarded by `podeEditar()`. Measured: `+` tap to
 confirmation toast is ~1.2s.
 
-### PWA
+### PWA / Service worker
 
-`<head>` carries a `manifest` (inline data URI), `apple-touch-icon`, and the mobile-web-app
-meta tags, so the site is installable ("Add to Home Screen", standalone display). There is
-**no service worker** — a real one needs a separate script file at a stable URL, which breaks
-the single-file constraint, and SW scripts can't be data/blob URLs. So the installed app is
-not offline-capable beyond what the browser HTTP cache happens to hold; `window.storage`
-(localStorage) is still the offline data layer.
+`<head>` carries a `manifest` (inline data URI), `apple-touch-icon`, e as meta tags
+mobile-web-app → o site é instalável (standalone).
 
-The monetization plan's Fase 2 accepts breaking the strict single-file rule *only* for
-extracting CSS/JS to hash-named files (the prerequisite for a real service worker), then Fase
-3 wraps the same PWA in a **TWA** (Bubblewrap) for the Play Store. Not started.
+**`sw.js`** (arquivo próprio no root — a **única** exceção ao arquivo único; CSS/JS seguem
+inline no `index.html`, sem build). Descoberta: um SW **não** exige extrair CSS/JS — só um
+`.js` num caminho estável. `sw.js` faz precache do `index.html` monolítico inteiro
+(`CACHE = 'bolso-certo-<versão>'`, **bumpar junto com `APP_VERSION`** no mesmo commit).
+Estratégia: navegação = **network-first** (online sempre pega HTML fresco e reabastece o
+cache; offline cai pro último bom), demais same-origin = stale-while-revalidate. **CDNs
+(Chart.js, jsPDF, GSI, PostHog) e `googleapis.com` NUNCA passam pelo SW** —
+`if (url.origin !== self.location.origin) return`. O SW só cacheia arquivo estático, **nunca**
+dado do usuário.
+
+Registro no `index.html` (bloco antes da linha de boot): só com `location.protocol === 'https:'`
+(ou `localhost`) e `!window.__ARTIFACT_RUNTIME` (flag setada no shim de `window.storage` quando
+ele já existia — dentro do iframe dos Artifacts não há `sw.js`). Falha de registro é `.catch`
+silencioso, nunca quebra o app.
+
+**Atualização:** SW novo instala e fica em `waiting` (o `install` **não** faz `skipWaiting`).
+`updatefound` + `statechange==='installed'` com controller presente → `mostrarFaixaAtualizar()`
+mostra `#barraAtualizar` ("✨ Nova versão disponível · [Atualizar]", reusa `.barra-trial`).
+Clicar → `postMessage('skip-waiting')` → SW novo assume → `controllerchange` → `location.reload()`
+**uma vez** (guard `tinhaControllerNoBoot`: no 1º registro de sempre o `clients.claim()` também
+dispara `controllerchange`, e aí não recarrega). Ignorar a faixa → atualiza sozinho no próximo
+fechar-e-reabrir. Nunca recarrega sem ação do usuário.
+
+`garantirVersaoAtual()` (o hack do `?v=timestamp`) ganhou um guard: **não** faz o
+`location.replace` se `navigator.serviceWorker.controller` existe (o SW já garante HTML fresco).
+Fica só como cinto-e-suspensório para a 1ª visita pós-deploy, antes do SW ativar.
+
+**Deploy inalterado:** `git push` (o `sw.js` sobe junto). **Mirror inalterado:**
+`cp index.html dashboard-financeiro.html` (o `sw.js` não é espelhado). `.nojekyll` no root
+desliga o Jekyll (deploy mais previsível).
+
+**Notificações:** o que existe hoje (`verificarNotificacoesPendentes` — avisa vencidas /
+vencendo-hoje com o app **aberto**) não mudou. Push real (app fechado) exige backend → Fase 2.
+
+`test-sw` (18 checks) sobe um servidor `http://localhost` de verdade (Node `http`) — contexto
+seguro onde o SW registra. A suíte normal roda em `file://`, onde o guard impede o registro.
+
+Fase 3 do plano de monetização envolve wrappar a PWA num **TWA** (Bubblewrap) para a Play
+Store. Não iniciada.
 
 ### Accounts vs. categories
 
@@ -508,7 +547,10 @@ mês vazio / anual, marca e rodapé presentes, tamanho.
 triggers one automatic `location.replace` with a `?v=timestamp` cache-buster, because mobile
 browsers were observed serving stale cached HTML after deploys even with the `no-cache` meta
 tags also present. **Bump `APP_VERSION` whenever shipping a change users need to see
-immediately** (not required for backend-only fixes with no visible behavior change).
+immediately** (not required for backend-only fixes with no visible behavior change). **Também
+bumpar `CACHE` em `sw.js` no mesmo commit** — é o que faz o service worker detectar a versão
+nova, precachear o HTML novo e apagar o cache antigo. Com o SW ativo, o `?v=timestamp` não
+dispara (guard em `garantirVersaoAtual`); o `sw.js` cuida do cache-busting.
 
 ### PIN lock
 
