@@ -18,6 +18,28 @@
 <link rel="manifest" href='data:application/manifest+json,{"name":"Bolso Certo","short_name":"Bolso Certo","description":"Suas finan%C3%A7as pessoais organizadas num s%C3%B3 lugar.","start_url":".","scope":".","display":"standalone","background_color":"%230f1115","theme_color":"%230f1115","icons":[{"src":"data:image/svg+xml,%253Csvg xmlns=%2527http://www.w3.org/2000/svg%2527 viewBox=%25270 0 72 72%2527%253E%253Crect width=%252772%2527 height=%252772%2527 rx=%252716%2527 fill=%2527%25230f1115%2527/%253E%253Ccircle cx=%252736%2527 cy=%252736%2527 r=%252726%2527 fill=%2527none%2527 stroke=%2527%25234d9eff%2527 stroke-width=%25273%2527/%253E%253Cpath d=%2527M25 40c0-7 5-13 11-13s11 6 11 13%2527 stroke=%2527%25234d9eff%2527 stroke-width=%25273%2527 stroke-linecap=%2527round%2527 fill=%2527none%2527/%253E%253Ccircle cx=%252736%2527 cy=%252726%2527 r=%25273.5%2527 fill=%2527%25234d9eff%2527/%253E%253Crect x=%252723%2527 y=%252740%2527 width=%252726%2527 height=%252712%2527 rx=%25273%2527 fill=%2527%25234d9eff%2527/%253E%253C/svg%253E","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}'>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- Telemetria: só contagem de eventos anônimos e agregados (trial, bloqueio, assinar,
+     retenção) — NUNCA lançamentos, valores, nome ou e-mail. Ver função rastrear() e a
+     seção "Telemetria (PostHog)" no CLAUDE.md. Falha em silêncio se bloqueado. -->
+<script>
+  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+  var BC_PH_KEY = 'phc_Dj3kAukpMc3knrfxJaiUaWif8wsp5FDspttUazfqjE65'; // Project API Key (pública) — projeto US Cloud
+  if(BC_PH_KEY.indexOf('phc_COLE') !== 0){
+    try{
+      posthog.init(BC_PH_KEY, {
+        api_host: 'https://us.i.posthog.com',
+        autocapture: false,
+        capture_pageview: false,
+        capture_pageleave: false,
+        disable_session_recording: true,
+        disable_surveys: true,
+        advanced_disable_decide: true,
+        persistence: 'localStorage',
+        property_denylist: ['$current_url','$host','$pathname','$referrer','$referring_domain','$initial_current_url','$initial_referrer','$initial_referring_domain'],
+      });
+    }catch(e){}
+  }
+</script>
 <style>
   :root{
     --bg:#0f1115; --card:#171a21; --card2:#1d212b; --border:#282d38;
@@ -610,6 +632,9 @@
       <div class="passo"><div class="n">3</div><div>Em <b>Orçamento</b> defina limites por categoria; em <b>Metas e fixos</b>, metas de economia e contas fixas recorrentes.</div></div>
       <div class="passo"><div class="n">4</div><div>Conecte sua conta Google (botão no topo) para sincronizar os dados entre celular e computador.</div></div>
       <button onclick="fecharOnboarding()" style="width:100%; margin-top:6px;">Entendi, vamos lá</button>
+      <p style="font-size:11px; color:var(--muted2); margin:12px 0 0; text-align:center;">
+        Coletamos apenas dados de uso anônimos e agregados (quantas pessoas usam cada função) para melhorar o app. Seus lançamentos, valores e dados pessoais nunca saem do seu aparelho e do seu Google Drive.
+      </p>
     </div>
   </div>
 
@@ -639,7 +664,8 @@
       <div style="font-size:11.5px; color:var(--muted); margin-bottom:14px;">
         Ao assinar você concorda com os <b>Termos de Uso</b> e a <b>Política de Assinatura</b>
         (plano, valor, ciclo e cancelamento). Seus dados de pagamento nunca ficam no app —
-        são tratados pela operadora de pagamento.
+        são tratados pela operadora de pagamento. O app coleta apenas estatísticas de uso
+        anônimas e agregadas; nunca seus lançamentos, valores ou dados pessoais.
       </div>
       <button onclick="assinarProvisorio()" style="width:100%;">Assinar agora</button>
       <div style="font-size:11px; color:var(--muted2); margin-top:10px; text-align:center;">
@@ -1087,7 +1113,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.2';
+const APP_VERSION = '2026-09-02.3';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -1304,6 +1330,38 @@ async function driveSalvarAgora(){
 
 function chaveMes(dataISO){ return dataISO.slice(0,7); }
 function hojeISO(){ return new Date().toISOString().slice(0,10); }
+
+// ---- Telemetria (PostHog) ----
+// Ponto ÚNICO de instrumentação. Só conta que um evento aconteceu — nunca envia
+// lançamentos, valores, descrições, categorias, nome ou e-mail. Falha em silêncio
+// (PostHog ausente, não inicializado, ou bloqueado por ad-blocker → nada acontece).
+// Não dispara em modo só-leitura (?readonly=1): esse contexto não é "uso" a medir.
+// props: apenas as chaves desta allowlist, apenas primitivos neutros.
+const RASTREAR_PROPS_OK = ['dias_de_trial', 'via'];
+function rastrear(evento, props){
+  try{
+    if(new URLSearchParams(location.search).get('readonly') === '1') return;
+    if(!window.posthog || typeof posthog.capture !== 'function') return;
+    let limpo;
+    if(props && typeof props === 'object'){
+      limpo = {};
+      for(const k of RASTREAR_PROPS_OK){
+        const v = props[k];
+        if(v !== undefined && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) limpo[k] = v;
+      }
+    }
+    posthog.capture(evento, limpo);
+  }catch(e){ /* telemetria nunca quebra o app */ }
+}
+// marca "trial_expirado já foi enviado neste aparelho" — chave PRÓPRIA, fora do funil de
+// sync do Drive (é telemetria local, não estado do app). Dispara no máx. 1x por aparelho.
+function rastrearTrialExpiradoUmaVez(){
+  try{
+    if(localStorage.getItem('bc_tel_expirado') === '1') return;
+    localStorage.setItem('bc_tel_expirado', '1');
+  }catch(e){ /* sem localStorage: aceita re-enviar, é conservador */ }
+  rastrear('trial_expirado');
+}
 function fmtMesLabel(chave){
   const [a,m] = chave.split('-');
   const nomes = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
@@ -1485,6 +1543,7 @@ async function carregar(){
   popularSeletorMes();
   aplicarModoReadonly();
   avaliarAssinatura();
+  rastrear('sessao_iniciada', { via: assinatura.status });
   aplicarSubAbaGeral();
   render();
   verificarOnboarding();
@@ -1694,6 +1753,7 @@ async function adicionar(){
     document.getElementById('descricao').value = '';
     document.getElementById('valor').value = '';
     document.getElementById('tag').value = '';
+    rastrear('lancamento_criado', { via: 'transferencia' });
     commitTransacoes(`Transferência de ${fmt(valorTotal)} registrada`, { irParaMes: chaveMes(dataISO) });
     return;
   }
@@ -1743,6 +1803,7 @@ async function adicionar(){
   document.getElementById('status').value = 'pago';
   document.getElementById('dataInput').value = dataISO;
 
+  if(!editandoId) rastrear('lancamento_criado', { via: 'formulario' });
   commitTransacoes(msgToast, { comUndo, irParaMes: chaveMes(dataISO) });
 }
 
@@ -1809,6 +1870,7 @@ function salvarRapido(){
   salvarSnapshot();
   transacoes.unshift({ id: uid(), tipo: rapidoTipo, desc: descFinal, valor, categoria, conta, data: dataISO, fixo:false, status:'pago', anexo:null, tag:null });
   fecharModalRapido();
+  rastrear('lancamento_criado', { via: 'rapido' });
   commitTransacoes(`${rapidoTipo === 'receita' ? 'Receita' : 'Gasto'} de ${fmt(valor)} em ${categoria}`, { irParaMes: chaveMes(dataISO) });
 }
 
@@ -3893,6 +3955,7 @@ async function carregarAssinatura(){
     assinatura.trialInicio = hojeISO();
     await setJSON(STORAGE_ASSINATURA, assinatura);
     driveAgendarSync();
+    rastrear('trial_iniciado', { dias_de_trial: TRIAL_DIAS });
   }
 }
 // decide status efetivo e aplica bloqueio/aviso. Roda no boot e ao voltar de background.
@@ -3907,6 +3970,7 @@ function avaliarAssinatura(){
   // não mexe no readonly vindo de ?readonly=1 (link de compartilhamento)
   const params = new URLSearchParams(window.location.search);
   const linkReadonly = params.get('readonly') === '1';
+  if(bloqueado && !linkReadonly) rastrearTrialExpiradoUmaVez();
   if(!linkReadonly){
     document.body.classList.toggle('readonly', bloqueado);
   }
@@ -3951,6 +4015,7 @@ function fecharPlanos(){
 }
 // Fase 1: "assinar" é provisório — só destrava para testar a lógica de acesso.
 async function assinarProvisorio(){
+  rastrear('assinar_clicado', { via: assinatura.status === 'bloqueado' ? 'bloqueio' : 'trial' });
   assinatura.assinouEm = hojeISO();
   assinatura.status = 'ativo';
   await setJSON(STORAGE_ASSINATURA, assinatura);
@@ -3969,6 +4034,7 @@ async function reverterAssinaturaTeste(){
   render();
 }
 function continuarSoConsultando(){
+  rastrear('continuar_consultando_clicado');
   document.getElementById('modalTrialFim').style.display = 'none';
   modalTrialJaFechadoNaSessao = true;
 }

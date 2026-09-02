@@ -69,6 +69,9 @@ green. As of the last round there are ~315 checks across:
 - `test-criterios-gerais` — "understand the balance without touching anything", "log a gasto in <5s"
 - `test-pdf` — `exportarPDF`/`exportarPDFAnual` via construtor-spy: 1 pág / N págs / mês vazio /
   anual, marca + rodapé + "sobrou do mês anterior" presentes, arquivo leve
+- `test-telemetria` — `rastrear()` via stub do PostHog: cada evento dispara no ponto certo e
+  1x só quando deve, payload sem dado financeiro/pessoal, `?readonly=1` não rastreia, falha
+  silenciosa sem PostHog
 
 Harness notes: `playwright-core` (not full `playwright`) with the `msedge` channel works
 headless. Load over `file://`, then dismiss `#btnEntrarApp` and `#modalOnboarding`. `file://`
@@ -163,6 +166,38 @@ unblocks (`assinarProvisorio`). The billing plan (Mercado Pago recommended, back
 Supabase, LGPD, roadmap) is in the "Bolso Certo — Assinatura" artifact. Known limitation,
 accepted for now: trial state lives only in `localStorage`/Drive — a determined user can
 bypass it via DevTools. That closes only with the Fase 2 backend.
+
+### Telemetria (PostHog)
+
+Coleta **só contagem de eventos anônimos e agregados** para decidir a Fase 2 — nunca
+lançamentos, valores, descrições, categorias, nome ou e-mail. Snippet oficial do PostHog no
+`<head>` (projeto **US Cloud**, `api_host: https://us.i.posthog.com` — o snippet deriva a URL
+de assets do `api_host`) com config mínima: `autocapture:false`, `capture_pageview:false`,
+`disable_session_recording:true`, `advanced_disable_decide:true`, `property_denylist` de
+URL/referrer. `BC_PH_KEY` guarda a *Project API Key* pública (`phc_…`). O guard
+`BC_PH_KEY.indexOf('phc_COLE') !== 0` só pula o `posthog.init` se a key ainda for o placeholder
+`phc_COLE_…` — com a key real, a telemetria está ativa.
+
+**`rastrear(evento, props)`** ([index.html](index.html), junto de `hojeISO()`) é o ponto
+ÚNICO. Contrato: falha em silêncio (sem PostHog / não inicializado / ad-blocker → nada, sem
+throw, sem log); **não dispara** com `?readonly=1` na URL; `props` só aceita as chaves de
+`RASTREAR_PROPS_OK` (`['dias_de_trial','via']`) e só primitivos. O `distinct_id` (UUID
+aleatório no `localStorage`, gerado pelo próprio SDK) é o único identificador — não é dado
+pessoal; habilita a métrica de retenção.
+
+Eventos e onde disparam: `sessao_iniciada` (fim de `carregar()`), `trial_iniciado`
+(`carregarAssinatura()`, no `if` que grava `trialInicio` pela 1ª vez), `trial_expirado`
+(`rastrearTrialExpiradoUmaVez()` em `avaliarAssinatura()` quando bloqueia — flag
+`localStorage` `bc_tel_expirado`, **fora** do funil de sync, 1x por aparelho),
+`assinar_clicado` (`assinarProvisorio()`), `continuar_consultando_clicado`
+(`continuarSoConsultando()`), `lancamento_criado` (`adicionar()` não-edição, transferência, e
+`salvarRapido()` — só o fato, com `via`).
+
+Linha de privacidade adicionada ao `#modalOnboarding` e ao `#modalPlanos`. **Não existe
+documento formal de política de privacidade** — pendência registrada. Painel: posthog.com →
+Funnels (`trial_iniciado` → `trial_expirado` → `assinar_clicado`) e Retention
+(`sessao_iniciada`). Testado em `test-telemetria` (21 checks, PostHog stub sobre `file://`,
+`?v=1` na URL evita o `location.replace` de cache-busting que senão zera o stub).
 
 ### Visão Geral: Resumo / Análise sub-tabs
 
