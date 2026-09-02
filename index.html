@@ -71,10 +71,21 @@
   .skel-line:last-child{ margin-bottom:0; }
   @keyframes skel-shimmer{ 0%{ transform:translateX(-100%); } 100%{ transform:translateX(100%); } }
   @media(prefers-reduced-motion:reduce){ .skel::after{ animation:none; } }
-  /* composição do Saldo: "deste mês" + "sobrou de antes", separado por um traço */
+  /* composição do Saldo: "deste mês" + "sobrou do mês anterior" + total, com trilha de auditoria */
   .saldo-composicao{font-size:11px; color:var(--muted); margin-top:8px; padding-top:8px; border-top:1px solid var(--border); line-height:1.5;}
   .saldo-composicao .parcela{display:flex; justify-content:space-between; gap:8px;}
   .saldo-composicao .parcela b{color:var(--text); font-weight:600;}
+  .saldo-composicao .parcela.total{margin-top:4px; padding-top:4px; border-top:1px solid var(--border);}
+  .saldo-composicao .parcela .nota{color:var(--muted); font-weight:400;}
+  #saldoAuditoria{margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);}
+  #saldoAuditoria .aud-titulo{color:var(--text); font-weight:600; margin-bottom:6px;}
+  #saldoAuditoria .aud-row{display:flex; justify-content:space-between; gap:8px;}
+  #saldoAuditoria .aud-row b{color:var(--text); font-weight:600;}
+  #saldoAuditoria .aud-nota{color:var(--muted2); margin:-2px 0 4px; display:block;}
+  #saldoAuditoria .aud-row.total{margin-top:4px; padding-top:4px; border-top:1px solid var(--border);}
+  #saldoAuditoria .aud-link{margin-top:6px;}
+  #saldoAuditoria .aud-link span{color:var(--blue); font-weight:500; cursor:pointer; text-decoration:underline; display:inline-block; padding:6px 2px;}
+  #saldoAuditoria .aud-link span:focus-visible{outline:2px solid var(--blue); outline-offset:2px;}
 
   /* faixa da dobra: "quanto você tem hoje" + frase de status (só mês corrente, aba Visão geral) */
   .dobra-saldo{
@@ -761,7 +772,11 @@
         <div class="mes-delta" id="deltaSaldo" style="color:var(--muted)"></div>
       </div>
     </div>
-    <div class="saldo-composicao" id="saldoAcumulado" style="display:none;"></div>
+    <div class="saldo-composicao" id="saldoAcumulado" style="display:none;">
+      <div id="saldoAcumLinhas"></div>
+      <button type="button" class="livre-toggle" id="btnAuditSaldo" onclick="toggleAuditSaldo()" aria-expanded="false">ver como foi calculado</button>
+      <div id="saldoAuditoria" hidden></div>
+    </div>
     <div class="mes-poupanca" id="mesPoupanca">
       <span>Você guardou <b id="kpiPoupanca">0%</b> do que ganhou</span>
       <span id="kpiPoupancaMsg" style="color:var(--muted)"></span>
@@ -1072,7 +1087,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-01.12';
+const APP_VERSION = '2026-09-02.1';
 (function garantirVersaoAtual(){
   try{
     if(sessionStorage.getItem('bolsoCertoVersao') !== APP_VERSION){
@@ -2206,10 +2221,14 @@ function render(){
   // quando o valor realmente muda (guarda interna) — re-render sem mudança escreve direto.
   fmtValorAnimado(document.getElementById('kpiReceita'), totalReceita);
   fmtValorAnimado(document.getElementById('kpiGasto'), totalGasto);
-  // Card "Saldo": quando o mês anterior deixou saldo, o número grande passa a ser o
-  // TOTAL acumulado (o que sobrou de antes + o resultado deste mês) — é o número que
-  // realmente responde "quanto eu tenho". A composição (deste mês / veio de antes)
-  // fica detalhada logo abaixo. Sem saldo anterior, o card mostra só o mês, como antes.
+  // Card "Saldo": quando o mês anterior fechou com resultado ≠ 0, o que sobrou (ou faltou)
+  // lá é transportado para cá — o número grande passa a ser o TOTAL (resultado deste mês +
+  // transportado do anterior), que responde "quanto eu tenho do período". A composição das
+  // 3 linhas + a trilha de auditoria (como o resultado do mês anterior foi calculado) ficam
+  // logo abaixo. Sem saldo anterior, o card mostra só o mês, como antes.
+  //
+  // NB: o transportado vive SÓ neste card. "Você tem hoje", "Fim do mês", alertas, taxa de
+  // poupança e projeção continuam medindo apenas o mês — não recebem o transportado.
   const saldoEl = document.getElementById('kpiSaldo');
   const saldoLabelEl = document.getElementById('kpiSaldoLabel');
   const acumEl = document.getElementById('saldoAcumulado');
@@ -2218,17 +2237,35 @@ function render(){
   const deltaSaldoEl = document.getElementById('deltaSaldo');
   if(temSaldoAnterior){
     const total = saldoAnt + saldo;
-    saldoLabelEl.textContent = 'Sobrou (com meses anteriores)';
+    saldoLabelEl.textContent = 'Sobrou (com o mês anterior)';
     saldoEl.className = 'mes-valor ' + (total>=0?'blue':'red');
     fmtValorAnimado(saldoEl, total);
     deltaSaldoEl.innerHTML = '';  // comparação "vs mês passado" fica implícita na composição abaixo
 
     const sinalMes = saldo >= 0 ? '+' : '−';
     const sinalAnt = saldoAnt >= 0 ? '+' : '−';
-    acumEl.innerHTML =
+    const verboAnt = saldoAnt >= 0 ? 'Sobrou' : 'Faltou';
+    document.getElementById('saldoAcumLinhas').innerHTML =
       `<div class="parcela"><span>Resultado de ${fmtMesLabel(mesAtual)}</span><b>${sinalMes} ${fmt(Math.abs(saldo))}</b></div>` +
-      `<div class="parcela"><span>Sobrou de ${fmtMesLabel(chaveAnt)}</span><b>${sinalAnt} ${fmt(Math.abs(saldoAnt))}</b></div>`;
+      `<div class="parcela"><span>${verboAnt} de ${fmtMesLabel(chaveAnt)} <span class="nota">— entrou aqui</span></span><b>${sinalAnt} ${fmt(Math.abs(saldoAnt))}</b></div>` +
+      `<div class="parcela total"><span>Total que você tem de ${fmtMesLabel(mesAtual)}</span><b>${total>=0?'':'− '}${fmt(Math.abs(total))}</b></div>`;
+
+    // trilha de auditoria: como o resultado do mês anterior foi calculado (mesma conta que saldoAnt)
+    const notaConta = conta ? ` <span class="aud-nota">Considerando só a conta ${conta}.</span>` : '';
+    const sinalResAnt = saldoAnt >= 0 ? '+' : '−';
+    document.getElementById('saldoAuditoria').innerHTML =
+      `<div class="aud-titulo">Como calculamos "${verboAnt} de ${fmtMesLabel(chaveAnt)}"</div>` +
+      `<div class="aud-row"><span>Entrou em ${fmtMesLabel(chaveAnt)}</span><b>+ ${fmt(receitaAnt)}</b></div>` +
+      `<span class="aud-nota">receitas lançadas no mês</span>` +
+      `<div class="aud-row"><span>Saiu em ${fmtMesLabel(chaveAnt)}</span><b>− ${fmt(gastoAnt)}</b></div>` +
+      `<span class="aud-nota">gastos do mês, pagos e pendentes</span>` +
+      `<div class="aud-row total"><span>Resultado de ${fmtMesLabel(chaveAnt)}</span><b>${sinalResAnt} ${fmt(Math.abs(saldoAnt))}</b></div>` +
+      `<span class="aud-nota">→ transportado para ${fmtMesLabel(mesAtual)}</span>` +
+      notaConta +
+      `<div class="aud-link"><span class="small" role="button" tabindex="0" onclick="verMesAnterior('${chaveAnt}')">ver lançamentos de ${fmtMesLabel(chaveAnt)}</span></div>`;
+
     acumEl.style.display = 'block';
+    aplicarEstadoAuditSaldo();
   }else{
     saldoLabelEl.textContent = 'Sobrou';
     saldoEl.className = 'mes-valor ' + (saldo>=0?'blue':'red');
@@ -2885,6 +2922,34 @@ function aplicarEstadoDetalheLivre(){
   card.classList.toggle('detalhe-aberto', detalheLivreAberto);
   btn.textContent = detalheLivreAberto ? 'ocultar detalhe' : 'ver detalhe';
   btn.setAttribute('aria-expanded', String(detalheLivreAberto));
+}
+
+// trilha de auditoria do "saldo transportado" do mês anterior (dentro do card "Este mês")
+let auditSaldoAberto = false;
+function toggleAuditSaldo(){
+  auditSaldoAberto = !auditSaldoAberto;
+  aplicarEstadoAuditSaldo();
+}
+function aplicarEstadoAuditSaldo(){
+  const painel = document.getElementById('saldoAuditoria');
+  const btn = document.getElementById('btnAuditSaldo');
+  if(!painel || !btn) return;
+  painel.hidden = !auditSaldoAberto;
+  btn.textContent = auditSaldoAberto ? 'ocultar cálculo' : 'ver como foi calculado';
+  btn.setAttribute('aria-expanded', String(auditSaldoAberto));
+}
+// pula para o mês anterior na Visão Geral (a partir do link da trilha de auditoria)
+function verMesAnterior(chave){
+  const sel = document.getElementById('mesSel');
+  if(!sel) return;
+  if(!Array.from(sel.options).some(o => o.value === chave)){
+    const o = document.createElement('option');
+    o.value = chave; o.textContent = fmtMesLabel(chave);
+    sel.appendChild(o);
+  }
+  sel.value = chave;
+  mesAtual = chave;
+  render();
 }
 
 // "Fim do mês": quanto sobra (ou falta) depois de pagar tudo que ainda vence este mês —

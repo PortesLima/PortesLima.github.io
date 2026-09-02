@@ -56,7 +56,8 @@ verification that a change works, and every change in the UX rounds was gated on
 green. As of the last round there are ~315 checks across:
 
 - `test-trial` — trial countdown, soft-block, `podeEditar()`, sub-modal state (Fase 1)
-- `test-saldo-anterior` — the "sobrou de meses anteriores" composition in the Saldo card
+- `test-saldo-anterior` — the "Sobrou (com o mês anterior)" composition (3 lines + total) and
+  the "ver como foi calculado" audit trail (entrou/saiu of the previous month, `verMesAnterior`)
 - `test-toast` — confirmation toast + undo, `commitTransacoes()` funnel
 - `test-sync-undo` — Drive debounce vs. undo timing (fast undo absorbed, slow undo converges)
 - `test-dobra` — the "Você tem hoje" band + status phrase colour thresholds
@@ -177,6 +178,20 @@ first). Same pattern as the Lançamentos/Dicas sub-tabs; the bottom bar stays at
 - **Análise** (`#geralAnalise`) — investigation, one tap deeper: "Projeção de saldo" (moved
   here from Lançamentos > Dicas), "Últimos 6 meses", "Evolução do saldo", "Contas fixas vs.
   gastos do dia a dia", "Comparação anual" + a plain daily-average "Ritmo de gastos" line.
+
+**"Este mês" — saldo transportado do mês anterior (`render()`, bloco `#cardEsteMes`):** quando
+o mês **imediatamente anterior** fechou com resultado ≠ 0 (`saldoAnt = receitaAnt − gastoAnt`,
+inclui pendentes, respeita o filtro de conta), esse valor é *transportado* para o mês atual: o
+número grande de "Sobrou" vira `saldoAnt + saldo` e o rótulo vira "Sobrou (com o mês anterior)".
+Abaixo, `#saldoAcumLinhas` mostra 3 linhas (Resultado do mês / Sobrou-ou-Faltou de {mês ant.}
+"— entrou aqui" / Total), e `#saldoAuditoria` (toggle `toggleAuditSaldo`, `let auditSaldoAberto`
+efêmero que sobrevive a `render()` como `detalheLivreAberto`) é a **trilha de auditoria**:
+Entrou − Saiu = Resultado do mês anterior, com link `verMesAnterior(chave)` que troca `#mesSel`
+e re-renderiza. **É só uma linha calculada — nenhuma transação é criada**, sem risco de dupla
+contagem no estado. Escopo deliberadamente estreito: o transportado vive **só neste card** —
+`renderDobraSaldo` ("Você tem hoje"), `renderLivreParaGastar` ("Fim do mês"), `renderAlertas`,
+`renderDicas`, taxa de poupança e `renderProjecaoSaldo` continuam medindo **apenas o mês**.
+Não acumula cadeia (só o mês anterior, não desde `HISTORICO_INICIO`).
 
 **Chart.js measures a 0-size canvas inside `display:none`.** The Análise charts
 (`chartMes`, `chartSaldo`, `chartFixoVar`, `chartProjecao`) are only built when
