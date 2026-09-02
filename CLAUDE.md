@@ -83,6 +83,10 @@ green. As of the last round there are ~315 checks across:
 - `test-sw` — sobe servidor `http://localhost` real: SW registra, precache do shell, offline
   serve o app, CDNs fora do cache, guard do `?v=`, faixa de atualização aparece e o clique em
   Atualizar troca o cache
+- `test-copy-a11y` — "Livre para gastar" some do markup; campos de valor aceitam vírgula
+  (`47,90`→`47.9`, `1.234,56`, `47.90` US) em todos os pontos; `type`/`inputmode` corretos;
+  `editar()` abre pt-BR; 7 gráficos com `role="img"` + `aria-label` com números reais; Dicas em
+  2 blocos; rótulos novos das telas secundárias; `recTipo`/`recDesc` não vazam
 
 Harness notes: `playwright-core` (not full `playwright`) with the `msedge` channel works
 headless. Load over `file://`, then dismiss `#btnEntrarApp` and `#modalOnboarding`. `file://`
@@ -245,6 +249,25 @@ Funnels (`trial_iniciado` → `trial_expirado` → `assinar_clicado`) e Retentio
 (`sessao_iniciada`). Testado em `test-telemetria` (21 checks, PostHog stub sobre `file://`,
 `?v=1` na URL evita o `location.replace` de cache-busting que senão zera o stub).
 
+### Nome do card "Fim do mês"
+
+Um conceito só. Nome de referência (código, comentários, docs, label estático `#livreTitulo`):
+**"Fim do mês"**. Os ids internos são legado (`livreCard`, `livreTitulo`, `livreValor`,
+`renderLivreParaGastar`) — não renomeados pra evitar churn, mas **nunca** "Livre para gastar"
+como texto visível. No mês corrente `renderLivreParaGastar()` sobrescreve o label com a frase
+dinâmica ("Depois de pagar as contas de {mês}, você fica com"); fora do mês corrente o card
+some e o label volta pra "Fim do mês".
+
+### Aba Dicas — 2 blocos
+
+`renderDicas()` marca cada dica com `origem: 'voce'` (tirada dos dados do usuário — contas a
+vencer, categoria acima da média, meta apertada, maior gasto do mês) ou `'geral'` (boa prática
+fixa — 50/30/20, automatize a poupança, revise assinaturas, e os nudges de "defina
+orçamento/crie meta" quando não há nenhum). Render em dois grupos: `<h3>Para você agora</h3>`
+com as `voce` no estilo `.alert` (ou uma linha calma se não houver nenhuma), depois
+`<h3 class="dicas-gerais-titulo">Boas práticas</h3>` com as `geral` em `.dica-geral` (fonte
+menor, marcador `·`, sem ícone de alerta).
+
 ### Visão Geral: Resumo / Análise sub-tabs
 
 `#secGeral` has two sub-tabs (`mudarSubAbaGeral('resumo'|'analise')`, `subAbaGeral` is a
@@ -308,6 +331,20 @@ values were re-tuned (`--muted` `#5e646f`, `--amber` `#8a5808`, `--green` `#0b7a
 tick colour tracks `--muted`. Touch targets: `.iconbtn` ≥ 28px desktop / 44px in the mobile
 list; clickable `<span>`s got `role="button"` + `tabindex="0"` + a global Enter/Space handler;
 focus-visible outlines on tabs, sub-tabs, icon buttons, links.
+
+**Gráficos (`<canvas>`) — `role="img"` + `aria-label`:** leitor de tela não enxerga canvas,
+então cada `render*Chart` chama `descreverGrafico(canvasEl, texto)` ao fim, montando um resumo
+textual com os números reais (top categorias + %, entrou/saiu por mês, saldo de/até, etc.).
+Cobre os 7 gráficos (`chartCat`, `chartFixoVar`, `chartMes`, `chartSaldo`, `chartProjecao`,
+`chartSimulador`, `chartEvolucaoMeta`). Estados vazios já têm `.empty-chart` (texto) como
+alternativa.
+
+**Campos de valor aceitam vírgula:** os inputs de dinheiro (`#valor`, `#rapValor`, `#metaValor`,
+`#recValor`, `#simValorMensal`, o de limite em `orcEdit`) são `type="text" inputmode="decimal"`
+e lidos por **`parseValorBR()`** (não `parseFloat`, que para no primeiro `,`). `parseValorBR`
+cobre `"47,90"`, `"1.234,56"`, `"47.90"` (US) e `"1500"`. Inputs de **contagem** (`#parcelas`,
+`#simMeses`, dias de cartão) seguem `type="number"`. `editar()`/`editarMeta()` abrem o campo já
+formatado pt-BR (`toLocaleString('pt-BR')`).
 
 ### Microinteractions
 

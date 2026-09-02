@@ -192,6 +192,14 @@
   .alert .ico{font-size:15px; flex-shrink:0;}
   .alert b{color:inherit;}
 
+  /* aba Dicas: 2 blocos — "Para você agora" (dados do usuário) e "Boas práticas" (genéricas) */
+  .dicas-grupo{ display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+  .dicas-grupo h3{ font-size:12px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color:var(--muted); margin:0 0 2px; }
+  .dicas-gerais-titulo{ color:var(--muted2) !important; }
+  .dica-geral{ font-size:12px; color:var(--muted); padding:8px 12px 8px 22px; position:relative; line-height:1.5; }
+  .dica-geral::before{ content:"·"; position:absolute; left:12px; top:7px; color:var(--muted2); font-weight:700; }
+  .dica-geral b{ color:var(--muted); font-weight:600; }
+
   .cols{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:14px;}
   @media(max-width:1023px){.cols{grid-template-columns:1fr 1fr;}}
   @media(max-width:599px){.cols{grid-template-columns:1fr;}}
@@ -288,6 +296,9 @@
   }
 
   .orc-row{display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:12.5px;}
+  .orc-item .orc-row{margin-bottom:0;}
+  .orc-item{margin-bottom:12px;}
+  .orc-nota{font-size:10.5px; margin:3px 0 0 108px; display:flex; gap:8px; flex-wrap:wrap;}
   .orc-label{width:100px; flex-shrink:0; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .orc-track{flex:1; height:7px; background:var(--card2); border-radius:4px; overflow:hidden;}
   .orc-fill{height:100%; border-radius:4px;}
@@ -595,7 +606,7 @@
   <div id="modalContas" class="modal-bg" style="display:none;">
     <div class="modal-box" style="max-width:520px;">
       <h2>Gerenciar contas e cartões</h2>
-      <div style="font-size:11.5px; color:var(--muted); margin-bottom:10px;">Informe o <b>saldo inicial</b> de cada conta e a data — o app calcula o saldo atual somando os lançamentos e alimenta o card "Livre para gastar" e a projeção.</div>
+      <div style="font-size:11.5px; color:var(--muted); margin-bottom:10px;">Informe o <b>saldo inicial</b> de cada conta e a data — o app calcula o saldo atual somando os lançamentos e alimenta o card <b>"Fim do mês"</b> e a projeção de saldo.</div>
       <div id="listaContas" style="margin-bottom:14px;"></div>
       <div style="border-top:1px solid var(--border); padding-top:12px;">
         <div class="row">
@@ -637,7 +648,7 @@
         <button type="button" class="seg-btn" id="rapReceita" onclick="rapidoSetTipo('receita')">Receita</button>
       </div>
       <div class="row">
-        <input type="number" id="rapValor" inputmode="decimal" placeholder="Valor (R$)" step="0.01" style="font-size:18px; padding:12px;">
+        <input type="text" id="rapValor" inputmode="decimal" placeholder="Valor (R$)" style="font-size:18px; padding:12px;">
       </div>
       <div class="row">
         <input type="text" id="rapDesc" placeholder="Descrição (ex: iFood, Uber, Salário)" oninput="rapidoAtualizarPalpite()">
@@ -660,7 +671,7 @@
     <div class="modal-box">
       <h2>Bem-vindo ao Bolso Certo</h2>
       <div class="passo"><div class="n">1</div><div>Toque no botão <b>+</b> (canto inferior direito) para um registro rápido, ou use a aba <b>Lançamentos</b> para o formulário completo (parcelas, comprovante, transferência entre contas).</div></div>
-      <div class="passo"><div class="n">2</div><div>Em <b>Contas</b> (topo), informe o <b>saldo inicial</b> de cada conta para ver o saldo atual de cada uma e quanto está <b>livre para gastar</b> no mês.</div></div>
+      <div class="passo"><div class="n">2</div><div>Em <b>Contas</b> (topo), informe o <b>saldo inicial</b> de cada conta para ver o saldo atual de cada uma e quanto <b>sobra no fim do mês</b> depois de pagar as contas.</div></div>
       <div class="passo"><div class="n">3</div><div>Em <b>Orçamento</b> defina limites por categoria; em <b>Metas e fixos</b>, metas de economia e contas fixas recorrentes.</div></div>
       <div class="passo"><div class="n">4</div><div>Conecte sua conta Google (botão no topo) para sincronizar os dados entre celular e computador.</div></div>
       <button onclick="fecharOnboarding()" style="width:100%; margin-top:6px;">Entendi, vamos lá</button>
@@ -781,7 +792,7 @@
       <button class="secondary" onclick="exportarComprovantes()">Baixar comprovantes anexados</button>
       <label class="chk" style="flex:1;">Importar backup: <input type="file" id="arquivoBackup" accept="application/json" style="flex:1;" onchange="importarBackupJSON(this.files[0])"></label>
     </div>
-    <div style="font-size:11.5px; color:var(--muted); margin-top:6px;">O backup inclui todos os lançamentos, orçamentos, metas e fixos. Importar substitui os dados atuais deste dispositivo.</div>
+    <div style="font-size:11.5px; color:var(--muted); margin-top:6px;">Guarde uma cópia antes de trocar de aparelho ou só por segurança — o arquivo tem todos os seus lançamentos, orçamentos, metas e contas fixas. Importar um backup <b>substitui tudo</b> que está neste aparelho.</div>
   </div>
 
   <div id="secGeral">
@@ -804,7 +815,7 @@
 
   <div class="livre-card" id="livreCard">
     <div class="livre-main">
-      <div class="livre-label" id="livreTitulo">Livre para gastar</div>
+      <div class="livre-label" id="livreTitulo">Fim do mês</div>
       <div class="livre-value" id="livreValor">R$ 0,00</div>
       <div class="livre-dia" id="livrePorDia"></div>
       <button type="button" class="livre-toggle" id="livreToggle" onclick="toggleDetalheLivre()" aria-expanded="false">ver detalhe</button>
@@ -937,7 +948,7 @@
           <input type="text" id="metaNome" placeholder="Nome da meta (ex: Viagem, Reserva)">
         </div>
         <div class="row">
-          <input type="number" id="metaValor" placeholder="Valor alvo (R$)" step="10">
+          <input type="text" id="metaValor" inputmode="decimal" placeholder="Valor alvo (R$)">
           <input type="date" id="metaPrazo">
           <button id="btnSalvarMeta" onclick="criarMeta()">Criar meta</button>
           <button class="secondary" id="btnCancelarEdicaoMeta" style="display:none;" onclick="cancelarEdicaoMeta()">Cancelar</button>
@@ -945,7 +956,7 @@
       </div>
     </div>
     <div class="card">
-      <h2>Lançamentos fixos <span class="small editable-only" role="button" tabindex="0" onclick="toggleNovoRecorrente()">+ novo fixo</span></h2>
+      <h2>Contas que se repetem todo mês <span class="small editable-only" role="button" tabindex="0" onclick="toggleNovoRecorrente()">+ nova conta fixa</span></h2>
       <div id="recorrentes"></div>
       <div id="formRecorrente" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
         <div class="row">
@@ -953,9 +964,9 @@
           <input type="text" id="recDesc" placeholder="Descrição (ex: Aluguel, Salário)">
         </div>
         <div class="row">
-          <input type="number" id="recValor" placeholder="Valor (R$)" step="0.01">
+          <input type="text" id="recValor" inputmode="decimal" placeholder="Valor (R$)">
           <select id="recCategoria"></select>
-          <button onclick="criarRecorrente()">Salvar fixo</button>
+          <button onclick="criarRecorrente()">Salvar</button>
         </div>
       </div>
     </div>
@@ -964,7 +975,7 @@
   <div class="card" style="margin-top:14px;">
     <h2>Simulador de economia<span class="help-icon" tabindex="0" data-tip="Simulação simples: valor mensal × número de meses, sem juros. Não usa seus dados reais — é só uma calculadora para planejar quanto guardar.">?</span></h2>
     <div class="row">
-      <input type="number" id="simValorMensal" placeholder="Valor guardado por mês (R$)" step="10">
+      <input type="text" id="simValorMensal" inputmode="decimal" placeholder="Valor guardado por mês (R$)">
       <input type="number" id="simMeses" placeholder="Por quantos meses" step="1" min="1">
       <button onclick="calcularSimulador()">Calcular</button>
     </div>
@@ -999,18 +1010,19 @@
       </span>
     </div>
     <div class="row">
-      <input type="number" id="valor" placeholder="Valor (R$)" step="0.01">
+      <input type="text" id="valor" inputmode="decimal" placeholder="Valor (R$)">
       <select id="categoria"></select>
       <label class="chk" style="flex:none;">Vencimento: <input type="date" id="dataInput" style="flex:none;"></label>
       <select id="status">
         <option value="pago">Pago</option>
         <option value="pendente">Pendente</option>
       </select>
-      <label class="chk" id="wrapFixoChk"><input type="checkbox" id="fixoChk"> gasto fixo</label>
+      <label class="chk" id="wrapFixoChk"><input type="checkbox" id="fixoChk"> conta que se repete todo mês</label>
     </div>
     <div class="row" id="wrapLinhaExtra">
       <label class="chk">Parcelas: <input type="number" id="parcelas" min="1" max="48" value="1" style="width:60px; flex:none;"></label>
-      <input type="text" id="tag" placeholder="Tag (opcional, ex: Mercado, Uber)" style="flex:1;">
+      <span style="align-self:center; font-size:11.5px; color:var(--muted2);">cada parcela entra num mês</span>
+      <input type="text" id="tag" placeholder="Etiqueta pra agrupar depois (opcional)" style="flex:1;">
       <label class="chk" style="flex:1;">Comprovante: <input type="file" id="anexo" accept="image/*" style="flex:1;"></label>
     </div>
     <div class="row">
@@ -1144,13 +1156,13 @@ let recorrentes = [];
 let saldoContas = null;
 // saldo inicial por conta, informado pelo usuário — { nomeConta: { valor: number, em: 'YYYY-MM-DD' } }.
 // O saldo atual de cada conta = valor + soma dos lançamentos efetivados dessa conta a partir de 'em'.
-// É a âncora do card "Livre para gastar" e da projeção de saldo.
+// É a âncora do card "Fim do mês" (id livreCard/livreTitulo — nome interno legado) e da projeção.
 let saldosIniciais = {};
 let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.5';
+const APP_VERSION = '2026-09-02.6';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -1423,7 +1435,7 @@ function efeitoNoSaldo(t){
 // dessa conta a partir da data do saldo inicial. Só entra o que de fato movimentou a conta:
 // gastos/receitas com status "pago" e transferências (sempre efetivadas). Lançamentos
 // pendentes/vencidos ainda não saíram da conta, então não reduzem o saldo aqui — eles
-// aparecem como "compromissos" no card Livre para gastar. Sem saldo inicial, parte de zero.
+// aparecem como "compromissos" no card "Fim do mês". Sem saldo inicial, parte de zero.
 function saldoAtualConta(nome){
   const ini = saldosIniciais[nome];
   const base = ini && typeof ini.valor === 'number' ? ini.valor : 0;
@@ -1534,6 +1546,13 @@ function getThemeColors(){
   const tema = document.documentElement.getAttribute('data-theme') || 'dark';
   // tick usa o mesmo cinza de texto secundário do tema (--muted)
   return tema === 'dark' ? { grid:'#282d38', tick:'#8b93a3' } : { grid:'#e1e3e9', tick:'#5e646f' };
+}
+// acessibilidade dos gráficos: leitor de tela não enxerga <canvas>, então cada um ganha
+// role="img" + um resumo textual do que mostra. Chamado ao fim de cada render*Chart.
+function descreverGrafico(canvasEl, texto){
+  if(!canvasEl) return;
+  canvasEl.setAttribute('role', 'img');
+  canvasEl.setAttribute('aria-label', String(texto || '').replace(/\s+/g, ' ').trim());
 }
 
 function popularSelectsEstaticos(){
@@ -1772,7 +1791,7 @@ async function adicionar(){
   if(!podeEditar()) return;
   const tipo = document.getElementById('tipo').value;
   const desc = document.getElementById('descricao').value.trim();
-  const valorTotal = parseFloat(document.getElementById('valor').value);
+  const valorTotal = parseValorBR(document.getElementById('valor').value);
   const categoria = tipo === 'receita' ? 'Receita' : document.getElementById('categoria').value;
   const conta = document.getElementById('conta').value;
   const dataISO = document.getElementById('dataInput').value || hojeISO();
@@ -1905,7 +1924,7 @@ function rapidoAtualizarPalpite(){
 }
 function salvarRapido(){
   if(!podeEditar()) return;
-  const valor = parseFloat(document.getElementById('rapValor').value);
+  const valor = parseValorBR(document.getElementById('rapValor').value);
   const desc = document.getElementById('rapDesc').value.trim();
   if(isNaN(valor) || valor <= 0){ alert('Informe um valor válido.'); return; }
   const conta = document.getElementById('rapConta').value;
@@ -1926,7 +1945,7 @@ function editar(id){
   document.getElementById('tipo').value = t.tipo;
   toggleCategoriaSel();
   document.getElementById('descricao').value = t.desc;
-  document.getElementById('valor').value = t.valor;
+  document.getElementById('valor').value = t.valor.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
   document.getElementById('categoria').value = t.categoria;
   document.getElementById('conta').value = t.conta || contas[0];
   document.getElementById('dataInput').value = t.data;
@@ -2072,13 +2091,13 @@ function toggleOrcEdit(){
     el.innerHTML = CATEGORIAS.map(c => `
       <div class="orc-edit-row">
         <label>${c}</label>
-        <input type="number" min="0" step="10" value="${orcamentos[c]||''}" placeholder="sem limite" onchange="setOrcamento('${c}', this.value)">
+        <input type="text" inputmode="decimal" value="${orcamentos[c] ? orcamentos[c].toLocaleString('pt-BR') : ''}" placeholder="sem limite" onchange="setOrcamento('${c}', this.value)">
       </div>
     `).join('') + `<button class="small" style="margin-top:6px;" onclick="toggleOrcEdit()">Concluir</button>`;
   }
 }
 function setOrcamento(cat, val){
-  const n = parseFloat(val);
+  const n = parseValorBR(val);
   if(!isNaN(n) && n > 0) orcamentos[cat] = n; else delete orcamentos[cat];
   salvarOrc();
   render();
@@ -2091,7 +2110,7 @@ function toggleNovaMeta(){
 }
 function criarMeta(){
   const nome = document.getElementById('metaNome').value.trim();
-  const valorAlvo = parseFloat(document.getElementById('metaValor').value);
+  const valorAlvo = parseValorBR(document.getElementById('metaValor').value);
   const prazo = document.getElementById('metaPrazo').value;
   if(!nome || isNaN(valorAlvo) || valorAlvo<=0){ alert('Preencha nome e valor alvo da meta.'); return; }
   if(editandoMetaId){
@@ -2113,7 +2132,7 @@ function editarMeta(id){
   if(!m) return;
   editandoMetaId = id;
   document.getElementById('metaNome').value = m.nome;
-  document.getElementById('metaValor').value = m.valorAlvo;
+  document.getElementById('metaValor').value = m.valorAlvo.toLocaleString('pt-BR');
   document.getElementById('metaPrazo').value = m.prazo || '';
   document.getElementById('btnSalvarMeta').textContent = 'Salvar edição';
   document.getElementById('btnCancelarEdicaoMeta').style.display = 'inline-block';
@@ -2156,9 +2175,9 @@ function toggleNovoRecorrente(){
 function criarRecorrente(){
   const tipo = document.getElementById('recTipo').value;
   const desc = document.getElementById('recDesc').value.trim();
-  const valor = parseFloat(document.getElementById('recValor').value);
+  const valor = parseValorBR(document.getElementById('recValor').value);
   const categoria = tipo==='receita' ? 'Receita' : document.getElementById('recCategoria').value;
-  if(!desc || isNaN(valor) || valor<=0){ alert('Preencha descrição e valor do fixo.'); return; }
+  if(!desc || isNaN(valor) || valor<=0){ alert('Preencha a descrição e o valor da conta fixa.'); return; }
   recorrentes.push({id:uid(), tipo, desc, valor, categoria});
   document.getElementById('recDesc').value='';
   document.getElementById('recValor').value='';
@@ -2554,6 +2573,9 @@ function renderChartFixoVar(gastoFixo, gastoVar){
     data:{ labels:['Fixos','Variáveis'], datasets:[{ data:[gastoFixo, gastoVar], backgroundColor:['#a78bfa','#4d9eff'], borderWidth:0 }] },
     options:{ maintainAspectRatio:false, cutout:'65%', plugins:{ legend:{display:false}, tooltip:{enabled:true} } }
   });
+  const total = gastoFixo + gastoVar;
+  const pctF = Math.round(gastoFixo / total * 100);
+  descreverGrafico(ctx, `Contas fixas vs. gastos do dia a dia: fixos ${fmt(gastoFixo)} (${pctF}%), dia a dia ${fmt(gastoVar)} (${100-pctF}%).`);
 }
 
 function renderChartCat(porCat){
@@ -2576,6 +2598,11 @@ function renderChartCat(porCat){
     // legenda desligada: as categorias aparecem como texto ao lado (#paraOndeLista)
     options: { maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{ display:false }, tooltip:{ enabled:true } } }
   });
+  const totalCat = data.reduce((s,v)=>s+v, 0);
+  const ordenadas = labels.map((l,i)=>({l, v:data[i]})).sort((a,b)=>b.v-a.v);
+  const resumo = ordenadas.slice(0,4).map(o => `${o.l} ${Math.round(o.v/totalCat*100)}%`).join(', ');
+  const resto = ordenadas.length > 4 ? ` e mais ${ordenadas.length-4}` : '';
+  descreverGrafico(ctx, `Gastos por categoria em ${fmtMesLabel(mesAtual)}: ${resumo}${resto}. Total ${fmt(totalCat)}.`);
 }
 
 function renderChartMes(conta){
@@ -2606,6 +2633,11 @@ function renderChartMes(conta){
       plugins:{ legend:{ position:'bottom', labels:{ color:tc.tick, boxWidth:10, font:{size:11} } } }
     }
   });
+  const detalhe = chaves.slice(-3).map((k,i0) => {
+    const i = chaves.length - Math.min(3, chaves.length) + i0;
+    return `${fmtMesLabel(k)} entrou ${fmt(receitasM[i])}, saiu ${fmt(gastosM[i])}`;
+  }).join('; ');
+  descreverGrafico(ctx, `Receitas e gastos dos últimos ${chaves.length} meses. ${detalhe}.`);
 }
 
 function renderChartSaldo(conta){
@@ -2641,6 +2673,8 @@ function renderChartSaldo(conta){
       plugins:{ legend:{display:false} }
     }
   });
+  const ys = pontos.map(p=>p.y);
+  descreverGrafico(ctx, `Evolução do saldo acumulado ao longo de ${pontos.length} lançamentos: começou em ${fmt(ys[0])}, chegou a ${fmt(ys[ys.length-1])}. Menor ponto ${fmt(Math.min(...ys))}, maior ${fmt(Math.max(...ys))}.`);
 }
 
 function mediaCategoriaUltimosMeses(cat, nMeses){
@@ -2663,7 +2697,7 @@ function mediaCategoriaUltimosMeses(cat, nMeses){
 function renderOrcamentos(porCat){
   const el = document.getElementById('orcamentos');
   const cats = CATEGORIAS.filter(c => orcamentos[c] || porCat[c]);
-  if(cats.length === 0){ el.innerHTML = '<div class="empty">Defina limites por categoria clicando em "editar limites".</div>'; return; }
+  if(cats.length === 0){ el.innerHTML = '<div class="empty">Defina um limite por categoria no botão "editar limites" acima.</div>'; return; }
   el.innerHTML = cats.map(c=>{
     const gasto = porCat[c] || 0;
     const limite = orcamentos[c];
@@ -2676,13 +2710,19 @@ function renderOrcamentos(porCat){
       const diffPct = Math.round(((gasto-media)/media)*100);
       if(Math.abs(diffPct) >= 10){
         const corDiff = diffPct > 0 ? 'var(--red)' : 'var(--green)';
-        comparativo = `<span style="font-size:10.5px; color:${corDiff}; margin-left:6px;">${diffPct>0?'▲':'▼'} ${Math.abs(diffPct)}% vs média</span>`;
+        comparativo = `<span style="color:${corDiff};">${diffPct>0?'▲':'▼'} ${Math.abs(diffPct)}% vs sua média</span>`;
       }
     }
-    return `<div class="orc-row">
-      <div class="orc-label">${c}${comparativo}</div>
-      <div class="orc-track"><div class="orc-fill" style="width:${limite?pct:0}%; background:${corBarra}"></div></div>
-      <div class="orc-val">${fmt(gasto)}${limite ? ' / '+fmt(limite) : ''}</div>
+    const notaMedia = media ? `<span style="color:var(--muted2);">costuma ser ~${fmt(media)}/mês</span>` : '';
+    const rodape = (comparativo || notaMedia)
+      ? `<div class="orc-nota">${[notaMedia, comparativo].filter(Boolean).join(' · ')}</div>` : '';
+    return `<div class="orc-item">
+      <div class="orc-row">
+        <div class="orc-label">${c}</div>
+        <div class="orc-track"><div class="orc-fill" style="width:${limite?pct:0}%; background:${corBarra}"></div></div>
+        <div class="orc-val">${fmt(gasto)}${limite ? ' / '+fmt(limite) : ''}</div>
+      </div>
+      ${rodape}
     </div>`;
   }).join('');
 }
@@ -2796,13 +2836,14 @@ function verEvolucaoMeta(id){
       plugins:{ legend:{display:false} }
     }
   });
+  descreverGrafico(ctx, `Evolução da meta ${m.nome}: ${contribuicoes.length} aporte(s), acumulado chegou a ${fmt(pontos[pontos.length-1])} de ${fmt(m.valorAlvo)}.`);
 }
 function fecharModalEvolucaoMeta(){
   document.getElementById('modalEvolucaoMeta').style.display = 'none';
 }
 
 function calcularSimulador(){
-  const valorMensal = parseFloat(document.getElementById('simValorMensal').value);
+  const valorMensal = parseValorBR(document.getElementById('simValorMensal').value);
   const meses = parseInt(document.getElementById('simMeses').value);
   const resEl = document.getElementById('simResultado');
   const wrapEl = document.getElementById('simChartWrap');
@@ -2838,11 +2879,12 @@ function calcularSimulador(){
       plugins:{ legend:{display:false} }
     }
   });
+  descreverGrafico(ctx, `Simulação: guardando ${fmt(valorMensal)} por mês durante ${prazoTxt}, o total acumulado chega a ${fmt(total)}.`);
 }
 
 function renderRecorrentes(){
   const el = document.getElementById('recorrentes');
-  if(recorrentes.length===0){ el.innerHTML = '<div class="empty">Nenhum lançamento fixo cadastrado.</div>'; return; }
+  if(recorrentes.length===0){ el.innerHTML = '<div class="empty">Nenhuma conta fixa cadastrada ainda.</div>'; return; }
   el.innerHTML = recorrentes.map(r=>{
     const cor = r.tipo==='receita' ? 'var(--green)' : 'var(--red)';
     return `<div class="rec-row">
@@ -2940,7 +2982,7 @@ function renderDobraSaldo(){
   const conta = contaAtivaFiltro();
   const contasComSaldo = contas.filter(temSaldoInicial).filter(n => !conta || n === conta);
 
-  // ponto de partida (mesma regra do "Livre para gastar" e da projeção):
+  // ponto de partida (mesma regra do card "Fim do mês" e da projeção):
   // (1) soma do saldo atual das contas com saldo inicial; senão (2) resultado do mês.
   let saldoHoje, partidaReal;
   if(contasComSaldo.length > 0){
@@ -3072,7 +3114,11 @@ function renderLivreParaGastar(){
   const card = document.getElementById('livreCard');
   const chaveCorrente = chaveMes(hojeISO());
 
-  if(mesAtual !== chaveCorrente){ card.style.display = 'none'; return; }
+  if(mesAtual !== chaveCorrente){
+    card.style.display = 'none';
+    document.getElementById('livreTitulo').textContent = 'Fim do mês'; // volta ao label neutro
+    return;
+  }
   card.style.display = 'flex';
 
   const hoje = new Date();
@@ -3319,6 +3365,8 @@ function renderProjecaoSaldo(){
         plugins:{ legend:{display:false} }
       }
     });
+    const fim = pontos[pontos.length-1];
+    descreverGrafico(ctx, `Projeção do saldo até ${fim ? fmtMesLabel(fim.mes) : 'o fim do ano'}: parte de ${fmt(saldoInicial)} hoje e chega a ${fmt(fim ? fim.acumulado : saldoInicial)}. É uma estimativa, não um extrato.`);
   }
 
   const ultimo = pontos[pontos.length-1];
@@ -3360,7 +3408,9 @@ function renderProjecaoSaldo(){
 function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   const el = document.getElementById('listaDicas');
   const projecao = renderProjecaoSaldo();
-  // dicas = {tipo: 'danger'|'warning'|'tip', ico, html} — ordenadas por urgência abaixo
+  // dicas = {tipo: 'danger'|'warning'|'tip', ico, html, origem: 'voce'|'geral'}
+  //   'voce'  = tirada dos SEUS dados (contas a vencer, categoria acima da média, meta apertada…)
+  //   'geral' = boa prática de finanças, não depende dos seus dados
   const dicas = [];
 
   // 1) contas em aberto (vencidas ou a vencer) em TODA a base, não só o mês selecionado —
@@ -3374,13 +3424,13 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
     const vencida = statusEfetivo(prim) === 'vencido';
     const [y,m,d] = prim.data.split('-');
     if(vencida){
-      dicas.push({tipo:'danger', ico:'🎯', html:`Pague primeiro <b>${prim.desc}</b> (${fmt(prim.valor)}, venceu em ${d}/${m}) — é a mais atrasada e some com o maior risco de juros/multa.`});
+      dicas.push({tipo:'danger', origem:'voce', ico:'🎯', html:`Pague primeiro <b>${prim.desc}</b> (${fmt(prim.valor)}, venceu em ${d}/${m}) — é a mais atrasada e some com o maior risco de juros/multa.`});
     }else{
-      dicas.push({tipo:'warning', ico:'🎯', html:`Priorize <b>${prim.desc}</b> (${fmt(prim.valor)}, vence em ${d}/${m}) para se livrar dela primeiro e ganhar respiro no orçamento.`});
+      dicas.push({tipo:'warning', origem:'voce', ico:'🎯', html:`Priorize <b>${prim.desc}</b> (${fmt(prim.valor)}, vence em ${d}/${m}) para se livrar dela primeiro e ganhar respiro no orçamento.`});
     }
     if(abertas.length > 1){
       const restante = abertas.slice(1).reduce((s,t)=>s+t.valor,0);
-      dicas.push({tipo:'tip', ico:'📋', html:`Depois dela, ainda restam <b>${abertas.length-1} conta(s) em aberto</b> somando ${fmt(restante)}. Quitar da mais próxima do vencimento para a mais distante evita juros.`});
+      dicas.push({tipo:'tip', origem:'voce', ico:'📋', html:`Depois dela, ainda restam <b>${abertas.length-1} conta(s) em aberto</b> somando ${fmt(restante)}. Quitar da mais próxima do vencimento para a mais distante evita juros.`});
     }
   }
 
@@ -3395,7 +3445,7 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
     const tetoComparar = limiteTotal>0 ? limiteTotal : totalReceita;
     if(tetoComparar>0 && projecaoFechamento > tetoComparar && diaAtual>=5){
       const diasFaltam = diasNoMes - diaAtual;
-      dicas.push({tipo:'danger', ico:'🧊', html:`No ritmo atual você vai fechar o mês em ${fmt(projecaoFechamento)}, acima do que entra/do orçamento. Considere <b>não fazer nenhuma compra não essencial nos próximos ${diasFaltam} dia(s)</b> para voltar ao azul.`});
+      dicas.push({tipo:'danger', origem:'voce', ico:'🧊', html:`No ritmo atual você vai fechar o mês em ${fmt(projecaoFechamento)}, acima do que entra/do orçamento. Considere <b>não fazer nenhuma compra não essencial nos próximos ${diasFaltam} dia(s)</b> para voltar ao azul.`});
     }
   }
 
@@ -3405,7 +3455,7 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
     const abertura = projecao.partidaReal
       ? `No ritmo atual, seu saldo projetado fica negativo em <b>${fmtMesLabel(mesNegativo.mes)}</b> (${fmt(mesNegativo.acumulado)}) — ou seja, o dinheiro que você tem hoje não cobre até lá.`
       : `Somando o resultado deste mês com as contas fixas e parcelas já cadastradas, a projeção fica negativa em <b>${fmtMesLabel(mesNegativo.mes)}</b> (${fmt(mesNegativo.acumulado)}).`;
-    dicas.push({tipo:'warning', ico:'📉', html:`${abertura} Vale se planejar com antecedência.`});
+    dicas.push({tipo:'warning', origem:'voce', ico:'📉', html:`${abertura} Vale se planejar com antecedência.`});
   }
 
   // 2c) categoria com maior potencial de economia: maior alta vs média dos meses anteriores (até 3, desde julho/2026)
@@ -3416,7 +3466,7 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   if(candidatasCat.length > 0){
     const c = candidatasCat[0];
     const diffPct = Math.round(((c.val-c.media)/c.media)*100);
-    dicas.push({tipo:'tip', ico:'💡', html:`<b>${c.cat}</b> está ${diffPct}% acima da sua média recente (${fmt(c.val)} vs ${fmt(c.media)}) — é onde você tem mais potencial de economia agora.`});
+    dicas.push({tipo:'tip', origem:'voce', ico:'💡', html:`<b>${c.cat}</b> está ${diffPct}% acima da sua média recente (${fmt(c.val)} vs ${fmt(c.media)}) — é onde você tem mais potencial de economia agora.`});
   }
 
   // 3) fim de ano: se o saldo acumulado do ano está apertado, sugerir congelar supérfluos até dezembro
@@ -3427,7 +3477,7 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   const saldoAno = receitaAno - gastoAno;
   const mesAtualNum = hoje.getMonth()+1;
   if(mesAtualNum <= 11 && receitaAno>0 && saldoAno < receitaAno*0.1){
-    dicas.push({tipo:'warning', ico:'❄️', html:`Sua sobra acumulada em ${anoAtual} está baixa (${fmt(saldoAno)}). Tente <b>evitar compras supérfluas até o fim do ano</b> e priorize só o essencial nos próximos meses.`});
+    dicas.push({tipo:'warning', origem:'voce', ico:'❄️', html:`Sua sobra acumulada em ${anoAtual} está baixa (${fmt(saldoAno)}). Tente <b>evitar compras supérfluas até o fim do ano</b> e priorize só o essencial nos próximos meses.`});
   }
 
   // 4) metas com prazo apertado e pouco progresso
@@ -3436,33 +3486,43 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
     if(falta <= 0 || !m.prazo) return;
     const meses = mesesAte(m.prazo);
     if(meses > 0 && meses <= 3){
-      dicas.push({tipo:'warning', ico:'⏳', html:`A meta <b>${m.nome}</b> vence em ${meses} mês(es) e ainda faltam ${fmt(falta)}. Guarde ${fmt(falta/meses)}/mês para chegar lá a tempo.`});
+      dicas.push({tipo:'warning', origem:'voce', ico:'⏳', html:`A meta <b>${m.nome}</b> vence em ${meses} mês(es) e ainda faltam ${fmt(falta)}. Guarde ${fmt(falta/meses)}/mês para chegar lá a tempo.`});
     }
   });
 
   const maiorCat = Object.entries(porCat).sort((a,b)=>b[1]-a[1])[0];
   if(maiorCat && totalGasto > 0){
     const pct = Math.round(maiorCat[1]/totalGasto*100);
-    dicas.push({tipo:'tip', ico:'i', html:`Sua maior categoria de gasto é <b>${maiorCat[0]}</b>, representando ${pct}% do total gasto no mês.`});
+    dicas.push({tipo:'tip', origem:'voce', ico:'i', html:`Sua maior categoria de gasto é <b>${maiorCat[0]}</b>, representando ${pct}% do total gasto no mês.`});
   }
-  dicas.push({tipo:'tip', ico:'i', html:'A regra 50/30/20 sugere destinar 50% da renda para necessidades, 30% para desejos e 20% para poupança/investimentos.'});
+  dicas.push({tipo:'tip', origem:'geral', ico:'i', html:'A regra 50/30/20 sugere destinar 50% da renda para necessidades, 30% para desejos e 20% para poupança/investimentos.'});
   if(taxaPoupanca < 20 && totalReceita > 0){
-    dicas.push({tipo:'tip', ico:'i', html:'Tente automatizar a poupança: no dia do salário, transfira uma parte fixa para uma conta separada antes de gastar o resto.'});
+    dicas.push({tipo:'tip', origem:'geral', ico:'i', html:'Tente automatizar a poupança: no dia do salário, transfira uma parte fixa para uma conta separada antes de gastar o resto.'});
   }
   if(Object.keys(orcamentos).length === 0){
-    dicas.push({tipo:'tip', ico:'i', html:'Defina limites de orçamento por categoria para receber alertas automáticos quando estiver perto de estourar.'});
+    dicas.push({tipo:'tip', origem:'geral', ico:'i', html:'Defina limites de orçamento por categoria para receber alertas automáticos quando estiver perto de estourar.'});
   }
   if(recorrentes.length === 0){
-    dicas.push({tipo:'tip', ico:'i', html:'Cadastre seus gastos fixos (aluguel, assinaturas) em "Lançamentos fixos" para lançá-los com 1 clique todo mês.'});
+    dicas.push({tipo:'tip', origem:'geral', ico:'i', html:'Cadastre suas contas que se repetem (aluguel, assinaturas) em "Contas que se repetem todo mês" para lançá-las com 1 clique.'});
   }
   if(metas.length === 0){
-    dicas.push({tipo:'tip', ico:'i', html:'Crie uma meta de economia (ex: reserva de emergência) para acompanhar seu progresso mês a mês.'});
+    dicas.push({tipo:'tip', origem:'geral', ico:'i', html:'Crie uma meta de economia (ex: reserva de emergência) para acompanhar seu progresso mês a mês.'});
   }
-  dicas.push({tipo:'tip', ico:'i', html:'Revise assinaturas recorrentes a cada poucos meses — é comum acumular serviços que você não usa mais.'});
+  dicas.push({tipo:'tip', origem:'geral', ico:'i', html:'Revise assinaturas recorrentes a cada poucos meses — é comum acumular serviços que você não usa mais.'});
 
   const ordem = {danger:0, warning:1, tip:2};
-  dicas.sort((a,b) => ordem[a.tipo]-ordem[b.tipo]);
-  el.innerHTML = dicas.map(d=>`<div class="alert ${d.tipo}" style="align-items:center;"><span class="ico">${d.ico}</span><span>${d.html}</span></div>`).join('');
+  const suas = dicas.filter(d => d.origem === 'voce').sort((a,b) => ordem[a.tipo]-ordem[b.tipo]);
+  const gerais = dicas.filter(d => d.origem === 'geral');
+
+  let html = '<div class="dicas-grupo"><h3>Para você agora</h3>';
+  html += suas.length
+    ? suas.map(d => `<div class="alert ${d.tipo}" style="align-items:center;"><span class="ico">${d.ico}</span><span>${d.html}</span></div>`).join('')
+    : '<div class="alert tip" style="align-items:center;"><span class="ico">✓</span><span>Nada precisa de atenção agora — seus lançamentos estão em dia.</span></div>';
+  html += '</div>';
+  html += '<div class="dicas-grupo"><h3 class="dicas-gerais-titulo">Boas práticas</h3>';
+  html += gerais.map(d => `<div class="dica-geral">${d.html}</div>`).join('');
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 function verAnexo(id){
