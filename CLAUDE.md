@@ -629,6 +629,70 @@ Client-side only (`STORAGE_PIN`), gates the UI (`telaPin` overlay) but not the u
 it does not encrypt `window.storage` or the Drive file. Treat it as a screen lock, not real
 access control.
 
+### Rodada de correção da auditoria visual (12 itens, CSS/layout apenas)
+
+Após a auditoria visual (406 combinações tela × breakpoint × tema), 12 problemas distintos
+foram corrigidos numa passada só de CSS/layout — **nenhuma lógica de dados/estado tocada**.
+Pontos que mudaram o comportamento visual e podem confundir uma sessão futura:
+
+- **Todos os `.modal-box` agora têm `max-height:90vh; overflow-y:auto`** (antes só
+  `#modalImportar` tinha controle de altura). Sem isto o `#modalContas` com várias contas
+  transbordava a tela e escondia os botões "Adicionar conta"/"Fechar" no celular (confirmado
+  no iPhone real). `#modalImportar` mantém seu layout flex-column próprio
+  (`overflow-y:visible` + `#importLista` rola). `#modalEvolucaoMeta` é `overflow:visible`
+  (tem um balão `.help-icon` no `<h2>` que o `overflow:auto` cortaria; conteúdo nunca
+  transborda). **Ao criar um modal novo com balão de ajuda no topo, lembrar deste caso.**
+- **O FAB some na aba Lançamentos** (`body[data-aba="lancamentos"] #fab{ display:none }`;
+  `mudarAbaPrincipal` seta `document.body.dataset.aba`). O form "Novo lançamento" completo já
+  está no topo dessa aba — o FAB era redundante e, no mobile com as faixas de trial/update,
+  caía sobre um campo do form.
+- **Alvos de toque:** a regra de 44px que só existia em `#corpoTabela` (≤599) foi estendida:
+  `#metas`/`#recorrentes`/`#listaContas .iconbtn` (≤1023 → 44px; ≥40px sempre), `#corpoTabela
+  .iconbtn` (600–1023, onde a lista ainda é `<table>`), `.modal-box h2 .iconbtn` (× de fechar,
+  ≥40px sempre), `#btnConfig` (44×44). Os checkboxes de linha da tabela agora vêm dentro de
+  `<label>` — a label é o alvo (24px desktop / 44px tablet), o `<input>` fica ~18px. O `<th>`
+  de "selecionar todos" ganhou `class="col-check"`. Os links inline "Contas" nas frases de
+  saldo (`renderLivreParaGastar`, `renderDobraSaldo`) ganharam `role="button" tabindex="0"`
+  (antes eram clique-só); o handler global de teclado agora cobre `[role="button"]:not(button)`,
+  não só `span[role="button"]`. Alvo inline dentro de frase é isento da regra de 44px (WCAG 2.5.8).
+- **`.dobra-saldo` no estado vazio (mobile):** `.ds-topo` agora `min-width:0; flex:1 1 100%`
+  e `.ds-valor` `overflow-wrap:anywhere`; `.ds-status` perdeu o `min-width:240px` em ≤560.
+  Corrigia 69px de scroll horizontal no `body`.
+- **Form "Novo lançamento" em 600–1023:** `#wrapLinhaExtra` quebra em coluna (parcelas /
+  etiqueta / comprovante), como já fazia em ≤599.
+- **`renderMetas`:** os botões do cartão de meta agora estão em `<span class="meta-acoes">`
+  (nunca quebram com o × órfão); `.meta-top` ganhou `gap` + `align-items:baseline` (título
+  não encosta mais no `%`). O `📈` de "ver evolução" segue emoji — **confirmar em navegador
+  real** que renderiza (aparece quebrado só no msedge headless, sem fonte de emoji).
+- **`renderParaOnde`:** no estado vazio agora limpa `#paraOndeLista` (`''`) — a mensagem
+  aparece só uma vez, dentro da área do gráfico (`#chartCatVazio`). Antes duplicava.
+- **`.mes-valor` (mobile):** `white-space:nowrap`; `.mes-label` pode quebrar em 2 linhas —
+  R$ 999.999,99 não corta mais na grade "Este mês" em ≤430.
+- **`.orc-nota`:** sem o `·` literal entre os spans (ficava pendurado ao quebrar) — só `gap`.
+- **Gráfico "Projeção de saldo":** eixo Y ganhou `grace:'12%'` (evita rótulo repetido quando
+  o range é estreito frente à magnitude).
+
+**Fora de escopo (não são bug):** overflow da `#telaInicial` (pré-existente, ver abaixo);
+espaço vazio nas laterais em telas ≥1600px (decorrência do `.wrap` max-width 1120,
+decisão mobile-first — só muda se a decisão de produto mudar).
+
+**Verificação:** re-rodada a auditoria visual (406 combos) → **0 crítico / 0 moderado /
+0 cosmético**, 406/406 limpos (era 94/406). Suíte completa: **18 scripts, ~601 checks,
+2 fail** — os 2 são o pré-existente `test-dobra` CASO 4 (falha quando `diaHoje < 5`; hoje é
+02/09, confirmado idêntico no `main` limpo via `git stash`), **zero regressão**.
+`test-responsivo` ganhou 5 checks novos: o antigo "toast acima do FAB" na aba Lançamentos
+virou obsoleto com o M3 (FAB some lá) — reescrito para (a) afirmar que o FAB some em
+Lançamentos e (b) refazer a checagem toast-vs-FAB na Visão Geral, onde o FAB aparece.
+**Pendente de confirmação em aparelho real (não reproduz no msedge headless — a IA não tem
+como testar daqui):** (a) campo de data do `#modalContas` no iOS Safari — a correção foi
+`min-width:150px` + `font-size:16px` + label que quebra pra própria linha; (b) K3 — o emoji
+`📈` do botão "ver evolução" da meta: **não foi investigado nem corrigido**, só ganhou
+`aria-label`. Aparece quebrado só no headless (sem fonte de emoji); provavelmente ok em uso
+real (o app usa emoji em vários outros pontos). Se estiver quebrado num navegador/celular
+normal, trocar por um ícone de traço.
+
+`APP_VERSION`/`CACHE` → `2026-09-02.9`.
+
 ## Known pre-existing issues (candidates for a future round, not regressions)
 
 - **`#telaInicial` opening screen overflows ~39px horizontally.** Predates the whole UX round

@@ -139,8 +139,9 @@
   .ds-status b{ color:var(--text); font-weight:600; }
   @media(max-width:560px){
     .dobra-saldo{ padding:15px 16px; gap:14px; }
-    .ds-valor{ font-size:30px; }
-    .ds-status{ padding-left:0; border-left:none; padding-top:12px; border-top:1px solid var(--border); width:100%; }
+    .ds-topo{ min-width:0; flex:1 1 100%; }
+    .ds-valor{ font-size:30px; overflow-wrap:anywhere; }
+    .ds-status{ padding-left:0; border-left:none; padding-top:12px; border-top:1px solid var(--border); width:100%; min-width:0; }
   }
 
   /* card "Fim do mês" — quanto sobra (verde) ou falta (vermelho) depois de pagar
@@ -227,6 +228,16 @@
     input[type=text], input[type=number], input[type=date], select{ font-size:16px; }
   }
 
+  /* tablet (600-1023): o form "Novo lançamento" usava o layout multi-coluna do desktop
+     numa largura que não comporta — "Comprovante" e a etiqueta cortavam à direita.
+     Aqui a linha extra (parcelas/etiqueta/comprovante) quebra em coluna; o resto fica. */
+  @media(min-width:600px) and (max-width:1023px){
+    #secLancamentos #wrapLinhaExtra{ flex-direction:column; align-items:stretch; }
+    #secLancamentos #wrapLinhaExtra > *{ width:100%; }
+    #secLancamentos #wrapLinhaExtra label.chk{ justify-content:flex-start; }
+    #secLancamentos #descricao{ flex:1 1 260px; }
+  }
+
   .card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px;}
   .card h2{font-size:14px; font-weight:600; margin:0 0 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;}
   .card h2 span.small{
@@ -240,6 +251,9 @@
     flex:1; min-width:100px; padding:9px 10px; border:1px solid var(--border); border-radius:8px;
     font-size:13px; background:var(--card2); color:var(--text);
   }
+  /* "dd/mm/aaaa" (e o picker do iOS) precisa de ~120px — abaixo disso o texto some.
+     Assim o campo de data quebra pra própria linha antes de espremer. */
+  input[type=date]{ min-width:132px; }
   select{padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--card2); color:var(--text);}
   label.chk{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); padding:0 4px; min-width:0;}
   /* inputs de arquivo têm largura mínima intrínseca (texto "Nenhum arquivo escolhido")
@@ -253,6 +267,8 @@
     display:flex; align-items:center; gap:6px; padding:8px 12px; border-radius:8px;
     border:1px solid var(--border); background:var(--card2); color:var(--text); font-size:13px; cursor:pointer; font-weight:500;
   }
+  /* engrenagem ⚙️ (só ícone): alvo de toque quadrado de 44px */
+  #btnConfig{ min-width:44px; min-height:44px; justify-content:center; }
 
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
   th{text-align:left; color:var(--muted); font-weight:500; padding:6px 4px; border-bottom:1px solid var(--border);}
@@ -269,6 +285,28 @@
   .iconbtn:focus-visible{ outline:2px solid var(--blue); outline-offset:1px; }
   .iconbtn.del{color:var(--red);}
   .empty{color:var(--muted); font-size:13px; text-align:center; padding:16px 0;}
+  /* botão × de fechar dos modais: alvo de toque >= 40px em qualquer tamanho.
+     Cobre tanto o × no <h2> (importar/rápido/planos/assinatura) quanto o × de
+     remover conta dentro de #listaContas (#modalContas não tem × no h2). */
+  .modal-box h2 .iconbtn, #listaContas .iconbtn{ min-width:40px; min-height:40px; }
+  /* no touch (<=1023) os ícones de ação fora da tabela — cartões de meta/conta fixa
+     e o × de remover conta — sobem para 44px. A regra antiga só cobria #corpoTabela. */
+  @media(max-width:1023px){
+    #metas .iconbtn, #recorrentes .iconbtn, #listaContas .iconbtn{ min-width:44px; min-height:44px; font-size:15px; }
+  }
+  /* a célula de checkbox da tabela de Lançamentos: a <label> que envolve o <input>
+     é o alvo de clique — 24px no desktop (WCAG 2.5.8), 44px no touch (<=1023). */
+  #corpoTabela td.col-check, table thead th.col-check{ padding:2px 4px; }
+  #corpoTabela td.col-check label, table thead th.col-check label{
+    display:inline-flex; align-items:center; justify-content:center; min-width:24px; min-height:24px; cursor:pointer;
+  }
+  /* tablet (600-1023): a lista ainda é <table> (o modo cartão é <=599) — ícones de ação
+     e a célula de checkbox sobem para 44px de alvo de toque. */
+  @media(min-width:600px) and (max-width:1023px){
+    #corpoTabela .iconbtn{ min-width:44px; min-height:44px; font-size:15px; }
+    #corpoTabela td.col-check, table thead th.col-check{ padding:0; }
+    #corpoTabela td.col-check label, table thead th.col-check label{ min-width:44px; min-height:44px; }
+  }
 
   /* ===== tabela de movimentações vira cartões no mobile (<=599) ===== */
   @media(max-width:599px){
@@ -298,7 +336,8 @@
   .orc-row{display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:12.5px;}
   .orc-item .orc-row{margin-bottom:0;}
   .orc-item{margin-bottom:12px;}
-  .orc-nota{font-size:10.5px; margin:3px 0 0 108px; display:flex; gap:8px; flex-wrap:wrap;}
+  /* sem separador "·" literal: o gap dá a separação e nada fica pendurado ao quebrar */
+  .orc-nota{font-size:10.5px; margin:3px 0 0 108px; display:flex; gap:2px 14px; flex-wrap:wrap;}
   .orc-label{width:100px; flex-shrink:0; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .orc-track{flex:1; height:7px; background:var(--card2); border-radius:4px; overflow:hidden;}
   .orc-fill{height:100%; border-radius:4px;}
@@ -343,8 +382,10 @@
       padding:9px 0; border-bottom:1px solid var(--border);
     }
     .mes-item:last-child{ border-bottom:none; }
-    .mes-label{ margin-bottom:0; grid-row:1; grid-column:1; }
-    .mes-valor{ font-size:17px; grid-row:1; grid-column:2; text-align:right; }
+    /* o rótulo pode quebrar em 2 linhas ("Sobrou (com o mês anterior)"); o valor mantém
+       a largura do seu conteúdo (R$ 999.999,99 não corta) na coluna auto. */
+    .mes-label{ margin-bottom:0; grid-row:1; grid-column:1; line-height:1.3; }
+    .mes-valor{ font-size:17px; grid-row:1; grid-column:2; text-align:right; white-space:nowrap; }
     .mes-delta{ margin-top:0; grid-row:2; grid-column:1 / -1; }
   }
 
@@ -423,7 +464,11 @@
   .sec-fade{ animation: fadeIn .25s ease; }
 
   .modal-bg{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:900; display:flex; align-items:center; justify-content:center; padding:16px; }
-  .modal-box{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px; max-width:440px; width:100%; }
+  /* max-height + scroll interno: sem isto, um modal mais alto que a tela (ex: #modalContas
+     com várias contas, ou qualquer modal num celular em paisagem) transborda a viewport e
+     esconde os botões — o usuário fica preso. #modalImportar tem o seu próprio layout
+     flex-column com cabeçalho/rodapé fixos; os demais rolam o box inteiro. */
+  .modal-box{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px; max-width:440px; width:100%; max-height:90vh; overflow-y:auto; overscroll-behavior:contain; }
   .modal-box h2{ margin-top:0; }
   .modal-box .passo{ display:flex; gap:10px; margin-bottom:12px; font-size:13px; }
   .modal-box .passo .n{ background:var(--blue-bg); color:var(--blue); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0; }
@@ -438,8 +483,22 @@
   .onb-rodape [role="button"]{ color:var(--muted); text-decoration:underline; cursor:pointer; }
   .onb-rodape [role="button"]:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
 
+  /* #modalEvolucaoMeta tem um balão .help-icon no h2 que cresce pra cima; overflow:auto
+     do .modal-box o cortaria. O conteúdo (gráfico 240px + botão) não transborda, então
+     aqui fica visível. */
+  #modalEvolucaoMeta .modal-box{ overflow:visible; }
+
+  /* #modalContas: a linha "Saldo inicial [___] em [data]" espremia o input de data
+     abaixo da largura do texto "dd/mm/aaaa" — no iOS Safari o campo aparecia vazio
+     mesmo preenchido. Largura mínima + 16px de fonte (o iOS esconde texto e dá zoom
+     abaixo disso) + a label da data pode ir para a própria linha quando não couber. */
+  #modalContas .conta-linha-saldo{ align-items:center; }
+  #modalContas .conta-linha-saldo label.chk{ flex-wrap:wrap; }
+  #modalContas input[type=date]{ min-width:150px; font-size:16px; }
+  #modalContas .conta-linha-saldo .chk-data{ flex:1 1 150px; }
+
   /* modal de importação de extrato */
-  #modalImportar .modal-box{ max-width:560px; display:flex; flex-direction:column; max-height:88vh; }
+  #modalImportar .modal-box{ max-width:560px; display:flex; flex-direction:column; max-height:88vh; overflow-y:visible; }
   #importTopo{ font-size:13px; color:var(--muted); margin-bottom:12px; }
   #importLista{ overflow-y:auto; flex:1; margin:0 -6px; padding:0 6px; }
   .import-item{ border-bottom:1px solid var(--border); padding:8px 0; }
@@ -481,11 +540,16 @@
   .orc-edit-row label{color:var(--muted);}
 
   .meta-card{border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--card2);}
-  .meta-top{display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;}
-  .meta-top b{font-weight:600;}
+  .meta-top{display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:13px; margin-bottom:6px;}
+  .meta-top b{font-weight:600; min-width:0; overflow-wrap:anywhere;}
+  .meta-top > span{flex:none; font-variant-numeric:tabular-nums;}
   .meta-track{height:8px; background:var(--border); border-radius:4px; overflow:hidden; margin-bottom:6px;}
   .meta-fill{height:100%; background:var(--blue);}
-  .meta-sub{font-size:11.5px; color:var(--muted); display:flex; justify-content:space-between; align-items:center;}
+  /* o texto ("R$ X de R$ Y · até ...") e o grupo de botões podem ir para linhas
+     separadas quando não cabem — os botões ficam sempre juntos, sem × órfão. */
+  .meta-sub{font-size:11.5px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px 8px;}
+  .meta-sub > span:first-child{flex:1 1 140px; min-width:0;}
+  .meta-sub .meta-acoes{flex:none; display:flex; align-items:center; white-space:nowrap;}
   .meta-economia{font-size:11.5px; color:var(--blue); margin-top:6px; padding-top:6px; border-top:1px dashed var(--border);}
 
   .rec-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:12.5px;}
@@ -506,6 +570,10 @@
   #fab:hover{ transform:scale(1.06); box-shadow:0 8px 26px rgba(77,158,255,.55); }
   #fab:active{ transform:scale(.96); }
   body.readonly #fab{ display:none; }
+  /* na aba Lançamentos o formulário completo "Novo lançamento" já está no topo — o FAB
+     seria redundante e, no mobile com as faixas de trial/atualização, cai sobre um campo
+     do form. Some só nessa aba. */
+  body[data-aba="lancamentos"] #fab{ display:none; }
   @media(max-width:480px){ #fab{ right:14px; } }
   /* no mobile/tablet o FAB sobe acima da bottom bar (fixa, ~62px de altura) */
   @media(max-width:1023px){ #fab{ bottom:calc(76px + env(safe-area-inset-bottom, 0px)); } }
@@ -1078,7 +1146,7 @@
         <button class="secondary" onclick="limparSelecao()">Limpar seleção</button>
       </div>
       <table>
-        <thead><tr><th class="editable-only" style="width:20px;"><input type="checkbox" id="checkTodos" onchange="toggleSelecionarTodos(this.checked)"></th><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Status</th><th>Valor</th><th></th></tr></thead>
+        <thead><tr><th class="col-check editable-only" style="width:20px;"><label><input type="checkbox" id="checkTodos" onchange="toggleSelecionarTodos(this.checked)" aria-label="Selecionar todos"></label></th><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Status</th><th>Valor</th><th></th></tr></thead>
         <tbody id="corpoTabela"></tbody>
       </table>
       <div id="vazio" class="empty" style="display:none;">Nenhum lançamento encontrado.</div>
@@ -1176,7 +1244,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.8';
+const APP_VERSION = '2026-09-02.9';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -1755,12 +1823,12 @@ function renderListaContas(){
           <button class="iconbtn del" onclick="removerConta('${esc}')" title="Remover">&times;</button>
         </div>
       </div>
-      <div class="row" style="margin-top:8px; align-items:center;">
-        <label class="chk" style="flex:1;">Saldo inicial
+      <div class="row conta-linha-saldo" style="margin-top:8px;">
+        <label class="chk" style="flex:1 1 160px;">Saldo inicial
           <input type="text" inputmode="decimal" placeholder="ex: 1.200,00" value="${ini ? ini.valor.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}"
             style="flex:1; min-width:90px;" id="si-val-${esc}"
             onchange="editarSaldoInicialConta('${esc}', this.value, document.getElementById('si-em-${esc}').value)"></label>
-        <label class="chk">em <input type="date" value="${ini && ini.em ? ini.em : ''}" style="flex:none;" id="si-em-${esc}"
+        <label class="chk chk-data">em <input type="date" value="${ini && ini.em ? ini.em : ''}" id="si-em-${esc}"
             onchange="editarSaldoInicialConta('${esc}', document.getElementById('si-val-${esc}').value, this.value)"></label>
       </div>
       ${temIni ? `<div style="font-size:10.5px; color:var(--muted2); margin-top:2px;">Saldo hoje = saldo inicial ${fmt(ini.valor)} ${saldoAtual-ini.valor>=0?'+':'−'} ${fmt(Math.abs(saldoAtual-ini.valor))} de movimento desde ${ini.em ? ini.em.split('-').reverse().join('/') : 'sempre'}.</div>` : ''}
@@ -2060,6 +2128,7 @@ function confirmarExclusaoParcela(escopo){
 }
 
 function mudarAbaPrincipal(aba){
+  document.body.dataset.aba = aba;
   const secoes = {geral:'secGeral', lancamentos:'secLancamentos', orcamento:'secOrcamento', metas:'secMetas'};
   const navs = {geral:'navGeral', lancamentos:'navLancamentos', orcamento:'navOrcamento', metas:'navMetas'};
   Object.entries(secoes).forEach(([k,id])=>{
@@ -2556,7 +2625,7 @@ function render(){
           ? '<span class="tag" style="background:var(--amber-bg);color:var(--amber)">pendente</span>'
           : '<span class="tag" style="background:var(--green-bg);color:var(--green)">pago</span>';
       tr.innerHTML = `
-        <td class="col-check editable-only"><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" ${(statusEf==='pago'||ehTransf)?'disabled':''}></td>
+        <td class="col-check editable-only"><label><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" aria-label="Selecionar lançamento" ${(statusEf==='pago'||ehTransf)?'disabled':''}></label></td>
         <td class="col-desc">${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
         <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corCat}">${t.categoria}</span></td>
         <td class="col-conta" data-label="Conta" style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
@@ -2748,8 +2817,10 @@ function renderOrcamentos(porCat){
       }
     }
     const notaMedia = media ? `<span style="color:var(--muted2);">costuma ser ~${fmt(media)}/mês</span>` : '';
+    // separador só entre spans (via CSS): sem "·" literal solto, que ficava pendurado
+    // no fim da linha quando o .orc-nota (flex-wrap) quebrava.
     const rodape = (comparativo || notaMedia)
-      ? `<div class="orc-nota">${[notaMedia, comparativo].filter(Boolean).join(' · ')}</div>` : '';
+      ? `<div class="orc-nota">${[notaMedia, comparativo].filter(Boolean).join('')}</div>` : '';
     return `<div class="orc-item">
       <div class="orc-row">
         <div class="orc-label">${c}</div>
@@ -2822,7 +2893,7 @@ function renderMetas(){
       <div class="meta-track"><div class="meta-fill" style="width:${pct}%"></div></div>
       <div class="meta-sub">
         <span>${fmt(m.valorAtual)} de ${fmt(m.valorAlvo)}${m.prazo ? ' · até '+fmtDataBR(m.prazo) : ''}</span>
-        <span><button class="iconbtn" style="color:var(--blue)" onclick="addValorMeta(${m.id})">+ add</button><button class="iconbtn" onclick="verEvolucaoMeta(${m.id})" title="Ver evolução">📈</button><button class="iconbtn" onclick="editarMeta(${m.id})" title="Editar">✎</button><button class="iconbtn del" onclick="removerMeta(${m.id})">&times;</button></span>
+        <span class="meta-acoes"><button class="iconbtn" style="color:var(--blue)" onclick="addValorMeta(${m.id})">+ add</button><button class="iconbtn" onclick="verEvolucaoMeta(${m.id})" title="Ver evolução" aria-label="Ver evolução">📈</button><button class="iconbtn" onclick="editarMeta(${m.id})" title="Editar" aria-label="Editar">✎</button><button class="iconbtn del" onclick="removerMeta(${m.id})" aria-label="Remover">&times;</button></span>
       </div>
       ${economiaTxt}
     </div>`;
@@ -3041,7 +3112,7 @@ function renderDobraSaldo(){
     const n = contasComSaldo.length;
     subEl.textContent = n === 1 ? 'Em 1 conta' : `Somando ${n} contas`;
   }else{
-    subEl.innerHTML = 'Estimado pelo mês — <a onclick="abrirModalContas()">informe o saldo das suas contas</a> para o número exato';
+    subEl.innerHTML = 'Estimado pelo mês — <a role="button" tabindex="0" onclick="abrirModalContas()">informe o saldo das suas contas</a> para o número exato';
   }
 
   // frase de status: no ritmo de gasto atual, até quando o dinheiro dura
@@ -3218,7 +3289,7 @@ function renderLivreParaGastar(){
   if(parcelasAbertas > 0) linhas.push(`<div class="lb-row sub"><span>Parcelas em aberto</span><b>${fmt(parcelasAbertas)}</b></div>`);
   if(recorrentesFalta > 0) linhas.push(`<div class="lb-row sub"><span>Fixos ainda não lançados</span><b>${fmt(recorrentesFalta)}</b></div>`);
   linhas.push(`<div class="lb-row total"><span>= ${sobra ? 'Sobra' : 'Falta'}</span><b>${fmt(Math.abs(livre))}</b></div>`);
-  if(!partidaReal) linhas.push(`<div class="lb-row sub"><span>Informe o saldo das suas contas em <b style="text-decoration:underline;cursor:pointer" onclick="abrirModalContas()">Contas</b> para o número exato.</span></div>`);
+  if(!partidaReal) linhas.push(`<div class="lb-row sub"><span>Informe o saldo das suas contas em <b role="button" tabindex="0" style="text-decoration:underline;cursor:pointer" onclick="abrirModalContas()">Contas</b> para o número exato.</span></div>`);
   document.getElementById('livreBreakdown').innerHTML = linhas.join('');
 
   aplicarEstadoDetalheLivre();
@@ -3255,7 +3326,9 @@ function renderParaOnde(porCat){
   const entradas = Object.entries(porCat).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
   const totalGasto = entradas.reduce((s,[,v]) => s+v, 0);
   if(entradas.length === 0){
-    lista.innerHTML = '<div style="font-size:12.5px;color:var(--muted)">Nenhum gasto lançado neste mês ainda.</div>';
+    // estado vazio único: a mensagem já aparece dentro da área do gráfico
+    // (#chartCatVazio via renderChartCat); aqui só limpa a lista pra não duplicar.
+    lista.innerHTML = '';
     return;
   }
   const top = entradas.slice(0, 3);
@@ -3395,7 +3468,13 @@ function renderProjecaoSaldo(){
         { label:'Saldo projetado', data:dadosGrafico, borderColor:'#4d9eff', backgroundColor:'rgba(77,158,255,.15)', fill:true, tension:.25, pointRadius:3 }
       ]},
       options:{ maintainAspectRatio:false,
-        scales:{ x:{ ticks:{color:tc.tick, font:{size:10}}, grid:{display:false} }, y:{ ticks:{color:tc.tick, font:{size:10}}, grid:{color:tc.grid} } },
+        scales:{
+          x:{ ticks:{color:tc.tick, font:{size:10}}, grid:{display:false} },
+          /* grace:'12%' abre a faixa do eixo Y: sem isso, quando os pontos ficam muito
+             próximos frente à magnitude (ex: saldo ~1,9 mi variando poucos mil), o
+             Chart.js gera ticks que arredondam para o mesmo rótulo repetido. */
+          y:{ ticks:{color:tc.tick, font:{size:10}}, grid:{color:tc.grid}, grace:'12%' }
+        },
         plugins:{ legend:{display:false} }
       }
     });
@@ -4495,7 +4574,7 @@ document.addEventListener('click', (e)=>{
 });
 // Enter/Espaço aciona spans com role=button (links "gerenciar", "+ nova meta" etc.)
 document.addEventListener('keydown', (e)=>{
-  if((e.key === 'Enter' || e.key === ' ') && e.target.matches('span[role="button"]')){
+  if((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]:not(button)')){
     e.preventDefault();
     e.target.click();
   }
