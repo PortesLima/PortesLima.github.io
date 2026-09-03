@@ -683,15 +683,42 @@ decisão mobile-first — só muda se a decisão de produto mudar).
 `test-responsivo` ganhou 5 checks novos: o antigo "toast acima do FAB" na aba Lançamentos
 virou obsoleto com o M3 (FAB some lá) — reescrito para (a) afirmar que o FAB some em
 Lançamentos e (b) refazer a checagem toast-vs-FAB na Visão Geral, onde o FAB aparece.
-**Pendente de confirmação em aparelho real (não reproduz no msedge headless — a IA não tem
-como testar daqui):** (a) campo de data do `#modalContas` no iOS Safari — a correção foi
-`min-width:150px` + `font-size:16px` + label que quebra pra própria linha; (b) K3 — o emoji
-`📈` do botão "ver evolução" da meta: **não foi investigado nem corrigido**, só ganhou
-`aria-label`. Aparece quebrado só no headless (sem fonte de emoji); provavelmente ok em uso
-real (o app usa emoji em vários outros pontos). Se estiver quebrado num navegador/celular
-normal, trocar por um ícone de traço.
 
-`APP_VERSION`/`CACHE` → `2026-09-02.9`.
+**Pendente de confirmação em aparelho real (K3):** o emoji `📈` do botão "ver evolução" da
+meta — **não foi investigado nem corrigido**, só ganhou `aria-label`. Aparece quebrado só no
+headless (sem fonte de emoji); provavelmente ok em uso real. Se estiver quebrado num
+navegador/celular normal, trocar por um ícone de traço.
+
+### Correção pós-deploy do `#modalContas` (evidência de iPhone real)
+
+Dois defeitos vistos num iPhone (Safari **e** Chrome iOS — ambos WebKit) que o headless não
+reproduz:
+
+- **Campo de data ("em [___]") aparecia vazio, sem placeholder.** Causa: `<input type="date">`
+  no WebKit iOS **não mostra nenhum placeholder textual** quando `value` está vazio (Chromium
+  desktop mostra "dd/mm/aaaa"; iOS não mostra nada, e `placeholder` é ignorado nesse tipo de
+  campo). CSS de tamanho não resolve — não há conteúdo. **Solução:** `renderListaContas`
+  agora envolve cada campo em `<label class="conta-campo">` com uma **legenda visível**
+  (`.campo-legenda`) acima: "Saldo inicial" / "Data do saldo". Funciona vazio ou preenchido.
+  O `em` solto foi removido. `font-size:16px` mantido (anti-zoom iOS) + `box-sizing` +
+  `min-width:0` + `max-width:100%` pro controle nativo nunca vazar do card.
+- **Fragmento de texto ("...tas") vazando na borda direita, de um elemento atrás do modal.**
+  Causa: `.modal-bg` é `position:fixed` mas translúcido, e **não havia trava de scroll** —
+  no iOS dava pra arrastar a página por trás e ver nav/filtros vazando pelas bordas.
+  **Solução:** `_sincronizarTravaScroll` (script, perto do handler de `[role=button]`) — um
+  `MutationObserver` no `style` de cada `.modal-bg` + `#telaPin`; quando algum vira
+  `display:flex`, põe `body.modal-aberto` (`position:fixed; width:100%; overflow:hidden` +
+  `top:-Ypx` guardando a posição), reposta ao fechar todos. **Zero mudança nas ~20 chamadas
+  de abrir/fechar** — o observer cobre todas. `.modal-bg` também ganhou `overflow:hidden`.
+  A trava aplica ~1 frame depois (observer é assíncrono) — imperceptível.
+
+`test-modal-contas` (novo, 61 checks): legendas presentes/visíveis/acima do input em 4
+viewports; input de data ≥16px e dentro do card; sem scroll-x com o modal aberto; nada vaza;
+body trava ao abrir e destrava + repõe scroll ao fechar; transição onboarding→rápido mantém
+a trava sem flicker.
+
+`APP_VERSION`/`CACHE` → `2026-09-02.9` (mantido — a rodada da auditoria já tinha bumpado;
+este commit sai junto ou logo em seguida, mesma versão de deploy).
 
 ## Known pre-existing issues (candidates for a future round, not regressions)
 

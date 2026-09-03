@@ -463,7 +463,12 @@
   @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
   .sec-fade{ animation: fadeIn .25s ease; }
 
-  .modal-bg{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:900; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .modal-bg{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:900; display:flex; align-items:center; justify-content:center; padding:16px; overflow:hidden; overscroll-behavior:contain; }
+  /* enquanto um modal está aberto, trava o scroll do body: sem isso, no iOS dá pra
+     arrastar a página por trás do overlay translúcido e ver conteúdo (nav, filtros)
+     vazando pelas bordas. `position:fixed` no body preserva a posição do scroll via
+     `top` negativo, reposto ao fechar (ver `_sincronizarTravaScroll` no script). */
+  body.modal-aberto{ position:fixed; left:0; right:0; width:100%; overflow:hidden; }
   /* max-height + scroll interno: sem isto, um modal mais alto que a tela (ex: #modalContas
      com várias contas, ou qualquer modal num celular em paisagem) transborda a viewport e
      esconde os botões — o usuário fica preso. #modalImportar tem o seu próprio layout
@@ -488,14 +493,21 @@
      aqui fica visível. */
   #modalEvolucaoMeta .modal-box{ overflow:visible; }
 
-  /* #modalContas: a linha "Saldo inicial [___] em [data]" espremia o input de data
-     abaixo da largura do texto "dd/mm/aaaa" — no iOS Safari o campo aparecia vazio
-     mesmo preenchido. Largura mínima + 16px de fonte (o iOS esconde texto e dá zoom
-     abaixo disso) + a label da data pode ir para a própria linha quando não couber. */
-  #modalContas .conta-linha-saldo{ align-items:center; }
-  #modalContas .conta-linha-saldo label.chk{ flex-wrap:wrap; }
-  #modalContas input[type=date]{ min-width:150px; font-size:16px; }
-  #modalContas .conta-linha-saldo .chk-data{ flex:1 1 150px; }
+  /* #modalContas — linha "Saldo inicial" + "Data do saldo".
+     O <input type="date"> no iOS (Safari e Chrome, ambos WebKit) NÃO mostra nenhum
+     placeholder textual quando está vazio — a caixa fica em branco, sem "dd/mm/aaaa"
+     (e `placeholder` é ignorado nesse tipo de campo). A solução é a legenda VISÍVEL
+     `.campo-legenda` acima de cada campo, que funciona vazio ou preenchido.
+     `font-size:16px` evita o zoom automático do iOS ao focar. `box-sizing` + `min-width:0`
+     + `max-width:100%` garantem que o controle nativo (que no iOS tende a não encolher)
+     nunca ultrapasse o card. */
+  #modalContas .conta-linha-saldo{ align-items:flex-start; }
+  #modalContas .conta-campo{ display:flex; flex-direction:column; gap:3px; flex:1 1 140px; min-width:0; }
+  #modalContas .campo-legenda{ font-size:11px; color:var(--muted); font-weight:400; }
+  #modalContas .conta-campo input{
+    width:100%; max-width:100%; min-width:0; box-sizing:border-box; font-size:16px;
+  }
+  #modalContas input[type=date]{ min-height:40px; }
 
   /* modal de importação de extrato */
   #modalImportar .modal-box{ max-width:560px; display:flex; flex-direction:column; max-height:88vh; overflow-y:visible; }
@@ -1824,11 +1836,14 @@ function renderListaContas(){
         </div>
       </div>
       <div class="row conta-linha-saldo" style="margin-top:8px;">
-        <label class="chk" style="flex:1 1 160px;">Saldo inicial
+        <label class="conta-campo">
+          <span class="campo-legenda">Saldo inicial</span>
           <input type="text" inputmode="decimal" placeholder="ex: 1.200,00" value="${ini ? ini.valor.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}"
-            style="flex:1; min-width:90px;" id="si-val-${esc}"
+            id="si-val-${esc}"
             onchange="editarSaldoInicialConta('${esc}', this.value, document.getElementById('si-em-${esc}').value)"></label>
-        <label class="chk chk-data">em <input type="date" value="${ini && ini.em ? ini.em : ''}" id="si-em-${esc}"
+        <label class="conta-campo">
+          <span class="campo-legenda">Data do saldo</span>
+          <input type="date" value="${ini && ini.em ? ini.em : ''}" id="si-em-${esc}"
             onchange="editarSaldoInicialConta('${esc}', document.getElementById('si-val-${esc}').value, this.value)"></label>
       </div>
       ${temIni ? `<div style="font-size:10.5px; color:var(--muted2); margin-top:2px;">Saldo hoje = saldo inicial ${fmt(ini.valor)} ${saldoAtual-ini.valor>=0?'+':'−'} ${fmt(Math.abs(saldoAtual-ini.valor))} de movimento desde ${ini.em ? ini.em.split('-').reverse().join('/') : 'sempre'}.</div>` : ''}
@@ -4579,6 +4594,36 @@ document.addEventListener('keydown', (e)=>{
     e.target.click();
   }
 });
+
+// ---- Trava de scroll do fundo enquanto um modal está aberto ----
+// Um MutationObserver no `style` de cada overlay (.modal-bg / #telaPin) evita ter que
+// mexer nas ~20 chamadas de abrir/fechar espalhadas pelo código. Quando qualquer overlay
+// passa a `display:flex`, trava; quando todos voltam a `display:none`, destrava e repõe
+// a posição do scroll.
+let _scrollTravadoY = 0;
+function _algumOverlayAberto(){
+  return [...document.querySelectorAll('.modal-bg, #telaPin')].some(el => {
+    return el.style.display && el.style.display !== 'none';
+  });
+}
+function _sincronizarTravaScroll(){
+  const aberto = _algumOverlayAberto();
+  const jaTravado = document.body.classList.contains('modal-aberto');
+  if(aberto && !jaTravado){
+    _scrollTravadoY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.top = `-${_scrollTravadoY}px`;
+    document.body.classList.add('modal-aberto');
+  }else if(!aberto && jaTravado){
+    document.body.classList.remove('modal-aberto');
+    document.body.style.top = '';
+    window.scrollTo(0, _scrollTravadoY);
+  }
+}
+{
+  const alvos = document.querySelectorAll('.modal-bg, #telaPin');
+  const obs = new MutationObserver(_sincronizarTravaScroll);
+  alvos.forEach(el => obs.observe(el, { attributes:true, attributeFilter:['style'] }));
+}
 
 // ---- Link somente leitura ----
 function gerarLinkSomenteLeitura(){
