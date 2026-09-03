@@ -785,10 +785,11 @@ overflow de input iOS não acontece em desktop largo), mas m360/m390/m430 + todo
 
 **Regressão introduzida por `1d00f5a`** (a legenda "Data do saldo" acima do campo). Vista num
 iPhone 12 real: o `<input type="date">` de "Data do saldo" primeiro com ~132px de altura
-(caixa gigante), depois — pós 1ª correção — ainda ~2x mais alto **e** mais largo que o
-"Saldo inicial" ao lado (que tem altura/largura normais). Precisou de 2 rodadas, cada uma
-guiada por screenshot de iPhone real (o headless não reproduz nem a altura nem a largura reais
-do controle nativo de data no WebKit iOS).
+(caixa gigante), depois — pós correções — ainda mais alto **e** mais largo que o "Saldo
+inicial" ao lado (que tem altura/largura normais). Precisou de **3 rodadas**, cada uma guiada
+por screenshot de iPhone real — o Chromium headless **não reproduz** o `<input type="date">`
+do WebKit iOS: renderiza altura/largura diferentes e respeita `height`/`width` que o iOS
+ignora. Ver **regra geral** no fim desta seção.
 
 Causa: a legenda passou a envolver cada input num `<label class="conta-campo">` que é
 `display:flex; flex-direction:column`. As regras **globais** de input têm `flex` setado
@@ -807,13 +808,22 @@ mesmo commit era um piso, não um teto — não segurava os 132px.
   a altura intrínseca do controle nativo, maior que a de um `input[type=text]`) **e** mais
   largo (com `.conta-campo{ flex:1 1 140px }`, a largura intrínseca grande do date no iOS
   furava o `flex-basis` e roubava espaço do "Saldo inicial").
-- **2ª rodada (mesmo item, deploy `.12`):** duas mudanças pra igualar **largura E altura** ao "Saldo inicial":
-  - `.conta-campo{ flex:1 1 0; width:0; min-width:0 }` (era `flex:1 1 140px`) → os dois campos
-    dividem a linha **50/50 exatos**; `min-width:0` destrava o encolhimento abaixo da largura
-    intrínseca do controle.
-  - input: `height:42px; min-height:42px; max-height:42px` (era `height:auto; min-height:40px`)
-    → **altura fixa**, o iOS não infla. 42px casa com a altura natural do `input[type=text]`
-    ao lado (`padding:9px` + font 16px).
+- **2ª rodada (`.12`):** duas mudanças que resolveram no Chromium mas **não** no iPhone:
+  - `.conta-campo{ flex:1 1 0; width:0; min-width:0 }` (era `flex:1 1 140px`) → 50/50 na linha.
+  - input: `height:42px; min-height:42px; max-height:42px` (era `height:auto`) → altura fixa.
+- **3ª rodada (`.13`):** o que faltava era mexer no **controle nativo do WebKit** (WebKit Bug
+  198959) — `height` sozinho é ignorado pelo iOS. Regras novas, só `#modalContas .conta-campo
+  input[type=date]`:
+  - `-webkit-appearance:none; appearance:none` — remove as restrições de tamanho do controle.
+  - `::-webkit-datetime-edit*` (e `-fields-wrapper`, `-text`, `-day/-month/-year-field`):
+    `padding:0; line-height:1.2` — zera o padding interno dos pseudo-elementos, que era a
+    origem da altura extra.
+  - `::-webkit-calendar-picker-indicator{ margin:0; padding:0; width:16px; height:16px }` —
+    encolhe o ícone do calendário (reservava largura/altura).
+  - `::-webkit-inner-spin-button{ display:none }`.
+  Com os pseudos zerados, a altura vem do `padding:9px 10px` do próprio input (herdado da
+  regra global) — igual ao `input[type=text]` ao lado. `-webkit-appearance:none` **não**
+  impede o date picker de abrir no tap (isso é nativo do iOS, imune a CSS).
 
 A legenda **não** foi mexida em nenhuma das rodadas. `_sincronizarTravaScroll` e o resto de
 `1d00f5a`/`f124466` intocados.
@@ -824,18 +834,27 @@ horizontal, como projetado. Só o `.conta-campo` é `flex-direction:column`.
 
 `test-modal-contas` **61 → 73 checks**: +12 medindo altura E largura do input de data vs. o
 `input[type=text]` "Saldo inicial" ao lado (±6px cada) + teto de altura < 70px, em 4 viewports.
-Os checks de altura falham no `main` pré-`78f343c` (data=132 vs texto=41). **Limitação:** o
-check de largura passa em headless mesmo com `flex:1 1 140px` (Chromium não renderiza o date
-mais largo que 140px) — vale como guard de intenção, mas o desequilíbrio de largura só aparece
-no iOS. Suíte completa: 19 scripts, 2 fail (só `test-dobra` CASO 4, data-dependente).
-`audit-modalcontas.js` (harness focado, no scratchpad) + `dbg-largura.js` (mede os dois campos
-lado a lado): m360…d1280 × dark/light → largura e altura idênticas (0px de diferença).
-Auditoria visual completa (`audit-visual.js`, 406 combos): 0 crítico / 0 moderado / 0 cosmético.
+Os checks de altura falham no `main` pré-`78f343c` (data=132 vs texto=41). **Limitação
+conhecida:** os checks passam em headless desde a 2ª rodada — o Chromium já mostrava os campos
+iguais quando o iPhone ainda não. Valem como guard de regressão grosseira (a caixa de 132px) e
+de intenção, **não** como prova de que está certo no iOS. A prova é screenshot de iPhone real.
+Suíte completa: 19 scripts, 2 fail (só `test-dobra` CASO 4, data-dependente). Auditoria visual
+completa (`audit-visual.js`, 406 combos): 0 crítico / 0 moderado / 0 cosmético (mesma ressalva
+— não vê o controle nativo de data do iOS).
 
-`APP_VERSION`/`CACHE` → **`2026-09-03.12`** na 2ª rodada (a `.11` já tinha ido pro ar e sido
-vista num iPhone — o SW de quem já instalou só detecta a correção com um `CACHE` novo).
-**Pendente:** confirmação no iPhone real da `.12` — largura E altura do campo "Data do saldo"
-iguais às do "Saldo inicial" ao lado.
+`APP_VERSION`/`CACHE` bumpado a cada rodada que foi pro ar: `.11` (1ª) → `.12` (2ª) → `.13`
+(3ª). Cada uma já tinha sido vista num iPhone, então o SV de quem instalou só pega a próxima
+com um `CACHE` novo. **Pendente:** confirmação no iPhone real da `.13`.
+
+**Regra geral — `<input type="date">` (e `time`, `month`) no iOS/WebKit:** o Chromium headless
+(a suíte E o `audit-visual.js`) **não é fonte confiável** pra altura/largura desses campos —
+renderiza diferente do WebKit iOS e respeita `height`/`width` que o iOS ignora (WebKit Bug
+198959). Pra igualar a um `input[type=text]` no iOS **não basta** `height`/`min-height`: precisa
+de `-webkit-appearance:none` **+** `padding:0` nos pseudo-elementos `::-webkit-datetime-edit-*`
+**+** encolher `::-webkit-calendar-picker-indicator`. **No "critério de pronto" de qualquer item
+visual que toque um `<input>` nativo (date/time/file/select), exigir um screenshot real de iOS
+Safari antes de fechar** — a auditoria headless não pega essas regressões (custou 3 rodadas de
+commit→push→teste-no-iPhone aqui).
 
 ## Known pre-existing issues (candidates for a future round, not regressions)
 

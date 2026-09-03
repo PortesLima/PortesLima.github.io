@@ -6,7 +6,7 @@
 // CACHE: bumpar JUNTO com APP_VERSION no index.html a cada deploy que os usuários precisem
 // ver na hora. Trocar este byte faz o browser detectar o SW novo, precachear o index.html
 // novo e apagar os caches antigos no 'activate'.
-const CACHE = 'bolso-certo-2026-09-03.12';
+const CACHE = 'bolso-certo-2026-09-03.13';
 const SHELL = ['./', './index.html'];
 
 self.addEventListener('install', (e) => {

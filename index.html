@@ -516,22 +516,38 @@
      nunca ultrapasse o card. */
   #modalContas .conta-linha-saldo{ align-items:flex-start; }
   /* `flex:1 1 0; width:0; min-width:0` (não `flex:1 1 140px`): os dois campos dividem a linha
-     em partes IGUAIS, e `min-width:0` destrava o encolhimento abaixo da largura intrínseca do
-     controle nativo. Com `flex-basis:140px` a largura intrínseca grande do <input type="date">
+     em partes IGUAIS. Com `flex-basis:140px` a largura intrínseca grande do <input type="date">
      no iOS fazia o campo de data roubar largura do "Saldo inicial" (visto num iPhone real). */
   #modalContas .conta-campo{ display:flex; flex-direction:column; gap:3px; flex:1 1 0; width:0; min-width:0; }
   #modalContas .campo-legenda{ font-size:11px; color:var(--muted); font-weight:400; }
-  /* O `.conta-campo` é `flex-direction:column`, então o `flex` das regras globais de input
-     (`input[type=text]{flex:1}`, `input[type=date]{flex:1 1 132px}`) passa a valer no eixo
-     VERTICAL — vira ALTURA. E o <input type="date"> no iOS/WebKit tem uma altura intrínseca
-     maior que a de um input de texto (o controle nativo reserva espaço), então `height:auto`
-     ainda deixava o campo de data ~2x mais alto que "Saldo inicial" no iPhone real.
-     Defesa: `flex:none` + altura FIXA de 42px nos dois (não `auto`, não só `min-height`) →
-     mesma largura E mesma altura do "Saldo inicial". */
+  /* Altura do campo de data no iOS — WebKit Bug 198959. Três camadas de defesa, porque as
+     duas primeiras SOZINHAS não bastam (passavam no Chromium headless, falhavam no iPhone):
+     1) `flex:none` — sem ele o `input[type=date]{flex:1 1 132px}` global vira `flex-basis`
+        VERTICAL (o `.conta-campo` é `flex-direction:column`) e a altura vai a 132px;
+     2) `height:42px` fixo — o Chromium respeita; o WebKit iOS IGNORA e se dimensiona pelo
+        conteúdo interno do controle nativo;
+     3) (o que faltava) `-webkit-appearance:none` + zerar o padding dos pseudo-elementos
+        `::-webkit-datetime-edit*` + encolher o `::-webkit-calendar-picker-indicator`. É esse
+        padding interno + o ícone que inchavam o campo (mais alto E mais largo que o "Saldo
+        inicial") no iPhone real. Com os pseudos zerados, a altura vem do padding do próprio
+        input (`9px 10px`, herdado da regra global) = mesma altura do `input[type=text]`. */
   #modalContas .conta-campo input{
     width:100%; max-width:100%; min-width:0; box-sizing:border-box; font-size:16px;
-    flex:none; height:42px; min-height:42px; max-height:42px;
+    flex:none; height:42px; min-height:42px; max-height:42px; line-height:1.2;
   }
+  /* iOS/WebKit: `-webkit-appearance:none` remove as restrições de tamanho do controle
+     nativo; zerar o padding dos pseudos `::-webkit-datetime-edit*` e encolher o ícone do
+     calendário faz a altura vir do padding do próprio input (= `input[type=text]` ao lado). */
+  #modalContas .conta-campo input[type=date]{ -webkit-appearance:none; appearance:none; }
+  #modalContas .conta-campo input[type=date]::-webkit-date-and-time-value{ text-align:left; margin:0; }
+  #modalContas .conta-campo input[type=date]::-webkit-datetime-edit,
+  #modalContas .conta-campo input[type=date]::-webkit-datetime-edit-fields-wrapper,
+  #modalContas .conta-campo input[type=date]::-webkit-datetime-edit-text,
+  #modalContas .conta-campo input[type=date]::-webkit-datetime-edit-day-field,
+  #modalContas .conta-campo input[type=date]::-webkit-datetime-edit-month-field,
+  #modalContas .conta-campo input[type=date]::-webkit-datetime-edit-year-field{ padding:0; line-height:1.2; }
+  #modalContas .conta-campo input[type=date]::-webkit-calendar-picker-indicator{ margin:0; padding:0; width:16px; height:16px; }
+  #modalContas .conta-campo input[type=date]::-webkit-inner-spin-button{ display:none; }
 
   /* modal de importação de extrato */
   #modalImportar .modal-box{ max-width:560px; display:flex; flex-direction:column; max-height:88vh; overflow-y:visible; }
@@ -1286,7 +1302,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.12';
+const APP_VERSION = '2026-09-03.13';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
