@@ -717,8 +717,42 @@ viewports; input de data ≥16px e dentro do card; sem scroll-x com o modal aber
 body trava ao abrir e destrava + repõe scroll ao fechar; transição onboarding→rápido mantém
 a trava sem flicker.
 
-`APP_VERSION`/`CACHE` → `2026-09-02.9` (mantido — a rodada da auditoria já tinha bumpado;
-este commit sai junto ou logo em seguida, mesma versão de deploy).
+### Mais overflow no mobile — frases longas e inputs de arquivo (iPhone real)
+
+Depois do commit acima, o usuário achou mais dois pontos de overflow no celular que o
+headless (Chromium) não pega porque renderiza controles nativos menores que o WebKit iOS:
+
+- **Faixa "Você tem hoje" / "Resultado do mês" (`.dobra-saldo`):** a frase de apoio
+  `#dsSub` ("Estimativa do mês. Informe o saldo das contas para o valor exato.") ditava a
+  largura da `.ds-topo` (`flex:0 0 auto`, sem `max-width`) e vazava. Correções:
+  `.ds-topo{ flex:0 1 auto; min-width:0; max-width:100% }`; `.ds-sub{ overflow-wrap:break-word }`;
+  a faixa passa a **empilhar** (topo em cima full-width, status embaixo) em **≤700px** (era
+  ≤560) — pega celular grande e celular deitado. Copy encurtada. `test-dobra` #2 virou
+  case-insensitive (`/informe o saldo/i`).
+- **Inputs de arquivo (`<input type="file">`):** no iOS o botão "Escolher arquivo" +
+  "Nenhum arquivo" tem largura mínima intrínseca enorme que ignora `flex-shrink`. As labels
+  que os envolvem ("Importar backup:" no `#painelBackup`, "Comprovante:" no form) ganharam
+  `class="chk-arquivo"` → `flex-direction:column` (texto em cima, input embaixo `width:100%`).
+  Vale pra qualquer `label.chk` nova com file input.
+- **Inputs de data (`<input type="date">`):** a regra global virou
+  `input[type=date]{ min-width:132px; max-width:100%; flex:1 1 132px }` — em qualquer `.row`
+  o campo **cresce** pro tamanho real do iOS (~190px) quando há espaço e **quebra pra própria
+  linha** quando não há, em vez de ser espremido abaixo do conteúdo do controle nativo.
+  `#dataInput` (Vencimento), `#periodoDe`/`#periodoAte` (filtro de período) e `#metaPrazo`
+  (prazo da meta) perderam os `style` inline de largura fixa / `flex:none` que impediam isso.
+
+**A auditoria visual agora simula a largura iOS:** `MEDIR()` no `audit-visual.js` tem uma
+checagem (#6) que, pra cada `<input type=date|file>`, testa se a linha transbordaria SE o
+input tivesse a largura real do iOS (date ~190px, file ~250px) — a defesa aceita é o input
+poder encolher (`max-width:100%`) OU a label quebrar em coluna. Foi assim que `#metaPrazo`
+apareceu depois que `.dobra-saldo`/backup foram corrigidos.
+
+**Lição pro futuro:** o Chromium headless **não vê a largura real de `<input type="date">` e
+`<input type="file">` no iOS** (ambos WebKit, muito mais largos). Ao mexer em qualquer linha
+com esses controles no mobile: garantir que o input tem `flex:1 1 <base>; max-width:100%` OU
+que a label quebra em coluna — e conferir que a checagem #6 do `MEDIR()` passa.
+
+`APP_VERSION`/`CACHE` → `2026-09-02.10`.
 
 ## Known pre-existing issues (candidates for a future round, not regressions)
 

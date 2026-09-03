@@ -115,14 +115,16 @@
     padding:18px 20px; margin-bottom:12px;
     display:flex; gap:24px 32px; align-items:center; flex-wrap:wrap;
   }
-  .ds-topo{ flex:0 0 auto; min-width:180px; }
+  .ds-topo{ flex:0 1 auto; min-width:0; max-width:100%; }
   .ds-label{ font-size:12.5px; color:var(--muted); margin-bottom:3px; }
   .ds-valor{
     font-size:38px; font-weight:700; letter-spacing:-.025em; line-height:1.05; color:var(--blue);
     font-variant-numeric:tabular-nums;
   }
   .ds-valor.neg{ color:var(--red); }
-  .ds-sub{ font-size:12px; color:var(--muted); margin-top:5px; }
+  /* a frase de apoio (ex.: "Estimado — informe o saldo...") não pode ditar a largura
+     da .ds-topo: quebra livre, e a .ds-topo pode encolher (flex:0 1 auto + min-width:0). */
+  .ds-sub{ font-size:12px; color:var(--muted); margin-top:5px; line-height:1.4; overflow-wrap:break-word; }
   .ds-sub a{ color:var(--blue); text-decoration:underline; cursor:pointer; }
   .ds-status{
     flex:1; min-width:240px; display:flex; align-items:flex-start; gap:9px;
@@ -137,11 +139,16 @@
   .ds-status.estoura{ border-left-color:var(--red); }
   .ds-status.estoura .ds-ico{ color:var(--red); }
   .ds-status b{ color:var(--text); font-weight:600; }
+  /* em telas estreitas (inclui celular grande e celular deitado) a faixa empilha:
+     "Você tem hoje/Resultado" em cima ocupando a largura toda, status embaixo.
+     Assim a frase de apoio tem o card inteiro pra quebrar, sem forçar largura. */
+  @media(max-width:700px){
+    .ds-topo{ flex:1 1 100%; }
+    .ds-status{ padding-left:0; border-left:none; padding-top:12px; border-top:1px solid var(--border); width:100%; min-width:0; }
+  }
   @media(max-width:560px){
     .dobra-saldo{ padding:15px 16px; gap:14px; }
-    .ds-topo{ min-width:0; flex:1 1 100%; }
     .ds-valor{ font-size:30px; overflow-wrap:anywhere; }
-    .ds-status{ padding-left:0; border-left:none; padding-top:12px; border-top:1px solid var(--border); width:100%; min-width:0; }
   }
 
   /* card "Fim do mês" — quanto sobra (verde) ou falta (vermelho) depois de pagar
@@ -251,14 +258,20 @@
     flex:1; min-width:100px; padding:9px 10px; border:1px solid var(--border); border-radius:8px;
     font-size:13px; background:var(--card2); color:var(--text);
   }
-  /* "dd/mm/aaaa" (e o picker do iOS) precisa de ~120px — abaixo disso o texto some.
-     Assim o campo de data quebra pra própria linha antes de espremer. */
-  input[type=date]{ min-width:132px; }
+  /* "dd/mm/aaaa" (e o picker do iOS) precisa de ~132px — abaixo disso o texto some.
+     `max-width:100%` + o `flex:1 1 132px` default deixam o campo crescer pro tamanho
+     real do iOS quando há espaço e quebrar pra própria linha quando não há, em vez de
+     ser espremido abaixo do conteúdo do controle nativo. */
+  input[type=date]{ min-width:132px; max-width:100%; flex:1 1 132px; }
   select{padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--card2); color:var(--text);}
   label.chk{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); padding:0 4px; min-width:0;}
-  /* inputs de arquivo têm largura mínima intrínseca (texto "Nenhum arquivo escolhido")
-     que ignora flex-shrink e causa overflow no mobile — forçar encolher */
+  /* inputs de arquivo têm uma largura mínima intrínseca enorme no iOS/WebKit (o botão
+     "Escolher arquivo" + "Nenhum arquivo selecionado") que ignora flex-shrink. A label
+     `.chk-arquivo` quebra em coluna: o texto ("Comprovante:" / "Importar backup:") em
+     cima, o <input> embaixo ocupando a largura toda e podendo encolher. */
   input[type=file]{ min-width:0; max-width:100%; font-size:11.5px; }
+  label.chk.chk-arquivo{ flex-direction:column; align-items:flex-start; gap:3px; }
+  label.chk.chk-arquivo input[type=file]{ width:100%; }
   button{padding:9px 16px; border:none; border-radius:8px; background:var(--text); color:var(--btn-text); font-size:13px; font-weight:600; cursor:pointer;}
   button.secondary{background:var(--card2); color:var(--text); border:1px solid var(--border);}
   button.small{padding:5px 10px; font-size:12px;}
@@ -563,6 +576,12 @@
   .meta-sub > span:first-child{flex:1 1 140px; min-width:0;}
   .meta-sub .meta-acoes{flex:none; display:flex; align-items:center; white-space:nowrap;}
   .meta-economia{font-size:11.5px; color:var(--blue); margin-top:6px; padding-top:6px; border-top:1px dashed var(--border);}
+  /* form "+ nova meta": em telas estreitas "Valor alvo" + data + botão não cabem numa
+     linha (o input de data agora cresce pro tamanho iOS e espremia o "Valor alvo"),
+     então cada um ocupa a largura toda. */
+  @media(max-width:599px){
+    #formMeta .row > *{ flex:1 1 100%; width:100%; }
+  }
 
   .rec-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:12.5px;}
   .rec-row:last-child{border-bottom:none;}
@@ -883,7 +902,7 @@
     <div class="row">
       <button class="secondary" onclick="exportarBackupJSON()">Baixar backup completo (.json)</button>
       <button class="secondary" onclick="exportarComprovantes()">Baixar comprovantes anexados</button>
-      <label class="chk" style="flex:1;">Importar backup: <input type="file" id="arquivoBackup" accept="application/json" style="flex:1;" onchange="importarBackupJSON(this.files[0])"></label>
+      <label class="chk chk-arquivo" style="flex:1 1 100%;">Importar backup: <input type="file" id="arquivoBackup" accept="application/json" onchange="importarBackupJSON(this.files[0])"></label>
     </div>
     <div style="font-size:11.5px; color:var(--muted); margin-top:6px;">Guarde uma cópia antes de trocar de aparelho ou só por segurança — o arquivo tem todos os seus lançamentos, orçamentos, metas e contas fixas. Importar um backup <b>substitui tudo</b> que está neste aparelho.</div>
   </div>
@@ -1105,7 +1124,7 @@
     <div class="row">
       <input type="text" id="valor" inputmode="decimal" placeholder="Valor (R$)">
       <select id="categoria"></select>
-      <label class="chk" style="flex:none;">Vencimento: <input type="date" id="dataInput" style="flex:none;"></label>
+      <label class="chk" style="flex:1 1 auto; min-width:0;">Vencimento: <input type="date" id="dataInput" style="flex:1 1 132px; min-width:0; max-width:100%;"></label>
       <select id="status">
         <option value="pago">Pago</option>
         <option value="pendente">Pendente</option>
@@ -1116,7 +1135,7 @@
       <label class="chk">Parcelas: <input type="number" id="parcelas" min="1" max="48" value="1" style="width:60px; flex:none;"></label>
       <span style="align-self:center; font-size:11.5px; color:var(--muted2);">cada parcela entra num mês</span>
       <input type="text" id="tag" placeholder="Etiqueta pra agrupar depois (opcional)" style="flex:1;">
-      <label class="chk" style="flex:1;">Comprovante: <input type="file" id="anexo" accept="image/*" style="flex:1;"></label>
+      <label class="chk chk-arquivo" style="flex:1 1 180px;">Comprovante: <input type="file" id="anexo" accept="image/*"></label>
     </div>
     <div class="row">
       <button onclick="adicionar()" id="btnAdicionar">Adicionar</button>
@@ -1147,8 +1166,8 @@
         <button class="secondary" onclick="exportarPDFIR()">Relatório para IR</button>
       </div>
       <div class="row">
-        <label class="chk" style="font-size:11.5px; color:var(--muted);">De: <input type="date" id="periodoDe" onchange="render()" style="width:150px; flex:none;"></label>
-        <label class="chk" style="font-size:11.5px; color:var(--muted);">Até: <input type="date" id="periodoAte" onchange="render()" style="width:150px; flex:none;"></label>
+        <label class="chk" style="font-size:11.5px; color:var(--muted); flex:1 1 150px; min-width:0;">De: <input type="date" id="periodoDe" onchange="render()" style="flex:1 1 132px; min-width:0; max-width:100%;"></label>
+        <label class="chk" style="font-size:11.5px; color:var(--muted); flex:1 1 150px; min-width:0;">Até: <input type="date" id="periodoAte" onchange="render()" style="flex:1 1 132px; min-width:0; max-width:100%;"></label>
         <button class="secondary" onclick="limparPeriodo()" id="btnLimparPeriodo" style="display:none;">Limpar período</button>
         <span style="font-size:11px; color:var(--muted2);">Filtra a lista abaixo em qualquer intervalo de datas, além do mês selecionado no topo.</span>
       </div>
@@ -1256,7 +1275,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-02.9';
+const APP_VERSION = '2026-09-02.10';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -3127,7 +3146,7 @@ function renderDobraSaldo(){
     const n = contasComSaldo.length;
     subEl.textContent = n === 1 ? 'Em 1 conta' : `Somando ${n} contas`;
   }else{
-    subEl.innerHTML = 'Estimado pelo mês — <a role="button" tabindex="0" onclick="abrirModalContas()">informe o saldo das suas contas</a> para o número exato';
+    subEl.innerHTML = 'Estimativa do mês. <a role="button" tabindex="0" onclick="abrirModalContas()">Informe o saldo das contas</a> para o valor exato.';
   }
 
   // frase de status: no ritmo de gasto atual, até quando o dinheiro dura
