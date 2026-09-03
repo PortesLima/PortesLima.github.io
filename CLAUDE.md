@@ -781,6 +781,44 @@ overflow de input iOS não acontece em desktop largo), mas m360/m390/m430 + todo
 
 `APP_VERSION`/`CACHE` → `2026-09-02.10` (deployado 03/09/2026).
 
+### Altura gigante do campo de data no `#modalContas` — regressão da legenda
+
+**Regressão introduzida por `1d00f5a`** (a legenda "Data do saldo" acima do campo). Vista num
+iPhone 12 real: o `<input type="date">` de "Data do saldo" com ~132px de altura, esticado até
+quase encostar no botão "Importar extrato", enquanto "Saldo inicial" ao lado tinha altura
+normal (~41px).
+
+Causa: a legenda passou a envolver cada input num `<label class="conta-campo">` que é
+`display:flex; flex-direction:column`. As regras **globais** de input têm `flex` setado
+(`input[type=text]{flex:1}`, `input[type=date]{ flex:1 1 132px }` — pensadas pra crescimento
+**horizontal** dentro de `.row`). Num container `flex-direction:column`, o `flex` passa a
+valer no **eixo vertical**: o `flex-basis:132px` do input de data virou **altura de 132px** e
+o `flex-grow:1` ainda esticava mais. O `#modalContas input[type=date]{ min-height:40px }` do
+mesmo commit era um piso, não um teto — não segurava os 132px.
+
+**Correção (só CSS, escopo `#modalContas .conta-campo input`):** `flex:none; height:auto;`
+neutraliza o `flex` herdado no eixo vertical → altura natural (padding), 43px pro date / 41px
+pro text, alinhados como dois campos normais lado a lado. `min-height:40px` mantido só como
+piso de alvo de toque (a altura natural já passa). A legenda **não** foi mexida — o problema
+era só a altura. `_sincronizarTravaScroll` e o resto de `1d00f5a`/`f124466` intocados.
+
+`#dataInput`, `#periodoDe`/`#periodoAte`, `#metaPrazo` **não** têm o bug: ficam em `label.chk`
+(`flex-direction:row`, `align-items:center`) ou direto na `.row` — lá o `flex:1 1 132px` é
+horizontal, como projetado. Só o `.conta-campo` é `flex-direction:column`.
+
+`test-modal-contas` **61 → 69 checks**: +8 medindo a altura do input de data vs. o input de
+texto ao lado (±10px) e um teto absoluto (< 70px) em cada viewport. Confirmado que os 8 falham
+no `main` limpo (data=132 vs texto=41) e passam com o fix (data=43). Suíte completa: 19
+scripts, 2 fail (só `test-dobra` CASO 4, data-dependente). `audit-modalcontas.js` (harness
+focado, fora da suíte, no scratchpad): m360/m390/m430/t768/t1023/d1280 × dark/light → 0
+problemas com o fix, 12/12 combos com o bug sem ele. **Auditoria visual completa
+(`audit-visual.js`, 406 combos tela × breakpoint × tema): 0 crítico / 0 moderado /
+0 cosmético.**
+
+`APP_VERSION`/`CACHE` → **`2026-09-03.11`** (mudança visível). **Pendente:** confirmação no
+iPhone real do usuário — a altura do campo "Data do saldo" deve ficar visualmente igual à do
+"Saldo inicial" ao lado, sem a caixa enorme.
+
 ## Known pre-existing issues (candidates for a future round, not regressions)
 
 - **`#telaInicial` opening screen overflows ~39px horizontally.** Predates the whole UX round
