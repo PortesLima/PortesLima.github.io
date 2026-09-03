@@ -515,17 +515,22 @@
      + `max-width:100%` garantem que o controle nativo (que no iOS tende a não encolher)
      nunca ultrapasse o card. */
   #modalContas .conta-linha-saldo{ align-items:flex-start; }
-  #modalContas .conta-campo{ display:flex; flex-direction:column; gap:3px; flex:1 1 140px; min-width:0; }
+  /* `flex:1 1 0; width:0; min-width:0` (não `flex:1 1 140px`): os dois campos dividem a linha
+     em partes IGUAIS, e `min-width:0` destrava o encolhimento abaixo da largura intrínseca do
+     controle nativo. Com `flex-basis:140px` a largura intrínseca grande do <input type="date">
+     no iOS fazia o campo de data roubar largura do "Saldo inicial" (visto num iPhone real). */
+  #modalContas .conta-campo{ display:flex; flex-direction:column; gap:3px; flex:1 1 0; width:0; min-width:0; }
   #modalContas .campo-legenda{ font-size:11px; color:var(--muted); font-weight:400; }
-  /* O `.conta-campo` é `flex-direction:column`, então o `flex` das regras globais de
-     input (`input[type=text]{flex:1}`, `input[type=date]{flex:1 1 132px}`) passa a valer
-     no eixo VERTICAL — o `flex-basis:132px` vira ALTURA e o `flex-grow` estica o campo de
-     data até virar uma caixa gigante (visto num iPhone 12 real). `flex:none` + `height:auto`
-     devolvem a altura natural (padding), igual ao "Saldo inicial" ao lado; `min-height:40px`
-     é só um piso de alvo de toque (a altura natural já passa disso). */
+  /* O `.conta-campo` é `flex-direction:column`, então o `flex` das regras globais de input
+     (`input[type=text]{flex:1}`, `input[type=date]{flex:1 1 132px}`) passa a valer no eixo
+     VERTICAL — vira ALTURA. E o <input type="date"> no iOS/WebKit tem uma altura intrínseca
+     maior que a de um input de texto (o controle nativo reserva espaço), então `height:auto`
+     ainda deixava o campo de data ~2x mais alto que "Saldo inicial" no iPhone real.
+     Defesa: `flex:none` + altura FIXA de 42px nos dois (não `auto`, não só `min-height`) →
+     mesma largura E mesma altura do "Saldo inicial". */
   #modalContas .conta-campo input{
     width:100%; max-width:100%; min-width:0; box-sizing:border-box; font-size:16px;
-    flex:none; height:auto; min-height:40px;
+    flex:none; height:42px; min-height:42px; max-height:42px;
   }
 
   /* modal de importação de extrato */
@@ -1281,7 +1286,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.11';
+const APP_VERSION = '2026-09-03.12';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já

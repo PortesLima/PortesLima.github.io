@@ -781,12 +781,14 @@ overflow de input iOS não acontece em desktop largo), mas m360/m390/m430 + todo
 
 `APP_VERSION`/`CACHE` → `2026-09-02.10` (deployado 03/09/2026).
 
-### Altura gigante do campo de data no `#modalContas` — regressão da legenda
+### Campo de data no `#modalContas` maior que o "Saldo inicial" — regressão da legenda
 
 **Regressão introduzida por `1d00f5a`** (a legenda "Data do saldo" acima do campo). Vista num
-iPhone 12 real: o `<input type="date">` de "Data do saldo" com ~132px de altura, esticado até
-quase encostar no botão "Importar extrato", enquanto "Saldo inicial" ao lado tinha altura
-normal (~41px).
+iPhone 12 real: o `<input type="date">` de "Data do saldo" primeiro com ~132px de altura
+(caixa gigante), depois — pós 1ª correção — ainda ~2x mais alto **e** mais largo que o
+"Saldo inicial" ao lado (que tem altura/largura normais). Precisou de 2 rodadas, cada uma
+guiada por screenshot de iPhone real (o headless não reproduz nem a altura nem a largura reais
+do controle nativo de data no WebKit iOS).
 
 Causa: a legenda passou a envolver cada input num `<label class="conta-campo">` que é
 `display:flex; flex-direction:column`. As regras **globais** de input têm `flex` setado
@@ -796,28 +798,44 @@ valer no **eixo vertical**: o `flex-basis:132px` do input de data virou **altura
 o `flex-grow:1` ainda esticava mais. O `#modalContas input[type=date]{ min-height:40px }` do
 mesmo commit era um piso, não um teto — não segurava os 132px.
 
-**Correção (só CSS, escopo `#modalContas .conta-campo input`):** `flex:none; height:auto;`
-neutraliza o `flex` herdado no eixo vertical → altura natural (padding), 43px pro date / 41px
-pro text, alinhados como dois campos normais lado a lado. `min-height:40px` mantido só como
-piso de alvo de toque (a altura natural já passa). A legenda **não** foi mexida — o problema
-era só a altura. `_sincronizarTravaScroll` e o resto de `1d00f5a`/`f124466` intocados.
+**Correção em 2 rodadas** (headless não reproduz nem a altura nem a largura reais do
+`<input type="date">` no WebKit iOS — as duas rodadas dependeram de screenshot de iPhone real):
+
+- **`78f343c`:** `flex:none; height:auto; min-height:40px` no `#modalContas .conta-campo
+  input` — mata o `flex-basis:132px` que virava altura. Resolveu os 132px mas no iPhone real o
+  campo de data ainda ficava ~2x mais alto que "Saldo inicial" (`height:auto` deixa o iOS usar
+  a altura intrínseca do controle nativo, maior que a de um `input[type=text]`) **e** mais
+  largo (com `.conta-campo{ flex:1 1 140px }`, a largura intrínseca grande do date no iOS
+  furava o `flex-basis` e roubava espaço do "Saldo inicial").
+- **2ª rodada (mesmo item, deploy `.12`):** duas mudanças pra igualar **largura E altura** ao "Saldo inicial":
+  - `.conta-campo{ flex:1 1 0; width:0; min-width:0 }` (era `flex:1 1 140px`) → os dois campos
+    dividem a linha **50/50 exatos**; `min-width:0` destrava o encolhimento abaixo da largura
+    intrínseca do controle.
+  - input: `height:42px; min-height:42px; max-height:42px` (era `height:auto; min-height:40px`)
+    → **altura fixa**, o iOS não infla. 42px casa com a altura natural do `input[type=text]`
+    ao lado (`padding:9px` + font 16px).
+
+A legenda **não** foi mexida em nenhuma das rodadas. `_sincronizarTravaScroll` e o resto de
+`1d00f5a`/`f124466` intocados.
 
 `#dataInput`, `#periodoDe`/`#periodoAte`, `#metaPrazo` **não** têm o bug: ficam em `label.chk`
 (`flex-direction:row`, `align-items:center`) ou direto na `.row` — lá o `flex:1 1 132px` é
 horizontal, como projetado. Só o `.conta-campo` é `flex-direction:column`.
 
-`test-modal-contas` **61 → 69 checks**: +8 medindo a altura do input de data vs. o input de
-texto ao lado (±10px) e um teto absoluto (< 70px) em cada viewport. Confirmado que os 8 falham
-no `main` limpo (data=132 vs texto=41) e passam com o fix (data=43). Suíte completa: 19
-scripts, 2 fail (só `test-dobra` CASO 4, data-dependente). `audit-modalcontas.js` (harness
-focado, fora da suíte, no scratchpad): m360/m390/m430/t768/t1023/d1280 × dark/light → 0
-problemas com o fix, 12/12 combos com o bug sem ele. **Auditoria visual completa
-(`audit-visual.js`, 406 combos tela × breakpoint × tema): 0 crítico / 0 moderado /
-0 cosmético.**
+`test-modal-contas` **61 → 73 checks**: +12 medindo altura E largura do input de data vs. o
+`input[type=text]` "Saldo inicial" ao lado (±6px cada) + teto de altura < 70px, em 4 viewports.
+Os checks de altura falham no `main` pré-`78f343c` (data=132 vs texto=41). **Limitação:** o
+check de largura passa em headless mesmo com `flex:1 1 140px` (Chromium não renderiza o date
+mais largo que 140px) — vale como guard de intenção, mas o desequilíbrio de largura só aparece
+no iOS. Suíte completa: 19 scripts, 2 fail (só `test-dobra` CASO 4, data-dependente).
+`audit-modalcontas.js` (harness focado, no scratchpad) + `dbg-largura.js` (mede os dois campos
+lado a lado): m360…d1280 × dark/light → largura e altura idênticas (0px de diferença).
+Auditoria visual completa (`audit-visual.js`, 406 combos): 0 crítico / 0 moderado / 0 cosmético.
 
-`APP_VERSION`/`CACHE` → **`2026-09-03.11`** (mudança visível). **Pendente:** confirmação no
-iPhone real do usuário — a altura do campo "Data do saldo" deve ficar visualmente igual à do
-"Saldo inicial" ao lado, sem a caixa enorme.
+`APP_VERSION`/`CACHE` → **`2026-09-03.12`** na 2ª rodada (a `.11` já tinha ido pro ar e sido
+vista num iPhone — o SW de quem já instalou só detecta a correção com um `CACHE` novo).
+**Pendente:** confirmação no iPhone real da `.12` — largura E altura do campo "Data do saldo"
+iguais às do "Saldo inicial" ao lado.
 
 ## Known pre-existing issues (candidates for a future round, not regressions)
 
