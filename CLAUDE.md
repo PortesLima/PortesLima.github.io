@@ -57,7 +57,9 @@ a única exceção ao arquivo único; ver "PWA / Service worker"), `.nojekyll`, 
 There **is** a test suite now — a set of standalone Playwright scripts kept in the session
 scratchpad (not committed; they drive `index.html` over `file://`). They are the real
 verification that a change works, and every change in the UX rounds was gated on them staying
-green. As of the last round there are ~315 checks across:
+green. As of the last round there are **~662 checks across 19 scripts** (`test-dobra` has 2
+known fails when the system date's day-of-month < 5 — the early-month guard in
+`renderDobraSaldo` suppresses the "apertado" branch; confirmed identical on clean `main`):
 
 - `test-trial` — trial countdown, soft-block, `podeEditar()`, sub-modal state (Fase 1)
 - `test-saldo-anterior` — the "Sobrou (com o mês anterior)" composition (3 lines + total) and
@@ -94,6 +96,19 @@ green. As of the last round there are ~315 checks across:
   aceita) → passo 2 abre o `#modalRapido`; lançar gasto OU fechar pelo × → passo 3 (sem estado
   preso); "Começar a usar" → `onboardingVisto` + aba Visão Geral; "pular este passo" / "pular
   tudo"; 2ª abertura não mostra nada
+- `test-modal-contas` (61 checks) — os 2 defeitos de iPhone real: legenda visível
+  ("Saldo inicial" / "Data do saldo") acima de cada campo em 4 viewports; input de data
+  ≥16px e dentro do card; sem scroll-x com o modal aberto; nada vaza pela direita; `body`
+  trava ao abrir e destrava + repõe a posição do scroll ao fechar; transição
+  onboarding→`#modalRapido` mantém a trava sem flicker
+- `test-responsivo` também recebeu 5 checks: o antigo "toast acima do FAB" na aba
+  Lançamentos ficou obsoleto (o FAB some lá) — reescrito para afirmar que o FAB some e
+  refazer a checagem toast-vs-FAB na Visão Geral, onde ele aparece
+- `audit-visual.js` (não é da suíte — é o harness de auditoria visual, 406 combos
+  tela × breakpoint × tema): `MEDIR()` tem uma checagem **#6** que simula a largura real
+  de `<input type=date|file>` no iOS (o Chromium headless os renderiza bem menores) e
+  flagra a linha que transbordaria; a defesa aceita é o input encolher (`max-width:100%`)
+  OU a label quebrar em coluna
 
 Harness notes: `playwright-core` (not full `playwright`) with the `msedge` channel works
 headless. Load over `file://`, click `#btnEntrarApp`, then dispensar `#modalOnboarding` —
@@ -629,7 +644,16 @@ Client-side only (`STORAGE_PIN`), gates the UI (`telaPin` overlay) but not the u
 it does not encrypt `window.storage` or the Drive file. Treat it as a screen lock, not real
 access control.
 
-### Rodada de correção da auditoria visual (12 itens, CSS/layout apenas)
+## Rodada de polimento mobile (3 commits, deployados juntos como `2026-09-02.10`)
+
+`aafd785` (auditoria visual) + `1d00f5a` (modal Contas no iPhone) + `f124466` (mais overflow
+mobile) subiram juntos em **03/09/2026** — `origin/main` = `f124466`, versão `.10`. Tudo
+CSS/layout + alguns atributos/classes de HTML; **nenhuma lógica de dados/cálculo/estado
+tocada**. As 3 seções abaixo detalham cada commit. **Pendente:** confirmação no iPhone real
+do usuário (faixa "Nova versão disponível", campo de data com legenda, modal sem vazar,
+frase da dobra, campos de anexo/backup, campo de data em Metas) + K3 (emoji `📈`).
+
+### Auditoria visual — 12 itens (`aafd785`)
 
 Após a auditoria visual (406 combinações tela × breakpoint × tema), 12 problemas distintos
 foram corrigidos numa passada só de CSS/layout — **nenhuma lógica de dados/estado tocada**.
@@ -677,22 +701,18 @@ espaço vazio nas laterais em telas ≥1600px (decorrência do `.wrap` max-width
 decisão mobile-first — só muda se a decisão de produto mudar).
 
 **Verificação:** re-rodada a auditoria visual (406 combos) → **0 crítico / 0 moderado /
-0 cosmético**, 406/406 limpos (era 94/406). Suíte completa: **18 scripts, ~601 checks,
-2 fail** — os 2 são o pré-existente `test-dobra` CASO 4 (falha quando `diaHoje < 5`; hoje é
-02/09, confirmado idêntico no `main` limpo via `git stash`), **zero regressão**.
-`test-responsivo` ganhou 5 checks novos: o antigo "toast acima do FAB" na aba Lançamentos
-virou obsoleto com o M3 (FAB some lá) — reescrito para (a) afirmar que o FAB some em
-Lançamentos e (b) refazer a checagem toast-vs-FAB na Visão Geral, onde o FAB aparece.
+0 cosmético**, 406/406 limpos (era 94/406).
 
 **Pendente de confirmação em aparelho real (K3):** o emoji `📈` do botão "ver evolução" da
 meta — **não foi investigado nem corrigido**, só ganhou `aria-label`. Aparece quebrado só no
 headless (sem fonte de emoji); provavelmente ok em uso real. Se estiver quebrado num
 navegador/celular normal, trocar por um ícone de traço.
 
-### Correção pós-deploy do `#modalContas` (evidência de iPhone real)
+### Modal Contas — 2 defeitos de iPhone real (`1d00f5a`)
 
 Dois defeitos vistos num iPhone (Safari **e** Chrome iOS — ambos WebKit) que o headless não
-reproduz:
+reproduz. **Contexto:** o site em produção estava em `.8` (sem a rodada da auditoria), então
+o usuário ainda pegava o modal sem `max-height` — os 2 abaixo entraram junto no mesmo deploy.
 
 - **Campo de data ("em [___]") aparecia vazio, sem placeholder.** Causa: `<input type="date">`
   no WebKit iOS **não mostra nenhum placeholder textual** quando `value` está vazio (Chromium
@@ -717,10 +737,10 @@ viewports; input de data ≥16px e dentro do card; sem scroll-x com o modal aber
 body trava ao abrir e destrava + repõe scroll ao fechar; transição onboarding→rápido mantém
 a trava sem flicker.
 
-### Mais overflow no mobile — frases longas e inputs de arquivo (iPhone real)
+### Mais overflow no mobile — frase da dobra + inputs de arquivo e de data (`f124466`)
 
-Depois do commit acima, o usuário achou mais dois pontos de overflow no celular que o
-headless (Chromium) não pega porque renderiza controles nativos menores que o WebKit iOS:
+Depois do commit acima, o usuário achou mais pontos de overflow no celular que o headless
+(Chromium) não pega porque renderiza controles nativos menores que o WebKit iOS:
 
 - **Faixa "Você tem hoje" / "Resultado do mês" (`.dobra-saldo`):** a frase de apoio
   `#dsSub` ("Estimativa do mês. Informe o saldo das contas para o valor exato.") ditava a
@@ -752,7 +772,14 @@ apareceu depois que `.dobra-saldo`/backup foram corrigidos.
 com esses controles no mobile: garantir que o input tem `flex:1 1 <base>; max-width:100%` OU
 que a label quebra em coluna — e conferir que a checagem #6 do `MEDIR()` passa.
 
-`APP_VERSION`/`CACHE` → `2026-09-02.10`.
+**Verificação das 3 rodadas:** suíte completa **19 scripts / ~662 checks, 2 fail** (só o
+`test-dobra` CASO 4 dependente da data — confirmado idêntico no `main` limpo). Última
+auditoria visual completa (v6): **0 crítico / 0 cosmético**; o único moderado (`#metaPrazo`)
+foi corrigido e re-checado. As ~80 telas de desktop da v7 não foram até o fim (canceladas —
+overflow de input iOS não acontece em desktop largo), mas m360/m390/m430 + todo o tablet
+(~330 combos) rodaram sem nenhum achado.
+
+`APP_VERSION`/`CACHE` → `2026-09-02.10` (deployado 03/09/2026).
 
 ## Known pre-existing issues (candidates for a future round, not regressions)
 
