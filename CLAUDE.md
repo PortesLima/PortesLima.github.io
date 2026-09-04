@@ -57,9 +57,11 @@ a única exceção ao arquivo único; ver "PWA / Service worker"), `.nojekyll`, 
 There **is** a test suite now — a set of standalone Playwright scripts kept in the session
 scratchpad (not committed; they drive `index.html` over `file://`). They are the real
 verification that a change works, and every change in the UX rounds was gated on them staying
-green. As of the last round there are **~662 checks across 19 scripts** (`test-dobra` has 2
-known fails when the system date's day-of-month < 5 — the early-month guard in
-`renderDobraSaldo` suppresses the "apertado" branch; confirmed identical on clean `main`):
+green. As of the last round there are **~700 checks across 20 scripts** (`test-dobra` has
+2–3 known fails when the system date's day-of-month < 5 — the early-month guard in
+`renderDobraSaldo` suppresses the "apertado" branch and the "configure contas" sub-line;
+`test-responsivo` has 1 known fail, "toast acima do FAB" on the max-density mobile case;
+all confirmed identical on clean `main`):
 
 - `test-trial` — trial countdown, soft-block, `podeEditar()`, sub-modal state (Fase 1)
 - `test-saldo-anterior` — the "Sobrou (com o mês anterior)" composition (3 lines + total) and
@@ -96,6 +98,12 @@ known fails when the system date's day-of-month < 5 — the early-month guard in
   aceita) → passo 2 abre o `#modalRapido`; lançar gasto OU fechar pelo × → passo 3 (sem estado
   preso); "Começar a usar" → `onboardingVisto` + aba Visão Geral; "pular este passo" / "pular
   tudo"; 2ª abertura não mostra nada
+- `test-categorias` (37 checks) — Gerenciar categorias: adicionar aparece nos 5 selects +
+  orçamento + tem cor da paleta; renomear padrão preserva vínculo em transações/orçamento/
+  recorrentes e herda a cor; excluir com uso pede destino e reatribui; padrão sem uso oculta
+  (constante intacta); `'Outros'` sem botão excluir; `editar()` de tx com categoria fora da
+  lista não troca em silêncio; `montarEstado` inclui o campo; ida-volta por
+  `aplicarDadosImportados` mantém `adicionadas`/`ocultas`; `normalizarCategoriasUsuario` tolera lixo
 - `test-modal-contas` (61 checks) — os 2 defeitos de iPhone real: legenda visível
   ("Saldo inicial" / "Data do saldo") acima de cada campo em 4 viewports; input de data
   ≥16px e dentro do card; sem scroll-x com o modal aberto; nada vaza pela direita; `body`
@@ -549,13 +557,52 @@ Store. Não iniciada.
 name (`t.conta`), never by object/id, so renaming an account silently orphans old transactions'
 display. `contasDetalhes` is a separate, sparse map (`{nome: {tipo, diaFechamento,
 diaVencimento}}`) holding extra config *only* for accounts marked as credit cards; most
-entries in `contas` have no corresponding `contasDetalhes` entry. `CATEGORIAS`/`CORES` are
-fixed constants, not user-editable data — they aren't persisted per-user.
+entries in `contas` have no corresponding `contasDetalhes` entry.
 
-`CATEGORIAS` holds **expense** categories only. Every income transaction has a fixed
-`categoria: 'Receita'` (the category dropdown is hidden for `tipo === 'receita'`), so
-`'Receita'` — and `'Transferência'` — are added manually as extra options in `filtroCategoria`
-(the Lançamentos category filter) on top of `CATEGORIAS`.
+`CATEGORIAS_PADRAO`/`CORES_PADRAO` hold the 12 built-in **expense** categories + their colours
+— **immutable** (a stale import/sync may reference any of them). Every income transaction has a
+fixed `categoria: 'Receita'` (the category dropdown is hidden for `tipo === 'receita'`), so
+`'Receita'` — and `'Transferência'` — are added manually as extra options in `filtroCategoria`.
+`CATEGORIAS`/`CORES` still exist as **aliases** of the `_PADRAO` constants for the little
+legacy code that reads them directly (`PALPITE_CATEGORIA`); the UI never does — see below.
+
+### Gerenciar categorias — user-editable category list
+
+`categoriasUsuario` (`{adicionadas:[{nome,cor}], renomes:{Padrão:'Novo nome'}, ocultas:['Doação']}`)
+is the user's personalization layer, wired through the **full state funnel** (top-level `let`,
+`STORAGE_CATEGORIAS`, `carregar()`, `montarEstado()`, `aplicarDadosImportados()` — which merges
+last-write-wins and already calls `popularSelectsEstaticos()`, so selects rebuild after sync;
+also `salvarCategorias()` mirroring `salvarContas`). `normalizarCategoriasUsuario()` coerces any
+blob into the shape and drops invalid entries (can't hide `'Outros'` or a non-padrão key).
+
+**Derived functions — the UI never touches `CATEGORIAS`/`CORES` directly:**
+- `categoriasAtivas()` → ordered visible expense categories: padrão (renamed, minus hidden) +
+  `adicionadas`. Replaces `CATEGORIAS` in all 5 selects (`#categoria`, `#recCategoria`,
+  `#filtroCategoria`, `#rapCategoria`, `orcEdit`) + the import modal + `editar()`.
+- `corCategoria(nome)` (by **effective** name) → added colour → `CORES_PADRAO` → padrão-via-
+  reverse-rename → `'#8b93a3'`. Replaces every `CORES[cat]` render point (table, donut,
+  `renderParaOnde`, `renderOrcamentos`, PDF via `pdfHexRgb(corCategoria(...))`).
+- `proximaCorCategoria()` picks the next unused colour from `PALETA_CATEGORIA` (12 tokens,
+  distinct from the padrão set, legible in both themes) — **auto-assigned**, no picker.
+
+**Modal** `#modalCategorias` (entry `🏷️ Gerenciar categorias` in `#menuConfig`, `editable-only`;
+picked up by `_sincronizarTravaScroll`'s observer automatically since it's in the initial HTML).
+`renderListaCategorias()` lists each active category with colour dot, rename input, usage count
+(`contarUsoCategoria` — tx + orçamento + recorrentes), delete `×` (not on `'Outros'`).
+- **Rename** (`renomearCategoria`): updates `renomes`/`adicionadas`, then `reatribuirCategoria(de,para)`
+  rewrites `t.categoria` in **`transacoes`**, `r.categoria` in **`recorrentes`**, and the key in
+  **`orcamentos`** (summing if the target already had a limit) → saves each touched store.
+- **Delete with usage** → `#categoriaMoverBox` asks for a destination category, `reatribuirCategoria`
+  moves everything, then removes. **Delete a padrão** just pushes it to `ocultas` (never removed
+  from `CATEGORIAS_PADRAO`) + clears its rename; delete an added one splices `adicionadas`.
+- `selecionarCategoriaNoSelect()` injects a transient `"X (fora da lista)"` option when a
+  transaction's category is hidden/long-renamed, so `editar()` never silently changes it.
+
+Tested in `test-categorias` (37 checks): add shows in all selects + orçamento; rename preserves
+the link in tx/orçamento/recorrentes + keeps the colour; delete-with-destination reassigns;
+padrão-without-use hides (constant intact); `'Outros'` protected; `montarEstado` includes the
+field; round-trip through `aplicarDadosImportados` keeps `adicionadas`/`ocultas`; `normalizar…`
+tolerates junk.
 
 ### Credit card invoice cycle math
 

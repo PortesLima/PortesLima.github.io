@@ -763,6 +763,32 @@
     </div>
   </div>
 
+  <div id="modalCategorias" class="modal-bg" style="display:none;">
+    <div class="modal-box" style="max-width:460px;">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;">Gerenciar categorias
+        <button class="iconbtn" style="font-size:20px;" onclick="fecharModalCategorias()" title="Fechar">&times;</button>
+      </h2>
+      <div style="font-size:11.5px; color:var(--muted); margin-bottom:10px;">Renomear mantém os lançamentos, orçamentos e contas fixas ligados à categoria. Categorias que você criar ficam disponíveis em todos os lançamentos.</div>
+      <div id="listaCategorias" style="margin-bottom:14px;"></div>
+      <div style="border-top:1px solid var(--border); padding-top:12px;">
+        <div class="row" style="align-items:center;">
+          <input type="text" id="novaCategoriaNome" placeholder="Nova categoria (ex: Pets, Viagem)" style="flex:1;" onkeydown="if(event.key==='Enter')adicionarCategoria()">
+          <span id="novaCategoriaCor" title="Cor atribuída automaticamente" style="width:20px; height:20px; border-radius:50%; flex:none; border:1px solid var(--border);"></span>
+          <button onclick="adicionarCategoria()">Adicionar</button>
+        </div>
+        <div id="categoriaErro" style="font-size:11.5px; color:var(--red); margin-top:6px; display:none;"></div>
+      </div>
+      <div id="categoriaMoverBox" style="display:none; border-top:1px solid var(--border); margin-top:12px; padding-top:12px;">
+        <div style="font-size:12.5px; margin-bottom:8px;" id="categoriaMoverTxt"></div>
+        <div class="row" style="align-items:center;">
+          <select id="categoriaMoverDestino" style="flex:1;"></select>
+          <button class="secondary" onclick="cancelarMoverCategoria()">Cancelar</button>
+          <button onclick="confirmarMoverCategoria()">Mover e excluir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="modalImportar" class="modal-bg" style="display:none;">
     <div class="modal-box">
       <h2 style="display:flex; justify-content:space-between; align-items:center;">Importar extrato
@@ -896,6 +922,7 @@
           <button class="so-mobile editable-only" onclick="abrirModalContas(); fecharMenuConfig()">💳 Contas e cartões</button>
           <button class="so-mobile editable-only" onclick="toggleMenuBackup(); fecharMenuConfig()">💾 Backup dos dados</button>
           <button class="so-mobile" id="btnTemaMenu" onclick="alternarTema()">🌙 Tema escuro</button>
+          <button class="editable-only" onclick="abrirModalCategorias(); fecharMenuConfig()">🏷️ Gerenciar categorias</button>
           <button onclick="configurarPin(); fecharMenuConfig()">🔒 PIN de acesso</button>
           <button id="btnMoeda" onclick="alternarMoeda()">💱 Moeda: BRL</button>
           <button id="btnNotif" onclick="ativarNotificacoes()">🔔 Notificações</button>
@@ -1254,6 +1281,7 @@ const STORAGE_ONBOARDING = 'onboardingVisto';
 const STORAGE_MOEDA = 'moeda';
 const STORAGE_CAMBIO_CACHE = 'cambioCache';
 const STORAGE_ASSINATURA = 'assinatura';
+const STORAGE_CATEGORIAS = 'categoriasUsuario';
 
 // ---- Assinatura (Fase 1: só trial + bloqueio, sem gateway) ----
 // { status, trialInicio, assinouEm }
@@ -1277,12 +1305,238 @@ let snapshotAnterior = null;
 let taxasCambio = { BRL:1, USD:1, EUR:1, GBP:1 };
 let cotacaoAtualizada = false;
 
-const CATEGORIAS = ['Moradia','Condomínio','Alimentação','Transporte','Lazer','Saúde','Educação','Assinaturas','Empréstimos','Financiamentos','Doação','Outros'];
-const CORES = {
+// Categorias PADRÃO — imutáveis. Nunca perdem entradas (um import/sync antigo pode
+// referenciar qualquer uma delas). O usuário pode ADICIONAR, RENOMEAR e OCULTAR via
+// "Gerenciar categorias", mas isso vive em `categoriasUsuario`, não aqui.
+const CATEGORIAS_PADRAO = ['Moradia','Condomínio','Alimentação','Transporte','Lazer','Saúde','Educação','Assinaturas','Empréstimos','Financiamentos','Doação','Outros'];
+const CORES_PADRAO = {
   Moradia:'#4d9eff', Condomínio:'#7c9cff', Alimentação:'#22c98a', Transporte:'#ffb84d', Lazer:'#a78bfa',
   Saúde:'#ff5c5c', Educação:'#38bdf8', Assinaturas:'#f472b6', Empréstimos:'#e0b23c',
   Financiamentos:'#c2703d', Doação:'#5fd4c4', Outros:'#8b93a3', Receita:'#22c98a'
 };
+// paleta para categorias NOVAS do usuário — tons distintos dos padrão, legíveis nos 2 temas.
+const PALETA_CATEGORIA = ['#e0723c','#3ca8a0','#b06fd8','#5c8ee0','#d84f8a','#6fbf4f','#d8a83c','#4fb0d8','#c25f5f','#8a7fd8','#7fb05f','#d86f9f'];
+// LEGADO: código que ainda lê `CATEGORIAS`/`CORES` direto (ex: PALPITE_CATEGORIA na carga).
+// A UI usa categoriasAtivas()/corCategoria(). Mantidos como aliases da base padrão.
+const CATEGORIAS = CATEGORIAS_PADRAO;
+const CORES = CORES_PADRAO;
+// Personalização do usuário. { adicionadas:[{nome,cor}], renomes:{Padrão:'Novo nome'}, ocultas:['Doação'] }
+// Entra no funil de estado (STORAGE_CATEGORIAS, montarEstado, aplicarDadosImportados).
+let categoriasUsuario = { adicionadas: [], renomes: {}, ocultas: [] };
+
+// nome efetivo de uma categoria padrão (aplica renome do usuário)
+function nomeCategoriaPadrao(padrao){
+  return (categoriasUsuario.renomes && categoriasUsuario.renomes[padrao]) || padrao;
+}
+// lista de categorias de GASTO visíveis, na ordem: padrão (renomeadas, menos ocultas) + adicionadas.
+function categoriasAtivas(){
+  const ocultas = new Set(categoriasUsuario.ocultas || []);
+  const base = CATEGORIAS_PADRAO.filter(c => !ocultas.has(c)).map(nomeCategoriaPadrao);
+  const extra = (categoriasUsuario.adicionadas || []).map(x => x.nome);
+  return [...base, ...extra];
+}
+// cor de qualquer categoria (por nome EFETIVO): adicionada → padrão (via renome reverso) → cinza.
+function corCategoria(nome){
+  const add = (categoriasUsuario.adicionadas || []).find(x => x.nome === nome);
+  if(add) return add.cor;
+  if(CORES_PADRAO[nome]) return CORES_PADRAO[nome];
+  // pode ser uma padrão renomeada: acha o padrão cujo nome efetivo é `nome`
+  const padrao = CATEGORIAS_PADRAO.find(p => nomeCategoriaPadrao(p) === nome);
+  if(padrao && CORES_PADRAO[padrao]) return CORES_PADRAO[padrao];
+  return '#8b93a3';
+}
+// próxima cor livre da paleta (não usada por nenhuma categoria adicionada)
+function proximaCorCategoria(){
+  const usadas = new Set((categoriasUsuario.adicionadas || []).map(x => x.cor));
+  return PALETA_CATEGORIA.find(c => !usadas.has(c)) || PALETA_CATEGORIA[(categoriasUsuario.adicionadas || []).length % PALETA_CATEGORIA.length];
+}
+// garante o shape { adicionadas:[], renomes:{}, ocultas:[] } a partir de qualquer entrada
+function normalizarCategoriasUsuario(v){
+  const base = { adicionadas: [], renomes: {}, ocultas: [] };
+  if(!v || typeof v !== 'object') return base;
+  if(Array.isArray(v.adicionadas)) base.adicionadas = v.adicionadas.filter(x => x && x.nome).map(x => ({ nome: String(x.nome), cor: x.cor || proximaCorCategoria() }));
+  if(v.renomes && typeof v.renomes === 'object') for(const [k,nv] of Object.entries(v.renomes)){ if(CATEGORIAS_PADRAO.includes(k) && nv && nv !== k) base.renomes[k] = String(nv); }
+  if(Array.isArray(v.ocultas)) base.ocultas = v.ocultas.filter(c => CATEGORIAS_PADRAO.includes(c) && c !== 'Outros');
+  return base;
+}
+async function salvarCategorias(){
+  await setJSON(STORAGE_CATEGORIAS, categoriasUsuario);
+  driveAgendarSync();
+}
+// põe `cat` como opção selecionada de um <select> de categoria, injetando uma opção
+// transitória se a categoria não estiver mais na lista ativa (oculta / renomeada há tempo,
+// mas ainda em lançamentos antigos) — evita que editar() troque a categoria em silêncio.
+function selecionarCategoriaNoSelect(sel, cat){
+  if(!cat) return;
+  if(![...sel.options].some(o => o.value === cat)){
+    const o = document.createElement('option');
+    o.value = cat; o.textContent = cat + ' (fora da lista)';
+    sel.appendChild(o);
+  }
+  sel.value = cat;
+}
+
+// ---- Gerenciar categorias (modal) ----
+// quantos lançamentos + orçamento + recorrentes usam uma categoria (por nome efetivo)
+function contarUsoCategoria(nome){
+  const tx = transacoes.filter(t => t.categoria === nome).length;
+  const orc = orcamentos[nome] ? 1 : 0;
+  const rec = recorrentes.filter(r => r.categoria === nome).length;
+  return { tx, orc, rec, total: tx + orc + rec };
+}
+// troca TODA referência a `de` por `para` em transacoes, orcamentos e recorrentes
+async function reatribuirCategoria(de, para){
+  let mexeuTx = false, mexeuOrc = false, mexeuRec = false;
+  transacoes.forEach(t => { if(t.categoria === de){ t.categoria = para; mexeuTx = true; } });
+  recorrentes.forEach(r => { if(r.categoria === de){ r.categoria = para; mexeuRec = true; } });
+  if(orcamentos[de] != null){
+    // se o destino já tem limite, soma; senão herda
+    orcamentos[para] = (orcamentos[para] || 0) + orcamentos[de];
+    delete orcamentos[de];
+    mexeuOrc = true;
+  }
+  if(mexeuTx) await salvarTx();
+  if(mexeuOrc) await salvarOrc();
+  if(mexeuRec) await salvarRec();
+}
+let _catMoverPendente = null; // { nome, ehPadrao, padraoOrigem }
+function abrirModalCategorias(){
+  if(!podeEditar()) return;
+  cancelarMoverCategoria();
+  document.getElementById('novaCategoriaNome').value = '';
+  document.getElementById('categoriaErro').style.display = 'none';
+  renderListaCategorias();
+  document.getElementById('modalCategorias').style.display = 'flex';
+}
+function fecharModalCategorias(){
+  document.getElementById('modalCategorias').style.display = 'none';
+  cancelarMoverCategoria();
+}
+function renderListaCategorias(){
+  document.getElementById('novaCategoriaCor').style.background = proximaCorCategoria();
+  const el = document.getElementById('listaCategorias');
+  // linhas: padrão visíveis (com nome efetivo) + adicionadas
+  const ocultas = new Set(categoriasUsuario.ocultas || []);
+  const linhas = [];
+  CATEGORIAS_PADRAO.forEach(p => {
+    if(ocultas.has(p)) return;
+    linhas.push({ chave: 'p:' + p, padraoOrigem: p, nome: nomeCategoriaPadrao(p), ehPadrao: true, cor: corCategoria(nomeCategoriaPadrao(p)) });
+  });
+  (categoriasUsuario.adicionadas || []).forEach((x, i) => {
+    linhas.push({ chave: 'a:' + i, idx: i, nome: x.nome, ehPadrao: false, cor: x.cor });
+  });
+  el.innerHTML = linhas.map(l => {
+    const uso = contarUsoCategoria(l.nome);
+    const podeExcluir = l.nome !== 'Outros';
+    const usoTxt = uso.total > 0 ? `${uso.tx} lançamento${uso.tx===1?'':'s'}${uso.orc?' · orçamento':''}${uso.rec?` · ${uso.rec} fixo${uso.rec===1?'':'s'}`:''}` : 'sem uso';
+    return `<div class="cat-row" style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);">
+      <span style="width:16px; height:16px; border-radius:50%; flex:none; background:${l.cor}; border:1px solid var(--border);"></span>
+      <input type="text" value="${escHtml(l.nome)}" data-chave="${l.chave}" aria-label="Nome da categoria"
+        style="flex:1; min-width:0;" onchange="renomearCategoria(this.dataset.chave, this.value)">
+      <span style="font-size:10.5px; color:var(--muted2); flex:none; white-space:nowrap;">${usoTxt}</span>
+      ${podeExcluir ? `<button class="iconbtn del" title="Excluir categoria" onclick="excluirCategoria('${l.chave}')">&times;</button>` : '<span style="width:28px; flex:none;"></span>'}
+    </div>`;
+  }).join('');
+}
+function _acharLinhaCat(chave){
+  if(chave.startsWith('p:')){ const p = chave.slice(2); return { ehPadrao:true, padraoOrigem:p, nome: nomeCategoriaPadrao(p) }; }
+  const i = parseInt(chave.slice(2));
+  const x = (categoriasUsuario.adicionadas || [])[i];
+  return x ? { ehPadrao:false, idx:i, nome:x.nome } : null;
+}
+async function renomearCategoria(chave, novoBruto){
+  const l = _acharLinhaCat(chave);
+  if(!l) return;
+  const novo = (novoBruto || '').trim();
+  if(!novo || novo === l.nome){ renderListaCategorias(); return; }
+  // colisão com outra categoria ativa
+  if(categoriasAtivas().some(c => c.toLowerCase() === novo.toLowerCase() && c !== l.nome)){
+    alert(`Já existe uma categoria "${novo}".`);
+    renderListaCategorias();
+    return;
+  }
+  const antigo = l.nome;
+  if(l.ehPadrao){
+    if(novo === l.padraoOrigem) delete categoriasUsuario.renomes[l.padraoOrigem];
+    else categoriasUsuario.renomes[l.padraoOrigem] = novo;
+  }else{
+    categoriasUsuario.adicionadas[l.idx].nome = novo;
+  }
+  await reatribuirCategoria(antigo, novo);
+  await salvarCategorias();
+  popularSelectsEstaticos();
+  renderListaCategorias();
+  render();
+  mostrarToast(`Categoria renomeada para "${escHtml(novo)}"`, {});
+}
+async function adicionarCategoria(){
+  const inp = document.getElementById('novaCategoriaNome');
+  const erroEl = document.getElementById('categoriaErro');
+  const nome = inp.value.trim();
+  const mostrarErro = m => { erroEl.textContent = m; erroEl.style.display = 'block'; };
+  if(!nome){ mostrarErro('Digite um nome para a categoria.'); return; }
+  if(nome.length > 30){ mostrarErro('Nome muito longo (máx. 30 caracteres).'); return; }
+  if([...categoriasAtivas(), 'Receita', 'Transferência'].some(c => c.toLowerCase() === nome.toLowerCase())){
+    mostrarErro(`Já existe uma categoria "${nome}".`); return;
+  }
+  categoriasUsuario.adicionadas.push({ nome, cor: proximaCorCategoria() });
+  await salvarCategorias();
+  inp.value = '';
+  erroEl.style.display = 'none';
+  popularSelectsEstaticos();
+  renderListaCategorias();
+  mostrarToast(`Categoria "${escHtml(nome)}" adicionada`, {});
+}
+function excluirCategoria(chave){
+  const l = _acharLinhaCat(chave);
+  if(!l || l.nome === 'Outros') return;
+  const uso = contarUsoCategoria(l.nome);
+  if(uso.total === 0){
+    _removerCategoria(l);
+    return;
+  }
+  // tem uso → pede categoria de destino
+  _catMoverPendente = { chave, nome: l.nome };
+  const destinos = categoriasAtivas().filter(c => c !== l.nome);
+  document.getElementById('categoriaMoverDestino').innerHTML = destinos.map(c => `<option>${escHtml(c)}</option>`).join('');
+  const partes = [];
+  if(uso.tx) partes.push(`${uso.tx} lançamento${uso.tx===1?'':'s'}`);
+  if(uso.orc) partes.push('o orçamento');
+  if(uso.rec) partes.push(`${uso.rec} conta${uso.rec===1?'':'s'} fixa${uso.rec===1?'':'s'}`);
+  document.getElementById('categoriaMoverTxt').innerHTML =
+    `<b>"${escHtml(l.nome)}"</b> tem ${partes.join(', ')}. Mover para qual categoria antes de excluir?`;
+  const box = document.getElementById('categoriaMoverBox');
+  box.style.display = 'block';
+  box.scrollIntoView({ block: 'nearest', behavior: _prefereMenosMovimento ? 'auto' : 'smooth' });
+}
+function cancelarMoverCategoria(){
+  _catMoverPendente = null;
+  const box = document.getElementById('categoriaMoverBox');
+  if(box) box.style.display = 'none';
+}
+async function confirmarMoverCategoria(){
+  if(!_catMoverPendente) return;
+  const l = _acharLinhaCat(_catMoverPendente.chave);
+  const destino = document.getElementById('categoriaMoverDestino').value;
+  if(!l || !destino) return;
+  await reatribuirCategoria(l.nome, destino);
+  _removerCategoria(l, `Categoria "${escHtml(l.nome)}" excluída · itens movidos para "${escHtml(destino)}"`);
+}
+async function _removerCategoria(l, msg){
+  if(l.ehPadrao){
+    // padrão nunca some da constante — só fica oculta; limpa qualquer renome
+    if(!categoriasUsuario.ocultas.includes(l.padraoOrigem)) categoriasUsuario.ocultas.push(l.padraoOrigem);
+    delete categoriasUsuario.renomes[l.padraoOrigem];
+  }else{
+    categoriasUsuario.adicionadas.splice(l.idx, 1);
+  }
+  await salvarCategorias();
+  cancelarMoverCategoria();
+  popularSelectsEstaticos();
+  renderListaCategorias();
+  render();
+  mostrarToast(msg || `Categoria "${escHtml(l.nome)}" excluída`, {});
+}
 
 let transacoes = [];
 let orcamentos = {};
@@ -1302,7 +1556,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.13';
+const APP_VERSION = '2026-09-03.14';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -1399,7 +1653,7 @@ function montarEstado(){
   return {
     transacoes, orcamentos, contas, contasDetalhes, metas, recorrentes, saldoContas, saldosIniciais, moeda: moedaAtual,
     tema: document.documentElement.getAttribute('data-theme') || 'dark',
-    assinatura
+    assinatura, categoriasUsuario
   };
 }
 async function driveApi(path, opts={}, jaTentouRenovar){
@@ -1463,9 +1717,13 @@ async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
       assinouEm
     };
   }
+  // Categorias do usuário: last-write-wins (mesmo critério do resto do blob). Normaliza
+  // o shape pra tolerar blobs antigos que não tinham o campo.
+  categoriasUsuario = normalizarCategoriasUsuario(dados.categoriasUsuario);
   if(dados.tema) aplicarTema(dados.tema);
   if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
   await setJSON(STORAGE_ASSINATURA, assinatura);
+  await setJSON(STORAGE_CATEGORIAS, categoriasUsuario);
   await setJSON(STORAGE_TX, transacoes);
   await setJSON(STORAGE_ORC, orcamentos);
   await setJSON(STORAGE_CONTAS, contas);
@@ -1711,9 +1969,18 @@ function descreverGrafico(canvasEl, texto){
 }
 
 function popularSelectsEstaticos(){
-  document.getElementById('categoria').innerHTML = CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
-  document.getElementById('recCategoria').innerHTML = CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
-  document.getElementById('filtroCategoria').innerHTML = '<option value="">Todas categorias</option><option>Receita</option><option>Transferência</option>' + CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
+  const cats = categoriasAtivas();
+  const opts = cats.map(c=>`<option>${escHtml(c)}</option>`).join('');
+  // preserva a escolha atual dos selects que não são reconstruídos a cada render
+  const preserva = (id, html) => {
+    const el = document.getElementById(id);
+    const antes = el.value;
+    el.innerHTML = html;
+    if(antes && [...el.options].some(o=>o.value===antes)) el.value = antes;
+  };
+  preserva('categoria', opts);
+  preserva('recCategoria', opts);
+  preserva('filtroCategoria', '<option value="">Todas categorias</option><option>Receita</option><option>Transferência</option>' + opts);
   document.getElementById('conta').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('contaDestino').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
   document.getElementById('contaFiltro').innerHTML = '<option value="">Todas as contas</option>' + contas.map(c=>`<option>${c}</option>`).join('');
@@ -1738,6 +2005,7 @@ async function carregar(){
   recorrentes = await getJSON(STORAGE_REC, []);
   saldoContas = await getJSON(STORAGE_SALDO_CONTAS, null);
   saldosIniciais = await getJSON(STORAGE_SALDOS_INICIAIS, {});
+  categoriasUsuario = normalizarCategoriasUsuario(await getJSON(STORAGE_CATEGORIAS, null));
   // migração: o antigo "saldo total das contas" (saldoContas) virou saldo inicial por conta.
   // Se o usuário tinha o valor antigo e nenhuma conta com saldo inicial ainda, joga o valor
   // na primeira conta para não perder a âncora da projeção. Roda só uma vez.
@@ -2055,7 +2323,7 @@ function abrirModalRapido(){
   document.getElementById('rapValor').value = '';
   document.getElementById('rapDesc').value = '';
   document.getElementById('rapConta').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
-  document.getElementById('rapCategoria').innerHTML = CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('rapCategoria').innerHTML = categoriasAtivas().map(c=>`<option>${escHtml(c)}</option>`).join('');
   document.getElementById('rapPalpite').textContent = '';
   document.getElementById('modalRapido').style.display = 'flex';
   setTimeout(()=>document.getElementById('rapValor').focus(), 50);
@@ -2109,7 +2377,7 @@ function editar(id){
   toggleCategoriaSel();
   document.getElementById('descricao').value = t.desc;
   document.getElementById('valor').value = t.valor.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
-  document.getElementById('categoria').value = t.categoria;
+  selecionarCategoriaNoSelect(document.getElementById('categoria'), t.categoria);
   document.getElementById('conta').value = t.conta || contas[0];
   document.getElementById('dataInput').value = t.data;
   document.getElementById('status').value = t.status || 'pago';
@@ -2252,10 +2520,10 @@ function toggleOrcEdit(){
   const abrir = el.style.display === 'none';
   el.style.display = abrir ? 'block' : 'none';
   if(abrir){
-    el.innerHTML = CATEGORIAS.map(c => `
+    el.innerHTML = categoriasAtivas().map(c => `
       <div class="orc-edit-row">
-        <label>${c}</label>
-        <input type="text" inputmode="decimal" value="${orcamentos[c] ? orcamentos[c].toLocaleString('pt-BR') : ''}" placeholder="sem limite" onchange="setOrcamento('${c}', this.value)">
+        <label>${escHtml(c)}</label>
+        <input type="text" inputmode="decimal" value="${orcamentos[c] ? orcamentos[c].toLocaleString('pt-BR') : ''}" placeholder="sem limite" data-cat="${escHtml(c)}" onchange="setOrcamento(this.dataset.cat, this.value)">
       </div>
     `).join('') + `<button class="small" style="margin-top:6px;" onclick="toggleOrcEdit()">Concluir</button>`;
   }
@@ -2649,7 +2917,7 @@ function render(){
   }else{
     const maiorValor = top5[0].valor;
     rankEl.innerHTML = top5.map((t,i)=>{
-      const corCat = CORES[t.categoria] || '#8b93a3';
+      const corCat = corCategoria(t.categoria);
       const pct = Math.round((t.valor/maiorValor)*100);
       return `<div class="orc-row">
         <div class="orc-label" style="width:22px; color:var(--muted); font-weight:600;">${i+1}º</div>
@@ -2676,7 +2944,7 @@ function render(){
       const cor = ehTransf ? 'blue' : (t.tipo==='receita' ? 'green' : 'red');
       const sinal = ehTransf ? (t.subtipo==='entrada' ? '⇄ +' : '⇄ −') : (t.tipo==='receita' ? '+' : '-');
       const [y,m,d] = t.data.split('-');
-      const corCat = ehTransf ? '#4d9eff' : (CORES[t.categoria] || '#8b93a3');
+      const corCat = ehTransf ? '#4d9eff' : corCategoria(t.categoria);
       const statusEf = statusEfetivo(t);
       const statusTag = ehTransf
         ? '<span class="tag" style="background:var(--blue-bg);color:var(--blue)">transferência</span>'
@@ -2745,7 +3013,7 @@ function renderChartFixoVar(gastoFixo, gastoVar){
 function renderChartCat(porCat){
   const labels = Object.keys(porCat);
   const data = Object.values(porCat);
-  const cores = labels.map(l => CORES[l] || '#8b93a3');
+  const cores = labels.map(l => corCategoria(l));
   const ctx = document.getElementById('chartCat');
   const vazioEl = document.getElementById('chartCatVazio');
   if(chartCat) chartCat.destroy();
@@ -2860,12 +3128,15 @@ function mediaCategoriaUltimosMeses(cat, nMeses){
 }
 function renderOrcamentos(porCat){
   const el = document.getElementById('orcamentos');
-  const cats = CATEGORIAS.filter(c => orcamentos[c] || porCat[c]);
+  const ordem = categoriasAtivas();
+  const todas = [...new Set([...ordem, ...Object.keys(orcamentos), ...Object.keys(porCat)])];
+  const cats = todas.filter(c => orcamentos[c] || porCat[c])
+    .sort((a,b)=>{ const ia=ordem.indexOf(a), ib=ordem.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
   if(cats.length === 0){ el.innerHTML = '<div class="empty">Defina um limite por categoria no botão "editar limites" acima.</div>'; return; }
   el.innerHTML = cats.map(c=>{
     const gasto = porCat[c] || 0;
     const limite = orcamentos[c];
-    const cor = CORES[c];
+    const cor = corCategoria(c);
     let pct = limite ? Math.min(100, (gasto/limite)*100) : 0;
     let corBarra = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : cor;
     const media = mediaCategoriaUltimosMeses(c, 3);
@@ -3397,8 +3668,8 @@ function renderParaOnde(porCat){
   let html = top.map(([cat,val]) => {
     const pct = Math.round(val/totalGasto*100);
     return `<div class="po-row">
-      <span class="po-dot" style="background:${CORES[cat]||'#8b93a3'}"></span>
-      <span class="po-nome">${cat}</span>
+      <span class="po-dot" style="background:${corCategoria(cat)}"></span>
+      <span class="po-nome">${escHtml(cat)}</span>
       <span class="po-valor">${fmt(val)}</span>
       <span class="po-pct">${pct}%</span>
     </div>`;
@@ -3858,7 +4129,7 @@ function pdfLinhaLancamento(doc, t, y, i, colX){
   doc.text(pdfTruncar(doc, t.desc, colX.cat - colX.desc - 4), colX.desc, y);
 
   // categoria como chip colorido (fundo claro da cor + texto na cor)
-  const cor = ehTransf ? PDF_COR.azul : pdfHexRgb(CORES[t.categoria]);
+  const cor = ehTransf ? PDF_COR.azul : pdfHexRgb(corCategoria(t.categoria));
   const cat = (t.categoria || '').substring(0, 16);
   doc.setFontSize(7.5);
   const chipW = doc.getTextWidth(cat) + 4;
@@ -3999,7 +4270,7 @@ function exportarPDFAnual(){
   Object.entries(porCategoria).sort((a,b) => b[1] - a[1]).forEach(([cat, total], i) => {
     if(y > Hp - 20){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano) + 2; }
     if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
-    const cor = pdfHexRgb(CORES[cat]);
+    const cor = pdfHexRgb(corCategoria(cat));
     doc.setFontSize(7.5);
     const chipW = doc.getTextWidth(cat) + 4;
     const temG = typeof doc.GState === 'function';
@@ -4105,7 +4376,7 @@ function exportarPDFIR(){
     catsOrd.forEach(([cat, total], i) => {
       y = quebra(y);
       if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
-      const cor = pdfHexRgb(CORES[cat]);
+      const cor = pdfHexRgb(corCategoria(cat));
       doc.setFontSize(7.5);
       const chipW = doc.getTextWidth(cat) + 4;
       const temG = typeof doc.GState === 'function';
@@ -4528,7 +4799,7 @@ function renderModalImportar(){
     + `<div style="font-size:11px; color:var(--muted2); margin-top:2px;">${fmtDataBR(datas[0])} a ${fmtDataBR(datas[datas.length-1])}`
     + (p.jaImportados > 0 ? ` · ${p.jaImportados} já estava(m) no app` : '') + `</div>`;
 
-  const opcoesCat = [...CATEGORIAS, 'Receita'].map(c => `<option value="${c}">${c}</option>`).join('');
+  const opcoesCat = [...categoriasAtivas(), 'Receita'].map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
   lista.innerHTML = p.itens.map((it, idx) => {
     const ehReceita = it.nova.valor >= 0;
     const cor = ehReceita ? 'var(--green)' : 'var(--red)';
