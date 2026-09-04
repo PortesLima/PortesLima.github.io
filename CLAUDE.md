@@ -652,6 +652,17 @@ padrão-without-use hides (constant intact); `'Outros'` protected; `montarEstado
 field; round-trip through `aplicarDadosImportados` keeps `adicionadas`/`ocultas`; `normalizar…`
 tolerates junk.
 
+**Pendente — confirmação em iPhone real (deployado como `.16`, 03/09/2026):** o `#modalCategorias`
+é um modal novo com lista rolável (`max-height:90vh`), inputs de texto em `.cat-row`
+(`display:flex`) e o `scrollIntoView` do `#categoriaMoverBox` — exatamente o perfil onde os
+bugs sutis só apareceram em WebKit real na rodada de polimento (o `<input type=date>` levou 3
+rodadas). Verificar no iPhone: (1) scroll dentro do modal com muitas categorias + trava do
+`body`; (2) abrir "mover para" numa categoria com lançamentos e ver o box rolar pra dentro da
+vista até os botões; (3) os inputs de renomear não transbordarem o card no flex row. O
+headless cobre o fluxo lógico, não o layout nativo iOS — mesma regra do "critério de pronto"
+para `<input>` nativo. Os botões "Ver pendentes/pagas" (Item A) e a linha "Próximo pagamento"
+(Item B) são CSS/layout mais simples, risco menor, mas valem um olhar no mesmo passe.
+
 ### Credit card invoice cycle math
 
 `calcularCicloFatura(diaFechamento, diaVencimento)` computes the currently-open billing cycle
