@@ -57,7 +57,7 @@ a única exceção ao arquivo único; ver "PWA / Service worker"), `.nojekyll`, 
 There **is** a test suite now — a set of standalone Playwright scripts kept in the session
 scratchpad (not committed; they drive `index.html` over `file://`). They are the real
 verification that a change works, and every change in the UX rounds was gated on them staying
-green. As of the last round there are **~700 checks across 20 scripts** (`test-dobra` has
+green. As of the last round there are **~745 checks across 21 scripts** (`test-dobra` has
 2–3 known fails when the system date's day-of-month < 5 — the early-month guard in
 `renderDobraSaldo` suppresses the "apertado" branch and the "configure contas" sub-line;
 `test-responsivo` has 1 known fail, "toast acima do FAB" on the max-density mobile case;
@@ -104,6 +104,13 @@ all confirmed identical on clean `main`):
   (constante intacta); `'Outros'` sem botão excluir; `editar()` de tx com categoria fora da
   lista não troca em silêncio; `montarEstado` inclui o campo; ida-volta por
   `aplicarDadosImportados` mantém `adicionadas`/`ocultas`; `normalizarCategoriasUsuario` tolera lixo
+- `test-contas-visao` (44 checks) — "Ver todas as pendentes/pagas": ignora o filtro de mês,
+  filtra por `statusEfetivo` em todo o histórico (pendente inclui vencido, transferência
+  nunca); ordenação (pendente asc por vencimento, paga desc); corte de 12 meses + "ver N
+  mais antiga(s)" (inclusive com lista vazia); tag "parada há N meses"; `visaoContas`
+  sobrevive a `render()` E a `desfazer()` (não reseta pro mês); marcar como pago da lista →
+  toast + Desfazer, item sai da lista mas a visão continua; filtro de conta respeitado;
+  soft-block esconde o `✓` sem guard extra
 - `test-modal-contas` (61 checks) — os 2 defeitos de iPhone real: legenda visível
   ("Saldo inicial" / "Data do saldo") acima de cada campo em 4 viewports; input de data
   ≥16px e dentro do card; sem scroll-x com o modal aberto; nada vaza pela direita; `body`
@@ -187,6 +194,14 @@ multi-item is risky) and get a toast without "Desfazer". Two quick actions in a 
 second toast replaces the first (first undo is lost) — intentional, like Gmail. The old
 `#btnDesfazer` header button is gone; `desfazer()` and `snapshotAnterior` remain, called by
 the toast.
+
+**`marcarComoPago(id)`** (the row `✓` button, and the "ver todas as pendentes" list) now goes
+through this funnel too — `salvarSnapshot()` + `commitTransacoes(msg, {comUndo:true})` — so a
+single mark-as-paid gets the toast + Desfazer, same as logging/deleting. This is not a
+technical necessity to update the month selector (`commitTransacoes` *and* `desfazer` already
+call `popularSeletorMes()`); it's the deliberate consistency choice. The **batch**
+`marcarSelecionadosComoPago()` keeps its `confirm()` + a plain `salvarTx()`/`render()` with no
+undo — blind undo on N items is the same risk as installments/transfers.
 
 ### Importação de extrato (OFX / CSV)
 
@@ -396,10 +411,24 @@ The **Visão Geral** tab (KPIs, all charts, alerts, budget-vs-actual) is always 
 `mesAtual`, the single month selected in the top dropdown — this is intentional and several
 calculations (month-over-month delta, same-month-last-year, daily burn rate) only make sense
 for exactly one month. The **Lançamentos** table is the one place that can show a wider slice:
-when a date-range filter or the search box has a value, the table switches to querying all of
-`transacoes` instead of just `mesAtual` (see the `periodoAtivo` / `buscaAtiva` branch in
-`render()`). Don't extend the wider-range behavior to the KPI cards — that would break the
-month-relative math.
+when a date-range filter, the search box, **or `visaoContas`** has a value, the table switches
+to querying all of `transacoes` instead of just `mesAtual` (see the `visaoContas` /
+`periodoAtivo` / `buscaAtiva` branch in `render()` — `visaoContas` wins over the others).
+Don't extend the wider-range behavior to the KPI cards — that would break the month-relative
+math.
+
+**"Ver todas as pendentes / pagas"** (2 buttons at the top of `#viewLista`,
+`alternarVisaoContas('pendente'|'pago')`): `visaoContas` + `visaoContasTudo` are session
+`let`s (not persisted), and — like `subAbaGeral` — survive `render()` and `desfazer()`
+untouched; `render()` re-applies the button/chip state via `aplicarEstadoVisaoContas()` at the
+end of the table block. When active, `baseTabela` is all of `transacoes` filtered by
+`statusEfetivo` (`'pendente'` view includes `'vencido'`; transfers always excluded), honouring
+the account filter. Default cut: last 12 months (`visaoContasCorte()`); `visaoContasAntigas`
+counts what's beyond it and a "ver N mais antiga(s)" row (`verVisaoContasAntigas()` →
+`visaoContasTudo = true`) expands it — that row must render even when `listaTabela` is empty
+but old items exist. Sort: `'pendente'` view is **ascending by date** (overdue first = most
+urgent); `'pago'` and normal mode are descending. Pendentes older than ~3 months get an amber
+"parada há N meses" tag. Tested in `test-contas-visao` (44 checks).
 
 ### Installments vs. recurring items — different data shapes
 

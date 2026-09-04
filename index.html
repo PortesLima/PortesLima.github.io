@@ -1204,6 +1204,11 @@
     </div>
 
     <div id="viewLista">
+      <div class="row" style="align-items:center;">
+        <button class="secondary" id="btnVisaoPendentes" onclick="alternarVisaoContas('pendente')">🟡 Ver todas as pendentes</button>
+        <button class="secondary" id="btnVisaoPagas" onclick="alternarVisaoContas('pago')">✓ Ver todas as pagas</button>
+        <span id="chipVisaoContas" style="display:none; font-size:11.5px; color:var(--muted);"></span>
+      </div>
       <div class="row">
         <input type="text" id="busca" placeholder="Buscar por descrição (em todos os meses)..." oninput="renderDebounced()">
         <select id="filtroCategoria" onchange="render()"><option value="">Todas categorias</option><option>Receita</option></select>
@@ -1556,7 +1561,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.14';
+const APP_VERSION = '2026-09-03.15';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -2484,6 +2489,51 @@ function mudarAba(aba){
   document.getElementById('viewDicas').style.display = aba==='dicas' ? 'block' : 'none';
 }
 
+// "Ver todas as pendentes / pagas" — a tabela de Lançamentos ignora o filtro de mês e
+// mostra TODAS as transações do status pedido (pendente = inclui vencido). Estado de sessão,
+// não persiste; sobrevive a render()/desfazer() como subAbaGeral. Por padrão limita aos
+// últimos 12 meses (visaoContasTudo expande). Nula = comportamento normal (escopo do mês).
+let visaoContas = null;        // 'pendente' | 'pago' | null
+let visaoContasTudo = false;   // false = só últimos 12 meses
+function alternarVisaoContas(status){
+  visaoContas = (visaoContas === status) ? null : status;
+  visaoContasTudo = false;
+  aplicarEstadoVisaoContas();
+  render();
+}
+function limparVisaoContas(){
+  visaoContas = null;
+  visaoContasTudo = false;
+  aplicarEstadoVisaoContas();
+  render();
+}
+function verVisaoContasAntigas(){
+  visaoContasTudo = true;
+  render();
+}
+// data-limite do corte de 12 meses (YYYY-MM-DD do primeiro dia, 12 meses atrás)
+function visaoContasCorte(){
+  const h = new Date();
+  const d = new Date(h.getFullYear(), h.getMonth() - 12, 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+}
+function aplicarEstadoVisaoContas(){
+  const bp = document.getElementById('btnVisaoPendentes');
+  const bg = document.getElementById('btnVisaoPagas');
+  const chip = document.getElementById('chipVisaoContas');
+  if(!bp || !bg || !chip) return;
+  // botão ativo perde a classe .secondary → fica sólido (destaque)
+  bp.classList.toggle('secondary', visaoContas !== 'pendente');
+  bg.classList.toggle('secondary', visaoContas !== 'pago');
+  if(visaoContas){
+    chip.style.display = 'inline';
+    const rot = visaoContas === 'pendente' ? 'pendentes' : 'pagas';
+    chip.innerHTML = `mostrando <b>todas as ${rot}</b> · <span role="button" tabindex="0" style="text-decoration:underline;cursor:pointer" onclick="limparVisaoContas()">voltar ao mês</span>`;
+  }else{
+    chip.style.display = 'none';
+  }
+}
+
 // sub-abas Resumo/Análise dentro da Visão geral. Estado de sessão (não persiste):
 // todo mundo abre o app querendo o resumo primeiro.
 let subAbaGeral = 'resumo';
@@ -2678,9 +2728,10 @@ function filtrarTransacoes(lista){
 function marcarComoPago(id){
   const t = transacoes.find(x=>x.id===id);
   if(!t) return;
+  salvarSnapshot();
   t.status = 'pago';
-  salvarTx();
-  render();
+  // mesmo funil de lançar/excluir: snapshot → persiste → seletor de mês → render → toast+undo
+  commitTransacoes(`✓ "${escHtml(t.desc)}" marcado como pago`, { comUndo: true });
 }
 
 function duplicarLancamento(id){
@@ -2751,10 +2802,25 @@ function render(){
   const doMes = filtrarTransacoes(todasDoMes);
 
   const buscaAtiva = !!(document.getElementById('busca').value||'').trim();
-  const baseTabela = (periodoAtivo || buscaAtiva)
+  // "Ver todas as pendentes/pagas": ignora o mês, filtra por status em todo o histórico.
+  // Vive junto do branch de período/busca — os três quebram o escopo-mês da tabela.
+  const corteVisao = (visaoContas && !visaoContasTudo) ? visaoContasCorte() : null;
+  const noStatusDaVisao = t => {
+    if(t.tipo === 'transferencia') return false;
+    if(conta && t.conta !== conta) return false;
+    const st = statusEfetivo(t);
+    return visaoContas === 'pendente' ? st !== 'pago' : st === 'pago';
+  };
+  const baseTabela = visaoContas
+    ? transacoes.filter(t => noStatusDaVisao(t) && (!corteVisao || t.data >= corteVisao))
+    : (periodoAtivo || buscaAtiva)
     ? transacoes.filter(t => (!conta || t.conta===conta) && (!periodoDe || t.data>=periodoDe) && (!periodoAte || t.data<=periodoAte))
     : todasDoMes;
   const listaTabela = filtrarTransacoes(baseTabela);
+  // quantos ficaram de fora pelo corte de 12 meses (só na visão de contas)
+  const visaoContasAntigas = corteVisao
+    ? transacoes.filter(t => noStatusDaVisao(t) && t.data < corteVisao).length
+    : 0;
 
   const receitas = todasDoMes.filter(t=>t.tipo==='receita');
   const gastos = todasDoMes.filter(t=>t.tipo==='gasto');
@@ -2934,11 +3000,20 @@ function render(){
   corpo.innerHTML = '';
   document.getElementById('barraSelecao').style.display = 'none';
   document.getElementById('checkTodos').checked = false;
-  if(listaTabela.length === 0){
+  // na visão de contas com corte de 12 meses, a lista pode estar vazia mas ainda haver
+  // itens antigos para expandir — então o "vazio" só aparece se não houver nem antigos.
+  if(listaTabela.length === 0 && visaoContasAntigas === 0){
     vazio.style.display = 'block';
   }else{
     vazio.style.display = 'none';
-    listaTabela.slice().sort((a,b)=>b.data.localeCompare(a.data)).forEach(t=>{
+    // na visão "pendentes" ordena por vencimento mais próximo primeiro (faz sentido p/ ação);
+    // "pagas" e o modo normal ordenam por data mais recente primeiro.
+    const ordenada = listaTabela.slice().sort(
+      visaoContas === 'pendente'
+        ? (a,b)=>a.data.localeCompare(b.data)
+        : (a,b)=>b.data.localeCompare(a.data)
+    );
+    ordenada.forEach(t=>{
       const tr = document.createElement('tr');
       const ehTransf = t.tipo === 'transferencia';
       const cor = ehTransf ? 'blue' : (t.tipo==='receita' ? 'green' : 'red');
@@ -2953,9 +3028,15 @@ function render(){
         : statusEf === 'pendente'
           ? '<span class="tag" style="background:var(--amber-bg);color:var(--amber)">pendente</span>'
           : '<span class="tag" style="background:var(--green-bg);color:var(--green)">pago</span>';
+      // na visão "pendentes", marca as que estão paradas há muito tempo (provável esquecimento)
+      let tagAntiga = '';
+      if(visaoContas === 'pendente'){
+        const meses = Math.floor(diasEntre(t.data, hojeISO()) / 30);
+        if(meses >= 3) tagAntiga = ` <span class="tag" style="background:var(--amber-bg);color:var(--amber)">parada há ${meses} meses</span>`;
+      }
       tr.innerHTML = `
         <td class="col-check editable-only"><label><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" aria-label="Selecionar lançamento" ${(statusEf==='pago'||ehTransf)?'disabled':''}></label></td>
-        <td class="col-desc">${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
+        <td class="col-desc">${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}${tagAntiga}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
         <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corCat}">${t.categoria}</span></td>
         <td class="col-conta" data-label="Conta" style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
         <td class="col-status" data-label="Status">${statusTag}</td>
@@ -2970,7 +3051,17 @@ function render(){
       `;
       corpo.appendChild(tr);
     });
+    // corte de 12 meses na visão de contas: oferece expandir
+    if(visaoContasAntigas > 0){
+      const tr = document.createElement('tr');
+      tr.className = 'linha-ver-antigas';
+      tr.innerHTML = `<td colspan="7" style="text-align:center; padding:10px; color:var(--muted);">
+        <span role="button" tabindex="0" style="text-decoration:underline; cursor:pointer;" onclick="verVisaoContasAntigas()">ver ${visaoContasAntigas} mais antiga(s) — antes dos últimos 12 meses</span>
+      </td>`;
+      corpo.appendChild(tr);
+    }
   }
+  aplicarEstadoVisaoContas();
 
   // gastos por categoria
   const porCat = {};
