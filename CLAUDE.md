@@ -57,11 +57,12 @@ a única exceção ao arquivo único; ver "PWA / Service worker"), `.nojekyll`, 
 There **is** a test suite now — a set of standalone Playwright scripts kept in the session
 scratchpad (not committed; they drive `index.html` over `file://`). They are the real
 verification that a change works, and every change in the UX rounds was gated on them staying
-green. As of the last round there are **~745 checks across 21 scripts** (`test-dobra` has
+green. As of the last round there are **~770 checks across 22 scripts** (`test-dobra` has
 2–3 known fails when the system date's day-of-month < 5 — the early-month guard in
 `renderDobraSaldo` suppresses the "apertado" branch and the "configure contas" sub-line;
 `test-responsivo` has 1 known fail, "toast acima do FAB" on the max-density mobile case;
-all confirmed identical on clean `main`):
+`test-fimdomes` can flake by 1 for a single run if executed across the local midnight
+boundary — re-run settles it; all confirmed identical on clean `main`):
 
 - `test-trial` — trial countdown, soft-block, `podeEditar()`, sub-modal state (Fase 1)
 - `test-saldo-anterior` — the "Sobrou (com o mês anterior)" composition (3 lines + total) and
@@ -111,6 +112,11 @@ all confirmed identical on clean `main`):
   sobrevive a `render()` E a `desfazer()` (não reseta pro mês); marcar como pago da lista →
   toast + Desfazer, item sai da lista mas a visão continua; filtro de conta respeitado;
   soft-block esconde o `✓` sem guard extra
+- `test-proximo-pagamento` (26 checks) — a linha "Próximo pagamento" no card "Fim do mês":
+  `proximoPagamento()` = próximo `gasto` pendente com `data >= hoje` (ignora vencido, receita,
+  transferência); independente do mês selecionado; empate no dia = soma + "e mais N"; cor por
+  proximidade (hoje/≤5 dias/neutro); marcar como pago → linha avança pro seguinte; some sem
+  pendentes e fora do mês corrente; respeita filtro de conta; não cria transação
 - `test-modal-contas` (61 checks) — os 2 defeitos de iPhone real: legenda visível
   ("Saldo inicial" / "Data do saldo") acima de cada campo em 4 viewports; input de data
   ≥16px e dentro do card; sem scroll-x com o modal aberto; nada vaza pela direita; `body`
@@ -472,8 +478,21 @@ Two adjacent elements at the top of Resumo, both current-month-only (hidden othe
   collapsible on mobile (`detalheLivreAberto`, session `let`, "ver detalhe"), always expanded
   on desktop.
 
-The two answer different questions on purpose (how much I *have* / how much *is left after
-paying what's due*) — kept visually distinct: band is blue, headline is green/red.
+- **"Próximo pagamento"** — a full-width line at the bottom of the same card (`#livreProximo`,
+  own top border, *not* inside the collapsible breakdown so it stays visible on mobile).
+  `proximoPagamento()` (near `renderLivreParaGastar`) returns the next pending **`gasto`**
+  (`status === 'pendente'`, `data >= hoje`) across all of `transacoes` — **independent of the
+  selected month** (viewing August still shows a September due date), honouring the account
+  filter; transfers/receitas never count; an already-overdue bill (`data < hoje`) is excluded
+  (it's in the alerts, not "próximo a vencer"). Ties on the nearest day are summed ("Aluguel e
+  mais 2 · R$ X"). Colour by proximity: red = today, amber ≤ 5 days, neutral beyond. It's
+  read-only math on status/date — creates nothing, no double-counting. `renderProximoPagamento()`
+  is called from `renderLivreParaGastar()`, so marking the next bill paid (Item A's toast flow)
+  re-renders and the line advances to the following one. Hidden with the whole card when
+  `mesAtual !== chaveCorrente`. Tested in `test-proximo-pagamento` (26 checks).
+
+The band and headline answer different questions on purpose (how much I *have* / how much *is
+left after paying what's due*) — kept visually distinct: band is blue, headline is green/red.
 `renderProjecaoSaldo()` uses the same two-step anchor.
 
 ### Per-account balances

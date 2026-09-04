@@ -174,6 +174,14 @@
   .livre-breakdown .lb-row b{ color:var(--text); font-weight:600; }
   .livre-breakdown .lb-row.total{ border-top:1px solid var(--border); padding-top:5px; margin-top:2px; color:var(--text); }
   .livre-breakdown .lb-row.sub{ font-size:11px; color:var(--muted2); padding-left:10px; }
+  .livre-proximo{
+    flex:1 1 100%; border-top:1px solid var(--border); padding-top:10px; margin-top:2px;
+    font-size:12.5px; color:var(--muted); display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
+  }
+  .livre-proximo b{ color:var(--text); font-weight:600; }
+  .livre-proximo .lp-dias{ font-weight:600; }
+  .livre-proximo .lp-dias.perto{ color:var(--amber); }
+  .livre-proximo .lp-dias.hoje{ color:var(--red); }
   @media(max-width:599px){
     .livre-value{ font-size:28px; }
     .livre-card{ padding:15px 16px; gap:12px; }
@@ -987,6 +995,7 @@
       <button type="button" class="livre-toggle" id="livreToggle" onclick="toggleDetalheLivre()" aria-expanded="false">ver detalhe</button>
     </div>
     <div class="livre-breakdown" id="livreBreakdown"></div>
+    <div class="livre-proximo" id="livreProximo" style="display:none;"></div>
   </div>
 
   <div class="card" id="cardEsteMes" style="margin-bottom:14px;">
@@ -1561,7 +1570,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.15';
+const APP_VERSION = '2026-09-03.16';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -3715,7 +3724,45 @@ function renderLivreParaGastar(){
   if(!partidaReal) linhas.push(`<div class="lb-row sub"><span>Informe o saldo das suas contas em <b role="button" tabindex="0" style="text-decoration:underline;cursor:pointer" onclick="abrirModalContas()">Contas</b> para o número exato.</span></div>`);
   document.getElementById('livreBreakdown').innerHTML = linhas.join('');
 
+  renderProximoPagamento();
   aplicarEstadoDetalheLivre();
+}
+
+// próximo gasto pendente a vencer a partir de hoje — independente do mês selecionado.
+// respeita o filtro de conta. empate no mesmo dia: soma o dia inteiro. null = nada pendente.
+function proximoPagamento(){
+  const hoje = hojeISO();
+  const conta = contaAtivaFiltro();
+  const pendentes = transacoes
+    .filter(t => t.tipo === 'gasto' && (t.status || 'pago') === 'pendente' && t.data >= hoje && (!conta || t.conta === conta))
+    .sort((a,b) => a.data.localeCompare(b.data));
+  if(pendentes.length === 0) return null;
+  const dataProx = pendentes[0].data;
+  const doDia = pendentes.filter(t => t.data === dataProx);
+  return {
+    data: dataProx,
+    dias: diasEntre(hoje, dataProx),
+    valor: doDia.reduce((s,t) => s + t.valor, 0),
+    desc: doDia[0].desc,
+    qtd: doDia.length,
+    conta: doDia[0].conta || null
+  };
+}
+function renderProximoPagamento(){
+  const el = document.getElementById('livreProximo');
+  const p = proximoPagamento();
+  if(!p){ el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  const [,m,d] = p.data.split('-');
+  const dataBR = `${d}/${m}`;
+  const quando = p.dias === 0 ? 'vence hoje'
+    : p.dias === 1 ? 'vence amanhã'
+    : `vence em ${p.dias} dias`;
+  const classeDias = p.dias === 0 ? 'hoje' : p.dias <= 5 ? 'perto' : '';
+  const alvo = p.qtd > 1
+    ? `<b>${escHtml(p.desc)}</b> e mais ${p.qtd - 1}`
+    : `<b>${escHtml(p.desc)}</b>`;
+  el.innerHTML = `<span>⏭</span><span>Próximo: ${alvo} · ${fmt(p.valor)} · <span class="lp-dias ${classeDias}">${quando}</span> (${dataBR})</span>`;
 }
 
 // mostra o saldo atual de cada conta que tem saldo inicial informado.
