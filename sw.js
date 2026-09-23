@@ -6,7 +6,7 @@
 // CACHE: bumpar JUNTO com APP_VERSION no index.html a cada deploy que os usuários precisem
 // ver na hora. Trocar este byte faz o browser detectar o SW novo, precachear o index.html
 // novo e apagar os caches antigos no 'activate'.
-const CACHE = 'bolso-certo-2026-09-03.16';
+const CACHE = 'bolso-certo-2026-09-23.17';
 const SHELL = ['./', './index.html'];
 
 self.addEventListener('install', (e) => {
@@ -26,6 +26,16 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('message', (e) => {
   if (e.data === 'skip-waiting') self.skipWaiting();
+});
+
+// Toque na notificação (contas vencidas / vence hoje) → foca o app aberto ou abre um novo.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const abertos = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (abertos.length) return abertos[0].focus();
+    return self.clients.openWindow('./');
+  })());
 });
 
 self.addEventListener('fetch', (e) => {

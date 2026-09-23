@@ -1570,7 +1570,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.16';
+const APP_VERSION = '2026-09-23.17';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -5326,8 +5326,30 @@ async function concluirOnboarding(via){
 });
 
 // ---- Notificações do navegador ----
+// No celular (Chrome Android, PWA instalada no iOS) o construtor de Notification lança
+// "Illegal constructor" — lá só funciona via service worker (reg.showNotification). Por isso
+// toda notificação passa por notificar(): tenta o SW primeiro, cai no construtor no desktop.
+// Nunca lança (antes o throw no celular interrompia o resto de carregar()).
+function notificar(titulo, corpo){
+  const icone = document.querySelector('link[rel="apple-touch-icon"]');
+  const opts = { body: corpo, tag: 'bolso-certo-' + titulo, icon: icone ? icone.href : undefined };
+  const viaConstrutor = () => { try { new Notification(titulo, opts); } catch(_) {} };
+  if('serviceWorker' in navigator && navigator.serviceWorker.getRegistration){
+    navigator.serviceWorker.getRegistration()
+      .then(reg => reg && reg.showNotification ? reg.showNotification(titulo, opts) : viaConstrutor())
+      .catch(viaConstrutor);
+  }else{
+    viaConstrutor();
+  }
+}
 function ativarNotificacoes(){
-  if(!('Notification' in window)){ alert('Seu navegador não suporta notificações.'); return; }
+  if(!('Notification' in window)){
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    alert(ios
+      ? 'No iPhone, as notificações só funcionam com o Bolso Certo instalado na tela de início: no Safari, toque em Compartilhar → "Adicionar à Tela de Início", abra o app por lá e ative de novo.'
+      : 'Seu navegador não suporta notificações.');
+    return;
+  }
   if(Notification.permission === 'granted'){
     alert('Notificações já estão ativadas neste navegador.');
     verificarNotificacoesPendentes(true);
@@ -5336,7 +5358,7 @@ function ativarNotificacoes(){
   Notification.requestPermission().then(perm=>{
     if(perm === 'granted'){
       document.getElementById('btnNotif').textContent = '🔔 Ativadas';
-      new Notification('Bolso Certo', {body:'Notificações ativadas! Você será avisado sobre contas a vencer enquanto o app estiver aberto.'});
+      notificar('Bolso Certo', 'Notificações ativadas! Você será avisado sobre contas a vencer quando abrir o app.');
       verificarNotificacoesPendentes(true);
     }else{
       alert('Permissão de notificação negada.');
@@ -5350,13 +5372,13 @@ function verificarNotificacoesPendentes(forcarMsg){
   const vencidos = transacoes.filter(t => statusEfetivo(t)==='vencido');
   const aVencerHoje = transacoes.filter(t => (t.status||'pago')==='pendente' && t.data===hoje);
   if(vencidos.length>0){
-    new Notification('Contas vencidas', {body:`Você tem ${vencidos.length} conta(s) vencida(s) no Bolso Certo.`});
+    notificar('Contas vencidas', `Você tem ${vencidos.length} conta(s) vencida(s) no Bolso Certo.`);
   }
   if(aVencerHoje.length>0){
-    new Notification('Vence hoje', {body:`${aVencerHoje.length} pagamento(s) vencem hoje: ${aVencerHoje.map(t=>t.desc).join(', ')}.`});
+    notificar('Vence hoje', `${aVencerHoje.length} pagamento(s) vencem hoje: ${aVencerHoje.map(t=>t.desc).join(', ')}.`);
   }
   if(forcarMsg && vencidos.length===0 && aVencerHoje.length===0){
-    new Notification('Tudo em dia', {body:'Nenhuma conta vencida ou vencendo hoje.'});
+    notificar('Tudo em dia', 'Nenhuma conta vencida ou vencendo hoje.');
   }
 }
 
