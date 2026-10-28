@@ -672,6 +672,41 @@ diaFechamento`, same month otherwise. This is pure date arithmetic with no year-
 special-casing beyond normal `Date` rollover — if you touch it, re-verify with cases spanning
 Dec→Jan and short months (Feb).
 
+### `hojeISO()` = data LOCAL
+
+`hojeISO()` monta `YYYY-MM-DD` com `getFullYear/getMonth/getDate` (local), **não** com
+`toISOString()` (UTC): em UTC−3, das 21h à meia-noite o UTC já é o dia seguinte e uma conta que
+vence hoje virava `vencido` / `mesAtual` pulava de mês. A única outra `toISOString` (carimbo de
+`exportadoEm`) é só metadado — não mexer. Testado em `test-hoje-local` (relógio fixo 23:30 BRT).
+
+### Avisos de vencimento (banner + notificação do navegador)
+
+- **`contasParaAvisar()`** (perto de `proximoPagamento`) → `{hoje, proximos, atrasadas}`: só
+  `tipo==='gasto'` + `status` pendente; `diasEntre(hoje, t.data)` = 0 / 1..`JANELA_AVISO_DIAS`(3) / <0.
+  **Ignora o filtro de conta do topo** (lembrete não pode esconder conta). Atrasadas sem corte de 12
+  meses (o "Ver" leva à lista do Item A, que já trata o histórico antigo). `avisosAtivos()` = o mesmo,
+  filtrado pelas preferências.
+- **Preferências** `avisosVencimento` (`{hoje, proximos, atrasadas}`, padrão tudo `true`), no funil
+  completo de estado (`STORAGE_AVISOS`, `carregar`, `montarEstado`, `aplicarDadosImportados`,
+  `normalizarAvisosVencimento` tolera blob antigo/lixo). Editadas no `#modalAvisos` (menu ⚙️ →
+  "🔔 Avisos de vencimento", **sem** `editable-only`, funciona em readonly/bloqueado).
+- **Banner** `#barraVencimentos` (zona global de barras, logo após `#barraAtualizar`; qualquer aba),
+  desenhado por `renderBarraVencimentos()` chamada de **`render()`** (muda ao marcar como pago).
+  Âmbar (`urgente`) com atrasada/hoje, neutro só com próximos. Texto via `textContent`. **Ver**
+  (`verContasAvisadas`) *força* `visaoContas='pendente'` (não alterna, ao contrário de
+  `alternarVisaoContas`) e abre Lançamentos.
+- **Dispensar (✕)**: `localStorage` `bc_aviso_venc_dispensado` = `{dia, ids}`, **fora** do funil de
+  sync (por aparelho). Oculto se `dia===hoje` e todos os ids atuais ∈ `ids`; reaparece no dia seguinte
+  ou com conta nova na janela; marcar como paga **não** reabre.
+- **Notificação do navegador** (`verificarNotificacoesPendentes`) agora usa as mesmas regras e
+  preferências: uma `Notification` por tipo ligado com contagem > 0. **Mudança de comportamento:**
+  antes contava receita pendente como "conta vencida"; agora só gastos. `#btnNotif` não existe mais —
+  o status (ativado/negado) vive no `#modalAvisos`.
+- Sem evento de telemetria novo. Testes: `test-avisos-vencimento` (33 checks).
+- **Pendente de confirmação em aparelho real (iPhone):** `#modalAvisos` (checkbox/labels, scroll) e o
+  banner com as 3 barras empilhadas (trial + atualizar + vencimentos). Headless não cobre o layout
+  nativo iOS.
+
 ### History start marker
 
 `HISTORICO_INICIO` (`'2026-07'`, a `YYYY-MM` string near the top of the script) is the zero

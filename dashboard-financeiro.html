@@ -593,6 +593,11 @@
   .barra-trial.urgente b{ color:inherit; }
   .barra-trial button{ padding:6px 12px; font-size:12px; flex-shrink:0; }
   .barra-trial button.secondary{ background:var(--card); }
+  #barraVencimentos .bv-txt{ flex:1 1 200px; min-width:0; overflow-wrap:anywhere; }
+  #barraVencimentos .bv-acoes{ display:flex; gap:8px; flex-shrink:0; }
+  @media (max-width:1023px){ #barraVencimentos button{ min-height:44px; min-width:44px; } }
+  .aviso-op{ display:flex; align-items:center; gap:10px; min-height:44px; font-size:14px; color:var(--text); cursor:pointer; }
+  .aviso-op input{ flex:none; width:20px; height:20px; margin:0; }
   .empty-chart{ display:flex; align-items:center; justify-content:center; height:200px; color:var(--muted); font-size:12.5px; text-align:center; padding:0 20px; }
   .chart-wrap{position:relative; height:200px; margin-bottom:6px;}
 
@@ -797,6 +802,24 @@
     </div>
   </div>
 
+  <div id="modalAvisos" class="modal-bg" style="display:none;">
+    <div class="modal-box" style="max-width:420px;">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;">Avisos de vencimento
+        <button class="iconbtn" style="font-size:20px;" onclick="fecharModalAvisos()" title="Fechar" aria-label="Fechar">&times;</button>
+      </h2>
+      <div style="font-size:12.5px; color:var(--muted); margin-bottom:10px;">Escolha de quais contas você quer ser avisado.</div>
+      <label class="aviso-op"><input type="checkbox" id="avisoHoje" onchange="alterarAviso('hoje', this.checked)"><span>Vence hoje</span></label>
+      <label class="aviso-op"><input type="checkbox" id="avisoProximos" onchange="alterarAviso('proximos', this.checked)"><span>Vence nos próximos 3 dias</span></label>
+      <label class="aviso-op"><input type="checkbox" id="avisoAtrasadas" onchange="alterarAviso('atrasadas', this.checked)"><span>Atrasadas</span></label>
+      <div style="border-top:1px solid var(--border); margin-top:12px; padding-top:12px;">
+        <div style="font-size:13px; font-weight:600; margin-bottom:4px;">Avisos do navegador</div>
+        <div id="avisosNavStatus" style="font-size:12.5px; color:var(--muted); margin-bottom:8px;"></div>
+        <button id="btnAvisosNav" class="secondary" onclick="ativarNotificacoes()">Ativar avisos do navegador</button>
+        <div style="font-size:11.5px; color:var(--muted); margin-top:8px;">Funciona enquanto o app estiver aberto.</div>
+      </div>
+    </div>
+  </div>
+
   <div id="modalImportar" class="modal-bg" style="display:none;">
     <div class="modal-box">
       <h2 style="display:flex; justify-content:space-between; align-items:center;">Importar extrato
@@ -933,7 +956,7 @@
           <button class="editable-only" onclick="abrirModalCategorias(); fecharMenuConfig()">🏷️ Gerenciar categorias</button>
           <button onclick="configurarPin(); fecharMenuConfig()">🔒 PIN de acesso</button>
           <button id="btnMoeda" onclick="alternarMoeda()">💱 Moeda: BRL</button>
-          <button id="btnNotif" onclick="ativarNotificacoes()">🔔 Notificações</button>
+          <button id="btnAvisos" onclick="abrirModalAvisos(); fecharMenuConfig()">🔔 Avisos de vencimento</button>
           <button class="editable-only" onclick="gerarLinkSomenteLeitura(); fecharMenuConfig()">🔗 Gerar link só de leitura</button>
         </div>
       </div>
@@ -958,6 +981,7 @@
     <button class="small" onclick="abrirPlanos()">Assinar</button>
   </div>
   <div id="barraAtualizar" class="barra-trial" style="display:none;"></div>
+  <div id="barraVencimentos" class="barra-trial" style="display:none;" role="status"></div>
 
   <div id="painelBackup" class="card editable-only" style="display:none; margin-bottom:14px;">
     <h2>Backup dos dados</h2>
@@ -1296,6 +1320,7 @@ const STORAGE_MOEDA = 'moeda';
 const STORAGE_CAMBIO_CACHE = 'cambioCache';
 const STORAGE_ASSINATURA = 'assinatura';
 const STORAGE_CATEGORIAS = 'categoriasUsuario';
+const STORAGE_AVISOS = 'avisosVencimento';
 
 // ---- Assinatura (Fase 1: só trial + bloqueio, sem gateway) ----
 // { status, trialInicio, assinouEm }
@@ -1337,6 +1362,20 @@ const CORES = CORES_PADRAO;
 // Personalização do usuário. { adicionadas:[{nome,cor}], renomes:{Padrão:'Novo nome'}, ocultas:['Doação'] }
 // Entra no funil de estado (STORAGE_CATEGORIAS, montarEstado, aplicarDadosImportados).
 let categoriasUsuario = { adicionadas: [], renomes: {}, ocultas: [] };
+// Quais avisos de vencimento a pessoa quer (banner + notificação do navegador). Entra no funil
+// de estado (STORAGE_AVISOS, montarEstado, aplicarDadosImportados).
+let avisosVencimento = { hoje: true, proximos: true, atrasadas: true };
+function normalizarAvisosVencimento(v){
+  const base = { hoje: true, proximos: true, atrasadas: true };
+  if(!v || typeof v !== 'object') return base;
+  for(const k of Object.keys(base)) if(typeof v[k] === 'boolean') base[k] = v[k];
+  return base;
+}
+async function salvarAvisos(){
+  await setJSON(STORAGE_AVISOS, avisosVencimento);
+  driveAgendarSync();
+  render();
+}
 
 // nome efetivo de uma categoria padrão (aplica renome do usuário)
 function nomeCategoriaPadrao(padrao){
@@ -1570,7 +1609,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.17';
+const APP_VERSION = '2026-09-03.18';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -1667,7 +1706,7 @@ function montarEstado(){
   return {
     transacoes, orcamentos, contas, contasDetalhes, metas, recorrentes, saldoContas, saldosIniciais, moeda: moedaAtual,
     tema: document.documentElement.getAttribute('data-theme') || 'dark',
-    assinatura, categoriasUsuario
+    assinatura, categoriasUsuario, avisosVencimento
   };
 }
 async function driveApi(path, opts={}, jaTentouRenovar){
@@ -1734,10 +1773,12 @@ async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
   // Categorias do usuário: last-write-wins (mesmo critério do resto do blob). Normaliza
   // o shape pra tolerar blobs antigos que não tinham o campo.
   categoriasUsuario = normalizarCategoriasUsuario(dados.categoriasUsuario);
+  avisosVencimento = normalizarAvisosVencimento(dados.avisosVencimento);
   if(dados.tema) aplicarTema(dados.tema);
   if(dados.moeda){ moedaAtual = dados.moeda; document.getElementById('btnMoeda').textContent = '💱 ' + moedaAtual; }
   await setJSON(STORAGE_ASSINATURA, assinatura);
   await setJSON(STORAGE_CATEGORIAS, categoriasUsuario);
+  await setJSON(STORAGE_AVISOS, avisosVencimento);
   await setJSON(STORAGE_TX, transacoes);
   await setJSON(STORAGE_ORC, orcamentos);
   await setJSON(STORAGE_CONTAS, contas);
@@ -2023,6 +2064,7 @@ async function carregar(){
   saldoContas = await getJSON(STORAGE_SALDO_CONTAS, null);
   saldosIniciais = await getJSON(STORAGE_SALDOS_INICIAIS, {});
   categoriasUsuario = normalizarCategoriasUsuario(await getJSON(STORAGE_CATEGORIAS, null));
+  avisosVencimento = normalizarAvisosVencimento(await getJSON(STORAGE_AVISOS, null));
   // migração: o antigo "saldo total das contas" (saldoContas) virou saldo inicial por conta.
   // Se o usuário tinha o valor antigo e nenhuma conta com saldo inicial ainda, joga o valor
   // na primeira conta para não perder a âncora da projeção. Roda só uma vez.
@@ -2046,9 +2088,6 @@ async function carregar(){
   aplicarSubAbaGeral();
   render();
   // o onboarding guiado é disparado no fim de entrarNoApp() (app já visível atrás do modal)
-  if('Notification' in window && Notification.permission === 'granted'){
-    document.getElementById('btnNotif').textContent = '🔔 Ativadas';
-  }
   verificarNotificacoesPendentes();
   if(moedaAtual !== 'BRL'){
     await carregarCotacoes();
@@ -3079,6 +3118,7 @@ function render(){
   const porCat = {};
   gastos.forEach(t => porCat[t.categoria] = (porCat[t.categoria]||0) + t.valor);
 
+  renderBarraVencimentos();
   renderDobraSaldo();
   renderLivreParaGastar();
   renderSaldosContas();
@@ -3729,6 +3769,107 @@ function renderLivreParaGastar(){
 
   renderProximoPagamento();
   aplicarEstadoDetalheLivre();
+}
+
+// ---- Avisos de vencimento ----
+// Considera TODAS as contas (ignora o filtro de conta do topo) e só gastos pendentes.
+const JANELA_AVISO_DIAS = 3;
+function contasParaAvisar(){
+  const hoje = hojeISO();
+  const r = { hoje: [], proximos: [], atrasadas: [] };
+  for(const t of transacoes){
+    if(t.tipo !== 'gasto' || (t.status || 'pago') !== 'pendente') continue;
+    const d = diasEntre(hoje, t.data);
+    if(d === 0) r.hoje.push(t);
+    else if(d > 0 && d <= JANELA_AVISO_DIAS) r.proximos.push(t);
+    else if(d < 0) r.atrasadas.push(t);
+  }
+  const porData = (a, b) => a.data.localeCompare(b.data);
+  r.hoje.sort(porData); r.proximos.sort(porData); r.atrasadas.sort(porData);
+  return r;
+}
+// só os tipos que a pessoa deixou ligados
+function avisosAtivos(){
+  const c = contasParaAvisar();
+  return {
+    atrasadas: avisosVencimento.atrasadas ? c.atrasadas : [],
+    hoje: avisosVencimento.hoje ? c.hoje : [],
+    proximos: avisosVencimento.proximos ? c.proximos : []
+  };
+}
+// "dispensar" é local do aparelho (fora do funil de sync): { dia, ids }
+const CHAVE_AVISO_DISPENSADO = 'bc_aviso_venc_dispensado';
+function lerAvisoDispensado(){
+  try{ const v = JSON.parse(localStorage.getItem(CHAVE_AVISO_DISPENSADO)); if(v && Array.isArray(v.ids)) return v; }catch(e){}
+  return null;
+}
+function idsDoBanner(a){ return [...a.atrasadas, ...a.hoje, ...a.proximos].map(t => t.id); }
+function dispensarAvisoVencimentos(){
+  try{ localStorage.setItem(CHAVE_AVISO_DISPENSADO, JSON.stringify({ dia: hojeISO(), ids: idsDoBanner(avisosAtivos()) })); }catch(e){}
+  renderBarraVencimentos();
+}
+function renderBarraVencimentos(){
+  const el = document.getElementById('barraVencimentos');
+  if(!el) return;
+  const a = avisosAtivos();
+  const ids = idsDoBanner(a);
+  const disp = lerAvisoDispensado();
+  if(ids.length === 0 || (disp && disp.dia === hojeISO() && ids.every(id => disp.ids.includes(id)))){
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+  const seg = [];
+  const n = a.atrasadas.length; if(n) seg.push(n + (n === 1 ? ' atrasada' : ' atrasadas'));
+  if(a.hoje.length) seg.push(a.hoje.length + (a.hoje.length === 1 ? ' vence hoje' : ' vencem hoje'));
+  if(a.proximos.length) seg.push(a.proximos.length + ' nos próximos ' + JANELA_AVISO_DIAS + ' dias');
+  const urgente = a.atrasadas.length > 0 || a.hoje.length > 0;
+  el.classList.toggle('urgente', urgente);
+  el.textContent = '';
+  const txt = document.createElement('span');
+  txt.className = 'bv-txt';
+  txt.textContent = (urgente ? '⚠ ' : '') + seg.join(' · ');
+  const acoes = document.createElement('span');
+  acoes.className = 'bv-acoes';
+  const ver = document.createElement('button');
+  ver.className = 'small'; ver.textContent = 'Ver'; ver.onclick = verContasAvisadas;
+  const x = document.createElement('button');
+  x.className = 'small secondary'; x.textContent = '✕'; x.title = 'Dispensar por hoje'; x.setAttribute('aria-label', 'Dispensar aviso por hoje');
+  x.onclick = dispensarAvisoVencimentos;
+  acoes.append(ver, x);
+  el.append(txt, acoes);
+  el.style.display = 'flex';
+}
+// força a lista de pendentes (não alterna, ao contrário de alternarVisaoContas)
+function verContasAvisadas(){
+  visaoContas = 'pendente';
+  visaoContasTudo = false;
+  mudarAbaPrincipal('lancamentos');
+  aplicarEstadoVisaoContas();
+  render();
+}
+function abrirModalAvisos(){
+  document.getElementById('avisoHoje').checked = avisosVencimento.hoje;
+  document.getElementById('avisoProximos').checked = avisosVencimento.proximos;
+  document.getElementById('avisoAtrasadas').checked = avisosVencimento.atrasadas;
+  atualizarStatusAvisosNavegador();
+  document.getElementById('modalAvisos').style.display = 'flex';
+}
+function fecharModalAvisos(){ document.getElementById('modalAvisos').style.display = 'none'; }
+function alterarAviso(tipo, ligado){
+  avisosVencimento[tipo] = !!ligado;
+  salvarAvisos();
+}
+function atualizarStatusAvisosNavegador(){
+  const st = document.getElementById('avisosNavStatus');
+  const btn = document.getElementById('btnAvisosNav');
+  if(!st || !btn) return;
+  if(!('Notification' in window)){ st.textContent = 'Seu navegador não suporta avisos.'; btn.style.display = 'none'; return; }
+  const p = Notification.permission;
+  btn.style.display = p === 'granted' ? 'none' : '';
+  st.textContent = p === 'granted' ? 'Ativados neste navegador.'
+    : p === 'denied' ? 'Bloqueados neste navegador. Libere nas configurações do site para ativar.'
+    : 'Desativados.';
 }
 
 // próximo gasto pendente a vencer a partir de hoje — independente do mês selecionado.
@@ -5337,8 +5478,8 @@ function ativarNotificacoes(){
     return;
   }
   Notification.requestPermission().then(perm=>{
+    atualizarStatusAvisosNavegador();
     if(perm === 'granted'){
-      document.getElementById('btnNotif').textContent = '🔔 Ativadas';
       new Notification('Bolso Certo', {body:'Notificações ativadas! Você será avisado sobre contas a vencer enquanto o app estiver aberto.'});
       verificarNotificacoesPendentes(true);
     }else{
@@ -5346,20 +5487,21 @@ function ativarNotificacoes(){
     }
   });
 }
+// usa as mesmas regras (e preferências) do banner: uma notificação por tipo ligado com contagem > 0
 function verificarNotificacoesPendentes(forcarMsg){
   if(!('Notification' in window) || Notification.permission !== 'granted') return;
-  document.getElementById('btnNotif').textContent = '🔔 Ativadas';
-  const hoje = hojeISO();
-  const vencidos = transacoes.filter(t => statusEfetivo(t)==='vencido');
-  const aVencerHoje = transacoes.filter(t => (t.status||'pago')==='pendente' && t.data===hoje);
-  if(vencidos.length>0){
-    new Notification('Contas vencidas', {body:`Você tem ${vencidos.length} conta(s) vencida(s) no Bolso Certo.`});
+  const a = avisosAtivos();
+  if(a.atrasadas.length>0){
+    new Notification('Contas vencidas', {body:`Você tem ${a.atrasadas.length} conta(s) vencida(s) no Bolso Certo.`});
   }
-  if(aVencerHoje.length>0){
-    new Notification('Vence hoje', {body:`${aVencerHoje.length} pagamento(s) vencem hoje: ${aVencerHoje.map(t=>t.desc).join(', ')}.`});
+  if(a.hoje.length>0){
+    new Notification('Vence hoje', {body:`${a.hoje.length} pagamento(s) vencem hoje: ${a.hoje.map(t=>t.desc).join(', ')}.`});
   }
-  if(forcarMsg && vencidos.length===0 && aVencerHoje.length===0){
-    new Notification('Tudo em dia', {body:'Nenhuma conta vencida ou vencendo hoje.'});
+  if(a.proximos.length>0){
+    new Notification('Vencem nos próximos '+JANELA_AVISO_DIAS+' dias', {body:`${a.proximos.length} pagamento(s): ${a.proximos.map(t=>t.desc).join(', ')}.`});
+  }
+  if(forcarMsg && idsDoBanner(a).length===0){
+    new Notification('Tudo em dia', {body:'Nenhuma conta nos avisos que você escolheu.'});
   }
 }
 
