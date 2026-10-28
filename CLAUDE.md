@@ -671,7 +671,7 @@ padrão-without-use hides (constant intact); `'Outros'` protected; `montarEstado
 field; round-trip through `aplicarDadosImportados` keeps `adicionadas`/`ocultas`; `normalizar…`
 tolerates junk.
 
-**Pendente — confirmação em iPhone real (deployado como `.16`, 03/09/2026):** o `#modalCategorias`
+**Confirmado em iPhone real (28/10/2026, informado pelo usuário; deployado como `.16`):** o `#modalCategorias`
 é um modal novo com lista rolável (`max-height:90vh`), inputs de texto em `.cat-row`
 (`display:flex`) e o `scrollIntoView` do `#categoriaMoverBox` — exatamente o perfil onde os
 bugs sutis só apareceram em WebKit real na rodada de polimento (o `<input type=date>` levou 3
@@ -809,7 +809,7 @@ access control.
 `aafd785` (auditoria visual) + `1d00f5a` (modal Contas no iPhone) + `f124466` (mais overflow
 mobile) subiram juntos em **03/09/2026** — `origin/main` = `f124466`, versão `.10`. Tudo
 CSS/layout + alguns atributos/classes de HTML; **nenhuma lógica de dados/cálculo/estado
-tocada**. As 3 seções abaixo detalham cada commit. **Pendente:** confirmação no iPhone real
+tocada**. As 3 seções abaixo detalham cada commit. **Confirmado no iPhone real (28/10/2026):** itens
 do usuário (faixa "Nova versão disponível", campo de data com legenda, modal sem vazar,
 frase da dobra, campos de anexo/backup, campo de data em Metas) + K3 (emoji `📈`).
 
@@ -863,7 +863,7 @@ decisão mobile-first — só muda se a decisão de produto mudar).
 **Verificação:** re-rodada a auditoria visual (406 combos) → **0 crítico / 0 moderado /
 0 cosmético**, 406/406 limpos (era 94/406).
 
-**Pendente de confirmação em aparelho real (K3):** o emoji `📈` do botão "ver evolução" da
+**Confirmado em aparelho real (K3, 28/10/2026):** o emoji `📈` do botão "ver evolução" da
 meta — **não foi investigado nem corrigido**, só ganhou `aria-label`. Aparece quebrado só no
 headless (sem fonte de emoji); provavelmente ok em uso real. Se estiver quebrado num
 navegador/celular normal, trocar por um ícone de traço.
@@ -1004,7 +1004,7 @@ completa (`audit-visual.js`, 406 combos): 0 crítico / 0 moderado / 0 cosmético
 
 `APP_VERSION`/`CACHE` bumpado a cada rodada que foi pro ar: `.11` (1ª) → `.12` (2ª) → `.13`
 (3ª). Cada uma já tinha sido vista num iPhone, então o SV de quem instalou só pega a próxima
-com um `CACHE` novo. **Pendente:** confirmação no iPhone real da `.13`.
+com um `CACHE` novo. **Confirmado no iPhone real (28/10/2026).**
 
 **Regra geral — `<input type="date">` (e `time`, `month`) no iOS/WebKit:** o Chromium headless
 (a suíte E o `audit-visual.js`) **não é fonte confiável** pra altura/largura desses campos —
