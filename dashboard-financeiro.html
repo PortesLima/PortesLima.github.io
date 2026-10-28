@@ -1570,7 +1570,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.16';
+const APP_VERSION = '2026-09-03.17';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -1793,7 +1793,10 @@ async function driveSalvarAgora(){
 }
 
 function chaveMes(dataISO){ return dataISO.slice(0,7); }
-function hojeISO(){ return new Date().toISOString().slice(0,10); }
+function hojeISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 // ---- Telemetria (PostHog) ----
 // Ponto ÚNICO de instrumentação. Só conta que um evento aconteceu — nunca envia
