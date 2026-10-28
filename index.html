@@ -1609,7 +1609,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.18';
+const APP_VERSION = '2026-09-03.19';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -3118,7 +3118,8 @@ function render(){
   const porCat = {};
   gastos.forEach(t => porCat[t.categoria] = (porCat[t.categoria]||0) + t.valor);
 
-  renderBarraVencimentos();
+  // aviso é acessório: um erro aqui não pode impedir o resto do render
+  try{ renderBarraVencimentos(); }catch(e){ console.error('renderBarraVencimentos', e); }
   renderDobraSaldo();
   renderLivreParaGastar();
   renderSaldosContas();
