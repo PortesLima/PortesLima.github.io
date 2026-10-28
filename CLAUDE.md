@@ -728,9 +728,10 @@ vence hoje virava `vencido` / `mesAtual` pulava de mês. A única outra `toISOSt
   antes contava receita pendente como "conta vencida"; agora só gastos. `#btnNotif` não existe mais —
   o status (ativado/negado) vive no `#modalAvisos`.
 - Sem evento de telemetria novo. Testes: `test-avisos-vencimento` (33 checks).
-- **Pendente de confirmação em aparelho real (iPhone):** `#modalAvisos` (checkbox/labels, scroll) e o
-  banner com as 3 barras empilhadas (trial + atualizar + vencimentos). Headless não cobre o layout
-  nativo iOS.
+- **Confirmado em iPhone real (.21), informado por Thamires:** `#modalAvisos` (checkbox/labels, scroll),
+  o banner com as 3 barras empilhadas (trial + atualizar + vencimentos) e o **Ver** (rola até a lista,
+  só as pendentes do mês selecionado, "ver todas" no chip, seletor de mês, ✕). O headless não cobre o
+  layout nativo iOS — esta confirmação é a que vale.
 
 ### History start marker
 
