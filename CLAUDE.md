@@ -64,7 +64,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
 `msedge`; `tests/lib.js` tem `abrir()` (relógio fixo opcional via `page.clock`, fuso
 `America/Sao_Paulo`, captura erros de console/página em `page.__erros`), `ok()`, `res()`. Hoje:
 - `test-hoje-local` (4) — `hojeISO()` local às 23:30 BRT, virada de mês no dia 30
-- `test-avisos-vencimento` (33) — `contasParaAvisar`, banner, dispensar, Ver, funil de estado, modal,
+- `test-avisos-vencimento` (52) — `contasParaAvisar`, banner, dispensar, Ver, funil de estado, modal,
   notificações
 - `test-regressao-minima` (31) — consumidores de `hojeISO` às 23:30, ida-e-volta de estado com blob
   novo/antigo, 4 abas sem erro de console (vazio e com dados), marcar pago/desfazer vs. banner,
@@ -713,7 +713,13 @@ vence hoje virava `vencido` / `mesAtual` pulava de mês. A única outra `toISOSt
   desenhado por `renderBarraVencimentos()` chamada de **`render()`** (muda ao marcar como pago).
   Âmbar (`urgente`) com atrasada/hoje, neutro só com próximos. Texto via `textContent`. **Ver**
   (`verContasAvisadas`) *força* `visaoContas='pendente'` (não alterna, ao contrário de
-  `alternarVisaoContas`) e abre Lançamentos.
+  `alternarVisaoContas`), liga `visaoContasMes=true` (só as pendentes do **mês selecionado**, sem corte
+  de 12 meses; `let` de sessão, fora do funil), abre Lançamentos e rola (rAF) até `#chipVisaoContas`.
+  O chip diz "pendentes de {mês} · N de outros meses (ver todas)"; "ver todas" e o botão "Ver todas
+  as pendentes" **ampliam** pra todos os meses em vez de desligar (`alternarVisaoContas` com
+  `visaoContasMes` ativo). `limparVisaoContas`/`verVisaoContasAntigas`/`alternarVisaoContas` zeram o
+  modo mês. Estado vazio no modo mês: "Nenhuma conta pendente em {mês}". O **banner continua contando
+  todos os meses** (`contasParaAvisar` não mudou).
 - **Dispensar (✕)**: `localStorage` `bc_aviso_venc_dispensado` = `{dia, ids}`, **fora** do funil de
   sync (por aparelho). Oculto se `dia===hoje` e todos os ids atuais ∈ `ids`; reaparece no dia seguinte
   ou com conta nova na janela; marcar como paga **não** reabre.

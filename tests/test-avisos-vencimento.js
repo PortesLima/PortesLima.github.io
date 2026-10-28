@@ -9,6 +9,7 @@ const SEED = [
 ];
 const set = (page, arr) => page.evaluate(async a => { transacoes = a; await salvarTx(); render(); }, arr);
 const txt = page => page.evaluate(() => { const e=document.getElementById('barraVencimentos'); return e.style.display==='none' ? null : e.querySelector('.bv-txt').textContent.replace(/\s+/g,' ').trim(); });
+const bannerTxtLocal = page => page.evaluate(() => document.querySelector('#barraVencimentos .bv-txt').textContent);
 const FIX = '2026-09-10T12:00:00-03:00';
 
 (async()=>{
@@ -92,6 +93,54 @@ const FIX = '2026-09-10T12:00:00-03:00';
       ok(r.top >= 0 && r.bottom <= r.vh - (vp.width<1024 ? r.nav : 0), vp.width+' de '+origem+': #'+r.id+' visível (top '+Math.round(r.top)+', vh '+r.vh+')');
       await ctx.close();
     }
+  }
+  ({ctx,page} = await abrir(browser,{fixed:FIX}));
+  await set(page, SEED);
+
+  console.log('7c. Ver = só o mês selecionado');
+  await ctx.close();
+  {
+    const OUT = [T(1,'2026-10-28'), T(2,'2026-10-29'), T(3,'2026-11-01'), T(4,'2026-09-15')];
+    const linhas = p => p.evaluate(() => [...document.querySelectorAll('#corpoTabela tr:not(.linha-ver-antigas)')].map(tr => tr.querySelector('.col-desc').firstChild.textContent.trim()));
+    const chip = p => p.evaluate(() => document.getElementById('chipVisaoContas').textContent.replace(/\s+/g,' ').trim());
+    ({ctx,page} = await abrir(browser,{fixed:'2026-10-28T12:00:00-03:00'}));
+    await set(page, OUT);
+    ok(await page.evaluate(()=>mesAtual)==='2026-10','mês selecionado = out/2026');
+    await page.click('#barraVencimentos button:not(.secondary)');
+    ok(JSON.stringify(await linhas(page))==='["Conta 1","Conta 2"]','Ver lista só as pendentes de outubro');
+    let c = await chip(page);
+    ok(/pendentes de out\/2026/.test(c),'chip: pendentes de out/2026 ['+c+']');
+    ok(/2 de outros meses/.test(c),'chip: 2 de outros meses');
+    ok(await page.evaluate(()=>contasParaAvisar().atrasadas.length)===1 && /1 atrasada/.test(await bannerTxtLocal(page)),'banner segue contando atrasada de setembro');
+    await page.click('#barraVencimentos button:not(.secondary)');
+    ok(await page.evaluate(()=>visaoContasMes)===true && (await linhas(page)).length===2,'Ver 2x não desliga o modo');
+    await page.click('#chipVisaoContas [onclick*="alternarVisaoContas"]');
+    ok(JSON.stringify(await linhas(page))==='["Conta 4","Conta 1","Conta 2","Conta 3"]','"ver todas" lista as 4 (mais antiga primeiro)');
+    ok(await page.evaluate(()=>!document.getElementById('btnVisaoPendentes').classList.contains('secondary')),'botão "Ver todas pendentes" fica ativo');
+    ok(/todas as pendentes/.test(await chip(page)),'chip volta ao texto "todas as pendentes"');
+    // volta ao modo mês, troca o seletor pra nov/2026
+    await page.evaluate(()=>verContasAvisadas());
+    await page.evaluate(()=>{ const s=document.getElementById('mesSel'); s.value='2026-11'; s.dispatchEvent(new Event('change')); });
+    ok(JSON.stringify(await linhas(page))==='["Conta 3"]','trocar pra nov/2026: lista só 11-01');
+    c = await chip(page);
+    ok(/pendentes de nov\/2026/.test(c) && /3 de outros meses/.test(c),'chip acompanha o seletor ['+c+']');
+    // botão normal em modo mês amplia (não desliga); limpar + botão normal lista tudo
+    await page.click('#btnVisaoPendentes');
+    ok((await linhas(page)).length===4 && await page.evaluate(()=>visaoContas)==='pendente','botão com modo mês ativo amplia pra todos os meses');
+    await page.evaluate(()=>limparVisaoContas());
+    await page.click('#btnVisaoPendentes');
+    ok((await linhas(page)).length===4 && await page.evaluate(()=>visaoContasMes)===false,'"Ver todas pendentes" normal lista todos os meses');
+    await page.evaluate(()=>{ limparVisaoContas(); const s=document.getElementById('mesSel'); s.value='2026-10'; s.dispatchEvent(new Event('change')); });
+    await ctx.close();
+    // mês sem pendentes
+    ({ctx,page} = await abrir(browser,{fixed:'2026-10-28T12:00:00-03:00'}));
+    await set(page, [T(1,'2026-10-05',{status:'pago'}), T(3,'2026-11-01')]);
+    await page.evaluate(()=>verContasAvisadas());
+    const v = await page.evaluate(()=>{ const e=document.getElementById('vazio'); return {d:e.style.display,t:e.textContent.replace(/\s+/g,' ').trim()}; });
+    ok(v.d==='block' && /Nenhuma conta pendente em out\/2026/.test(v.t) && /1 de outros meses/.test(v.t),'estado vazio do mês ['+v.t+']');
+    await page.evaluate(()=>limparVisaoContas());
+    ok(await page.evaluate(()=>document.getElementById('vazio').textContent)==='Nenhum lançamento encontrado.' || await page.evaluate(()=>document.getElementById('vazio').style.display)==='none','vazio volta ao texto padrão');
+    await ctx.close();
   }
   ({ctx,page} = await abrir(browser,{fixed:FIX}));
   await set(page, SEED);

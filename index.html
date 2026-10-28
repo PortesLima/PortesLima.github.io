@@ -1610,7 +1610,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.20';
+const APP_VERSION = '2026-09-03.21';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -2547,8 +2547,15 @@ function mudarAba(aba){
 // últimos 12 meses (visaoContasTudo expande). Nula = comportamento normal (escopo do mês).
 let visaoContas = null;        // 'pendente' | 'pago' | null
 let visaoContasTudo = false;   // false = só últimos 12 meses
+let visaoContasMes = false;    // true = visão restrita ao mês selecionado (vem do "Ver" do banner)
 function alternarVisaoContas(status){
-  visaoContas = (visaoContas === status) ? null : status;
+  if(visaoContasMes && visaoContas === status){
+    // estava no modo "só deste mês": o botão amplia pra todos os meses em vez de desligar
+    visaoContasMes = false;
+  }else{
+    visaoContas = (visaoContas === status) ? null : status;
+    visaoContasMes = false;
+  }
   visaoContasTudo = false;
   aplicarEstadoVisaoContas();
   render();
@@ -2556,12 +2563,25 @@ function alternarVisaoContas(status){
 function limparVisaoContas(){
   visaoContas = null;
   visaoContasTudo = false;
+  visaoContasMes = false;
   aplicarEstadoVisaoContas();
   render();
 }
 function verVisaoContasAntigas(){
   visaoContasTudo = true;
+  visaoContasMes = false;
   render();
+}
+// quantas contas da visão ativa estão em outros meses (só faz sentido com visaoContasMes)
+function visaoContasForaDoMes(){
+  const conta = contaAtivaFiltro();
+  return transacoes.filter(t => t.tipo !== 'transferencia' && (!conta || t.conta === conta)
+    && statusEfetivo(t) !== 'pago' && chaveMes(t.data) !== mesAtual).length;
+}
+function linkVisaoOutrosMeses(){
+  const n = visaoContasForaDoMes();
+  if(n === 0) return '';
+  return `${n} de outros meses (<span role="button" tabindex="0" style="text-decoration:underline;cursor:pointer" onclick="alternarVisaoContas('pendente')">ver todas</span>)`;
 }
 // data-limite do corte de 12 meses (YYYY-MM-DD do primeiro dia, 12 meses atrás)
 function visaoContasCorte(){
@@ -2580,7 +2600,10 @@ function aplicarEstadoVisaoContas(){
   if(visaoContas){
     chip.style.display = 'inline';
     const rot = visaoContas === 'pendente' ? 'pendentes' : 'pagas';
-    chip.innerHTML = `mostrando <b>todas as ${rot}</b> · <span role="button" tabindex="0" style="text-decoration:underline;cursor:pointer" onclick="limparVisaoContas()">voltar ao mês</span>`;
+    const outros = visaoContasMes ? linkVisaoOutrosMeses() : '';
+    chip.innerHTML = visaoContasMes
+      ? `mostrando as <b>pendentes de ${fmtMesLabel(mesAtual)}</b>${outros ? ' · ' + outros : ''} · <span role="button" tabindex="0" style="text-decoration:underline;cursor:pointer" onclick="limparVisaoContas()">voltar ao mês</span>`
+      : `mostrando <b>todas as ${rot}</b> · <span role="button" tabindex="0" style="text-decoration:underline;cursor:pointer" onclick="limparVisaoContas()">voltar ao mês</span>`;
   }else{
     chip.style.display = 'none';
   }
@@ -2856,14 +2879,16 @@ function render(){
   const buscaAtiva = !!(document.getElementById('busca').value||'').trim();
   // "Ver todas as pendentes/pagas": ignora o mês, filtra por status em todo o histórico.
   // Vive junto do branch de período/busca — os três quebram o escopo-mês da tabela.
-  const corteVisao = (visaoContas && !visaoContasTudo) ? visaoContasCorte() : null;
+  const corteVisao = (visaoContas && !visaoContasTudo && !visaoContasMes) ? visaoContasCorte() : null;
   const noStatusDaVisao = t => {
     if(t.tipo === 'transferencia') return false;
     if(conta && t.conta !== conta) return false;
     const st = statusEfetivo(t);
     return visaoContas === 'pendente' ? st !== 'pago' : st === 'pago';
   };
-  const baseTabela = visaoContas
+  const baseTabela = (visaoContas && visaoContasMes)
+    ? todasDoMes.filter(noStatusDaVisao)
+    : visaoContas
     ? transacoes.filter(t => noStatusDaVisao(t) && (!corteVisao || t.data >= corteVisao))
     : (periodoAtivo || buscaAtiva)
     ? transacoes.filter(t => (!conta || t.conta===conta) && (!periodoDe || t.data>=periodoDe) && (!periodoAte || t.data<=periodoAte))
@@ -3055,6 +3080,12 @@ function render(){
   // na visão de contas com corte de 12 meses, a lista pode estar vazia mas ainda haver
   // itens antigos para expandir — então o "vazio" só aparece se não houver nem antigos.
   if(listaTabela.length === 0 && visaoContasAntigas === 0){
+    if(visaoContas && visaoContasMes){
+      const outros = linkVisaoOutrosMeses();
+      vazio.innerHTML = `Nenhuma conta pendente em ${fmtMesLabel(mesAtual)}${outros ? '<div style="margin-top:6px;font-size:12px;">' + outros + '</div>' : ''}`;
+    }else{
+      vazio.textContent = 'Nenhum lançamento encontrado.';
+    }
     vazio.style.display = 'block';
   }else{
     vazio.style.display = 'none';
@@ -3845,6 +3876,7 @@ function renderBarraVencimentos(){
 // força a lista de pendentes (não alterna, ao contrário de alternarVisaoContas)
 function verContasAvisadas(){
   visaoContas = 'pendente';
+  visaoContasMes = true;
   visaoContasTudo = false;
   if(document.body.dataset.aba !== 'lancamentos') mudarAbaPrincipal('lancamentos');
   aplicarEstadoVisaoContas();
