@@ -54,7 +54,26 @@ a única exceção ao arquivo único; ver "PWA / Service worker"), `.nojekyll`, 
 
 ### Test suite (headless browser)
 
-There **is** a test suite now — a set of standalone Playwright scripts kept in the session
+**⚠ A suíte original (~770 checks / 22 scripts, descrita abaixo) foi PERDIDA.** Ficava no
+scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (confirmado em
+28/10/2026: scratchpads vazios, sem rastro no git nem nos logs de sessão). A descrição abaixo é
+**histórica** — serve de especificação do que cada teste cobria, não de scripts que existam.
+
+**`tests/` é o local oficial** (versionado). Rodar (1ª vez: `cd tests && npm install`): `node tests/run-all.js` (ou um script só:
+`node tests/test-xxx.js`). Usa `playwright-core` (`tests/package.json`; `lib.js` ainda cai para `C:/tmp/pw-check5` se não instalado) + canal
+`msedge`; `tests/lib.js` tem `abrir()` (relógio fixo opcional via `page.clock`, fuso
+`America/Sao_Paulo`, captura erros de console/página em `page.__erros`), `ok()`, `res()`. Hoje:
+- `test-hoje-local` (4) — `hojeISO()` local às 23:30 BRT, virada de mês no dia 30
+- `test-avisos-vencimento` (33) — `contasParaAvisar`, banner, dispensar, Ver, funil de estado, modal,
+  notificações
+- `test-regressao-minima` (31) — consumidores de `hojeISO` às 23:30, ida-e-volta de estado com blob
+  novo/antigo, 4 abas sem erro de console (vazio e com dados), marcar pago/desfazer vs. banner,
+  erro no banner não derruba `render()`
+
+Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
+em `tests/` desde o início**.
+
+*(Histórico)* There **was** a test suite — a set of standalone Playwright scripts kept in the session
 scratchpad (not committed; they drive `index.html` over `file://`). They are the real
 verification that a change works, and every change in the UX rounds was gated on them staying
 green. As of the last round there are **~770 checks across 22 scripts** (`test-dobra` has

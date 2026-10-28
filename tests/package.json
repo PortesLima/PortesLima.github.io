@@ -1,0 +1,7 @@
+{
+  "name": "bolso-certo-tests",
+  "private": true,
+  "description": "Testes headless do Bolso Certo (Playwright sobre file://). Rodar: cd tests && npm install && node run-all.js",
+  "scripts": { "test": "node run-all.js" },
+  "devDependencies": { "playwright-core": "^1.61.0" }
+}
