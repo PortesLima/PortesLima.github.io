@@ -73,6 +73,29 @@ const FIX = '2026-09-10T12:00:00-03:00';
   await page.click('#barraVencimentos button:not(.secondary)');
   ok(await page.evaluate(()=>visaoContas)==='pendente','Ver 2x não desliga');
 
+  console.log('7b. Ver rola até a lista (390 e 1280)');
+  await ctx.close();
+  for(const vp of [{width:390,height:800},{width:1280,height:800}]){
+    for(const origem of ['lancamentos','geral']){
+      ({ctx,page} = await abrir(browser,{fixed:FIX, vp}));
+      await set(page, SEED);
+      await page.evaluate(o => { mudarAbaPrincipal(o); }, origem);
+      await page.waitForTimeout(700);
+      await page.click('#barraVencimentos button:not(.secondary)');
+      await page.waitForTimeout(1200);
+      const r = await page.evaluate(() => {
+        const chip = document.getElementById('chipVisaoContas');
+        const el = chip.offsetParent !== null ? chip : document.getElementById('btnVisaoPendentes');
+        const b = el.getBoundingClientRect();
+        return { id: el.id, top: b.top, bottom: b.bottom, vh: window.innerHeight, nav: (document.getElementById('navPrincipal')||{}).offsetHeight||0 };
+      });
+      ok(r.top >= 0 && r.bottom <= r.vh - (vp.width<1024 ? r.nav : 0), vp.width+' de '+origem+': #'+r.id+' visível (top '+Math.round(r.top)+', vh '+r.vh+')');
+      await ctx.close();
+    }
+  }
+  ({ctx,page} = await abrir(browser,{fixed:FIX}));
+  await set(page, SEED);
+
   console.log('8. funil');
   await page.evaluate(() => { avisosVencimento={hoje:false,proximos:true,atrasadas:false}; });
   const est = await page.evaluate(() => montarEstado());

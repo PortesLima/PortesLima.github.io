@@ -593,6 +593,7 @@
   .barra-trial.urgente b{ color:inherit; }
   .barra-trial button{ padding:6px 12px; font-size:12px; flex-shrink:0; }
   .barra-trial button.secondary{ background:var(--card); }
+  #chipVisaoContas, #btnVisaoPendentes{ scroll-margin-top:12px; }
   #barraVencimentos .bv-txt{ flex:1 1 200px; min-width:0; overflow-wrap:anywhere; }
   #barraVencimentos .bv-acoes{ display:flex; gap:8px; flex-shrink:0; }
   @media (max-width:1023px){ #barraVencimentos button{ min-height:44px; min-width:44px; } }
@@ -1609,7 +1610,7 @@ let mesAtual = '';
 let editandoId = null;
 let chartCat, chartMes, chartSaldo, chartFixoVar, chartSimulador, chartEvolucaoMeta, chartProjecao;
 
-const APP_VERSION = '2026-09-03.19';
+const APP_VERSION = '2026-09-03.20';
 (function garantirVersaoAtual(){
   try{
     // com o service worker ativo (navegação network-first + faixa "Nova versão"), o HTML já
@@ -3845,9 +3846,16 @@ function renderBarraVencimentos(){
 function verContasAvisadas(){
   visaoContas = 'pendente';
   visaoContasTudo = false;
-  mudarAbaPrincipal('lancamentos');
+  if(document.body.dataset.aba !== 'lancamentos') mudarAbaPrincipal('lancamentos');
   aplicarEstadoVisaoContas();
   render();
+  // a lista fica abaixo do form "Novo lançamento": leva a vista até a faixa da visão ativa.
+  // Depois do render (rAF) pra o alvo existir; vence o scroll-pro-topo do mudarAbaPrincipal.
+  requestAnimationFrame(() => {
+    let alvo = document.getElementById('chipVisaoContas');
+    if(!alvo || alvo.offsetParent === null) alvo = document.getElementById('btnVisaoPendentes');
+    if(alvo) alvo.scrollIntoView({ block: 'start', behavior: _prefereMenosMovimento ? 'auto' : 'smooth' });
+  });
 }
 function abrirModalAvisos(){
   document.getElementById('avisoHoje').checked = avisosVencimento.hoje;
