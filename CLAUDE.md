@@ -124,6 +124,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   comprovante e cor importada; nada injetado, `window.__x` indefinido, sem `ERR_FILE_NOT_FOUND`. Regra para código novo: **qualquer texto do
   usuário em template de HTML passa por `escHtml`; para handler inline use `data-*` + `this.dataset.x`, nunca o texto entre aspas no `onclick`;
   cor só `#hex` (`corHexValida`)**.
+- `test-nomes` (9) — **Leva 3 · K**: guarda de código-fonte de nomes acessíveis (botões, campos, svg), `<main>`/`<header>` e `role="alert"`; sem navegador.
 
 ### Checks `[BUG-CONHECIDO]` convertidos em checks do comportamento correto (nome antigo → nome novo)
 
@@ -232,6 +233,20 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `… · geral: [BUG-CONHECIDO] a Visão Geral ESTOURA a 320px (rolagem horizontal de Npx): as linhas .orc-val…` (×2) → `… · geral: a Visão Geral NÃO estoura mais a 320px e as 4 abas continuam visíveis (antes: rolagem horizontal por causa das linhas .orc-val)`. Causas corrigidas: `.orc-label`/`.orc-val` encolhem (`flex-shrink:1; min-width:0; overflow-wrap:anywhere`), `.cols`/`.cols2` ≤599 com `minmax(0,1fr)` e `canvas{max-width:100%}` (a Análise e, por tabela, os 11 modais estouravam a 320 px).
 - (`test-a11y`) `[BUG-CONHECIDO] alvos de toque MENORES que 44×44 no celular (37 tipos)…` → `alvos de toque ≥ 44×44 no celular: nenhum tipo abaixo do mínimo (antes: N tipos abaixo)`. Regra só em ≤599: `min-height:44px` em `button`/`select`/`textarea`/`input` (exceto checkbox/radio), `min-width:44px` em `button`, `label.chk`, `span.small[role=button]`, `[role=tab]` e `.orc-row[role=button]` (não é só "padding invisível": campos de formulário ficam ~6 px mais altos no celular).
 - Capturas de conferência: `tests/capturas/` (390 e 320 px × claro/escuro × Visão Geral/Metas, topo e fim) — **fora do git** (`.gitignore`).
+
+**Leva 3 · K (rótulos e semântica)** — `tests/test-a11y.js`, `tests/test-responsivo.js`, `tests/test-nomes.js` (novo, 9 checks)
+- **Botões de ícone:** `aria-label` em × (6 modais, categorias, contas, contas fixas), ✓ ✎ ⧉ 📎 × da tabela, "+ add"/📈/✎/× das metas; nas linhas de lista o nome do item vai junto ("Marcar como pago: Aluguel"), sempre com `escHtml` (regra da Leva 2).
+- **Campos:** `aria-label` em todos os `input`/`select` que só tinham placeholder ou nada (34 estáticos + limite de orçamento, categoria do extrato importado). Escolha: `aria-label` (não `<label>` + `sr-only`) — o visual não muda e não há classe nova; o rótulo visual onde existe (`<label>` envolvente, "Conta:") segue valendo.
+- **Landmarks:** `<header class="top">` e `<main id="conteudoPrincipal">` (envolve as 4 seções; as faixas de aviso ficam fora). `.wrap`, ids e seletores dos testes não mudaram.
+- **SVG** da marca (3): `aria-hidden="true" focusable="false"`. **Erros** `#categoriaErro` e `#pinErro`: `role="alert"`.
+- **Movimento:** `@media (prefers-reduced-motion: reduce){ .sec-fade{ animation:none } }` (o `fadeIn` das seções rodava com a preferência ligada).
+- **Guarda `test-nomes`** (sem navegador, ms): lê o corpo do `index.html` — marcação estática **e** templates, inclusive `${ cond ? `<button…>` : '' }` aninhados — e falha se surgir `<button>` só com símbolo/emoji sem `aria-label`, `input`/`select`/`textarea` sem `aria-label`/`<label for>`/`<label>` envolvente, ou `<svg>` sem `aria-hidden`/`role="img"`. Exceções (hoje 0) iriam em `EXCECOES`, cada uma com regex e motivo. Ignora comentários de linha e `<!-- -->`, **não** os de bloco (um `image/*` em atributo engolia 100 KB de código e escondia botões). Complementa o dinâmico do `test-a11y` (só vê o que está visível em cada tela).
+- `[BUG-CONHECIDO] botões só com símbolo e SEM aria-label…` → `nenhum botão visível só com símbolo (✓ ✎ ⧉ × …) sem aria-label (antes: N ocorrências em vários tipos)`
+- `[BUG-CONHECIDO] campos de formulário SEM rótulo associado…` → `todo campo de formulário visível tem rótulo associado (<label for>, <label> envolvente ou aria-label); o placeholder deixou de ser o único nome`
+- `[BUG-CONHECIDO] os 3 <svg> (logo da marca) não são decorativos nem nomeados…` → `os 3 <svg> (logo da marca) são decorativos (aria-hidden="true"); antes: nenhum era`
+- `[BUG-CONHECIDO] as mensagens de erro de formulário (#categoriaErro, #pinErro) NÃO são região viva…` → `as mensagens de erro de formulário (#categoriaErro, #pinErro) são região viva (role=alert)… (antes: não eram)`
+- `[BUG-CONHECIDO] o app não tem landmark <main> nem <header>/banner…` → `o app tem 1 landmark <main> (as 4 seções) e 1 <header> (topo)… (antes: nenhum dos dois)`
+- (`test-responsivo`) `[BUG-CONHECIDO] com prefers-reduced-motion: reduce o fade-in (fadeIn) das seções AINDA roda ao trocar de aba…` → `com prefers-reduced-motion: reduce o fade-in (fadeIn) das seções NÃO roda ao trocar de aba (antes: rodava…)`
 
 **Leva 3 · J (modais e teclado)** — `tests/test-a11y.js` (108 → 116 checks)
 - **Helpers (um par para todos os `.modal-bg`):** `dialogoAbriu(m)` / `dialogoFechou(m)`, disparados por um `MutationObserver` no `style` de cada modal (o mesmo princípio de `_sincronizarTravaScroll`: **nenhuma** das ~20 chamadas de abrir/fechar mudou). Abrir: guarda o gatilho (`document.activeElement`; senão o último botão tocado há < 1,5 s — Safari/iOS não foca `<button>` ao tocar; item do menu ⚙️ → `#btnConfig`) e leva o foco ao 1º controle visível (ou ao `.modal-box` com `tabindex=-1`). Fechar: devolve o foco ao gatilho se ainda visível (e não há outro diálogo por cima com o foco). `keydown` global: Tab/Shift+Tab presos no modal de cima; Esc chama a **mesma função do ×** via `MODAL_FECHAR_ESC` (ex.: `fecharModalRapido` continua onboarding-aware).

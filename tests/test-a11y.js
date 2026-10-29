@@ -29,7 +29,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
   eq(await page.evaluate(() => /user-scalable\s*=\s*no|maximum-scale\s*=\s*1(\.0)?\b/.test(document.querySelector('meta[name=viewport]').content)), false, 'o viewport não bloqueia o zoom do usuário');
   eq(await page.evaluate(() => [...document.querySelectorAll('h1')].filter(h => window.__a11y.visivel(h)).length), 1, 'exatamente 1 <h1> visível no app');
   eq(await page.evaluate(() => document.querySelectorAll('nav[aria-label], [role=navigation][aria-label]').length >= 1), true, 'a navegação principal é um <nav> com aria-label ("Seções do app")');
-  eq(await page.evaluate(() => [document.querySelectorAll('main, [role=main]').length, document.querySelectorAll('header, [role=banner]').length]), [0, 0], '[BUG-CONHECIDO] o app não tem landmark <main> nem <header>/banner: leitor de tela não consegue "pular para o conteúdo principal"; esperado: <main> envolvendo as seções');
+  eq(await page.evaluate(() => [document.querySelectorAll('main, [role=main]').length, document.querySelectorAll('header, [role=banner]').length]), [1, 1], 'o app tem 1 landmark <main> (as 4 seções) e 1 <header> (topo): o leitor de tela consegue "pular para o conteúdo principal" (antes: nenhum dos dois)');
   for(const [a, s] of TELAS){
     await irPara(page, a, s);
     const saltos = await page.evaluate(() => {
@@ -40,7 +40,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
     eq(saltos.pulos, 0, `${nomeTela([a, s])}: hierarquia de títulos sem saltos (${saltos.n} títulos visíveis)`);
   }
   eq(await page.evaluate(() => { const t = document.getElementById('toast'); return [t.getAttribute('role'), t.getAttribute('aria-live')]; }), ['status', 'polite'], 'o toast é uma região viva (role=status, aria-live=polite)');
-  eq(await page.evaluate(() => ['categoriaErro', 'pinErro'].map(i => { const e = document.getElementById(i); return !!(e.getAttribute('role') === 'alert' || e.getAttribute('aria-live')); })), [false, false], '[BUG-CONHECIDO] as mensagens de erro de formulário (#categoriaErro, #pinErro) NÃO são região viva (sem role=alert/aria-live): o leitor de tela não anuncia "Já existe uma categoria…" nem "PIN incorreto"; esperado: role=alert');
+  eq(await page.evaluate(() => ['categoriaErro', 'pinErro'].map(i => { const e = document.getElementById(i); return !!(e.getAttribute('role') === 'alert' || e.getAttribute('aria-live')); })), [true, true], 'as mensagens de erro de formulário (#categoriaErro, #pinErro) são região viva (role=alert): o leitor de tela anuncia "Já existe uma categoria…" e "PIN incorreto" (antes: não eram)');
 
   // ================= 2. contraste =================
   console.log('2. contraste de texto (WCAG, cores computadas)');
@@ -230,12 +230,12 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
   ok(nBotoes > 40 && nCampos > 20, `medidos: ${nBotoes} botões/links e ${nCampos} campos nas 5 telas`);
   eq([...semNomeBotao], [], 'nenhum botão/link visível sem NENHUM texto, aria-label ou title');
   const tiposSimbolo = unicos([...soSimbolo].map(s => s.replace(/^button\.?\S*? /, 'botão ').replace(/^(\w+)\S* /, '$1 ')));
-  eq(tiposSimbolo.length > 0, true, `[BUG-CONHECIDO] botões só com símbolo e SEM aria-label (leitor de tela lê "vezes", "marca de verificação"…): ${tiposSimbolo.join(' · ')}; esperado: aria-label (Excluir, Editar, Duplicar, Marcar como pago)`);
+  eq(tiposSimbolo, [], 'nenhum botão visível só com símbolo (✓ ✎ ⧉ × …) sem aria-label (antes: ' + soSimbolo.size + ' ocorrências em ' + 'vários tipos)');
   const camposLista = [...campos].sort();
-  eq(camposLista.length > 5, true, `[BUG-CONHECIDO] campos de formulário SEM rótulo associado (só placeholder ou nada): ${camposLista.join(', ')}; placeholder some ao digitar e não é rótulo; esperado: <label for> ou aria-label em todos`);
+  eq(camposLista, [], 'todo campo de formulário visível tem rótulo associado (<label for>, <label> envolvente ou aria-label); o placeholder deixou de ser o único nome');
   // svg e canvas
   const svgs = await page.evaluate(() => [...document.querySelectorAll('svg')].filter(s => !s.closest('[style*="display:none"]')).map(s => ({ d: window.__a11y.desc(s.parentElement), ok: s.getAttribute('aria-hidden') === 'true' || s.getAttribute('role') === 'img' || !!s.querySelector('title') })));
-  eq(svgs.filter(s => !s.ok).length, svgs.length, `[BUG-CONHECIDO] os ${svgs.length} <svg> (logo da marca) não são decorativos nem nomeados (sem aria-hidden="true" nem role="img"+título): o leitor de tela pode ler o conteúdo do desenho; esperado: aria-hidden`);
+  eq(svgs.filter(s => !s.ok).length, 0, `os ${svgs.length} <svg> (logo da marca) são decorativos (aria-hidden="true"); antes: nenhum era`);
   await irPara(page, 'geral', 'analise');
   const canv = await page.evaluate(() => [...document.querySelectorAll('canvas')].filter(c => window.__a11y.visivel(c)).map(c => ({ id: c.id, role: c.getAttribute('role'), label: (c.getAttribute('aria-label') || '').length })));
   ok(canv.length >= 4 && canv.every(c => c.role === 'img' && c.label > 15), `todos os ${canv.length} <canvas> visíveis da Análise têm role="img" e aria-label descritivo`);

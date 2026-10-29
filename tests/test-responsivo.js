@@ -185,7 +185,7 @@ const NOME_OVF = (o) => o.estoura ? `scrollW ${o.scrollW} > ${o.clientW}; culpad
   await preparar(pr, 'cheio');
   for(const aba of ['geral', 'lancamentos', 'metas', 'geral']){ await pr.evaluate(a => mudarAbaPrincipal(a), aba); }
   const anim = await pr.evaluate(() => document.getAnimations().filter(a => { const t = a.effect.getComputedTiming(); return t.iterations !== Infinity && a.playState === 'running' && t.duration > 0; }).map(a => (a.animationName || a.transitionProperty || '?') + ' em ' + (a.effect.target ? window.__a11y.desc(a.effect.target) : '?')));
-  eq(anim.length > 0 && /fadeIn/.test(anim[0]), true, '[BUG-CONHECIDO] com prefers-reduced-motion: reduce o fade-in (fadeIn) das seções AINDA roda ao trocar de aba; só o tween dos números, o esqueleto e o toast respeitam; esperado: nenhuma animação');
+  eq(anim.length === 0 || anim.every(a => !/fadeIn/.test(a)), true, 'com prefers-reduced-motion: reduce o fade-in (fadeIn) das seções NÃO roda ao trocar de aba (antes: rodava; só o tween dos números, o esqueleto e o toast respeitavam)');
   const smooth = await pr.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior);
   eq(smooth, 'auto', 'com redução de movimento o scroll-behavior do documento é "auto"');
   const tween = await pr.evaluate(async () => { const el = document.getElementById('kpiGasto'); fmtValorAnimado(el, 123.45); return el.textContent; });
