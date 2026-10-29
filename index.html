@@ -5221,6 +5221,33 @@ function ofxData(bruto){
   const m = String(bruto).match(/(\d{4})(\d{2})(\d{2})/);
   return m ? `${m[1]}-${m[2]}-${m[3]}` : '';
 }
+// Valor do <TRNAMT> do OFX. NÃO usa parseValorBR (feito para digitação brasileira, onde "12.500" = doze mil e quinhentos):
+// no OFX o ponto é o decimal ("-12.500" = −12,5). Regra: só ponto → decimal; só vírgula → decimal (alguns bancos BR);
+// os dois → o ÚLTIMO separador é o decimal ("1.234,56" e "1,234.56" = 1234,56). Aceita sinal, espaços e "R$".
+// Qualquer outra coisa (letras, expoente, o mesmo separador repetido sem o outro, "--5") → NaN = transação rejeitada.
+function parseTrnAmt(txt){
+  let s = String(txt == null ? '' : txt).replace(/R\$/gi, '').replace(/\s+/g, '');
+  const m = s.match(/^([+-]?)([0-9.,]+)$/);
+  if(!m) return NaN;
+  const neg = m[1] === '-';
+  s = m[2];
+  const pontos = (s.match(/\./g) || []).length, virgs = (s.match(/,/g) || []).length;
+  let inteiro, dec;
+  if(pontos && virgs){
+    const ult = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','));
+    if((s[ult] === '.' ? pontos : virgs) !== 1) return NaN; // o separador decimal (o último) só pode aparecer uma vez
+    inteiro = s.slice(0, ult).replace(/[.,]/g, '');
+    dec = s.slice(ult + 1);
+  }else if(pontos + virgs === 0){
+    inteiro = s; dec = '';
+  }else if(pontos + virgs === 1){
+    const ult = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','));
+    inteiro = s.slice(0, ult); dec = s.slice(ult + 1);
+  }else return NaN; // o mesmo separador repetido ("1.2.3") é ambíguo: rejeita
+  if(!/^[0-9]*$/.test(inteiro) || !/^[0-9]*$/.test(dec) || (inteiro === '' && dec === '')) return NaN;
+  const n = parseFloat((inteiro || '0') + '.' + (dec || '0'));
+  return neg ? -n : n;
+}
 // parseOFX(texto) → { transacoes:[{data,desc,valor,fitid}], erro? }  (valor com sinal do banco)
 function parseOFX(texto){
   const t = String(texto || '');
@@ -5235,7 +5262,7 @@ function parseOFX(texto){
   const out = [];
   for(const bloco of blocos){
     const data = ofxData(ofxCampo(bloco, 'DTPOSTED'));
-    const valor = parseValorBR(ofxCampo(bloco, 'TRNAMT'));
+    const valor = parseTrnAmt(ofxCampo(bloco, 'TRNAMT'));
     if(!data || isNaN(valor)) continue;
     const nome = ofxCampo(bloco, 'NAME');
     const memo = ofxCampo(bloco, 'MEMO');

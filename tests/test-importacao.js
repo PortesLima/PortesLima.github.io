@@ -79,10 +79,21 @@ const enviar = (page, conta, nome, conteudo, latin1 = false) => page.evaluate(as
   const pv = (s) => page.evaluate(v => { const n = parseValorBR(v); return Number.isNaN(n) ? 'NaN' : n; }, s);
   for (const [e, v] of [['5970', 5970], ['5970.50', 5970.5], ['5.970,00', 5970], ['R$ 5.970,00', 5970], ['5 970,00', 5970], ['15.000', 15000],
     ['', 'NaN'], ['abc', 'NaN'], ['-12,50', -12.5], ['1.234.567', 1234567], ['R$ -1.000,00', -1000], ['47,90', 47.9], ['1.5', 1.5]]) eq(await pv(e), v, `parseValorBR(${JSON.stringify(e)}) = ${v}`);
-  eq(await pv('-12.500'), -12500, '[BUG-CONHECIDO] parseValorBR("-12.500") = -12500 (ponto+3 dígitos lido como milhar; um banco com 3 casas decimais esperaria -12.5)');
-  eq(await pv('0.500'), 500, '[BUG-CONHECIDO] parseValorBR("0.500") = 500 (mesma causa; esperado 0.5)');
+  eq(await pv('-12.500'), -12500, 'parseValorBR("-12.500") = -12500 — INTENCIONAL na digitação: ponto + 3 dígitos é MILHAR ("12.500" = doze mil e quinhentos); o parseOFX não usa mais essa função para TRNAMT');
+  eq(await pv('0.500'), 500, 'parseValorBR("0.500") = 500 — mesma regra de milhar, intencional na digitação (o OFX usa parser próprio)');
   r = await parse(page, 'parseOFX', ofxSGML([trn({ dt: '20260905', amt: '-12.500', name: 'tres casas' })]));
-  eq(r.transacoes[0].valor, -12500, '[BUG-CONHECIDO] OFX com TRNAMT "-12.500" importa como -12500 (esperado -12.5)');
+  eq(r.transacoes[0].valor, -12.5, 'OFX com TRNAMT "-12.500" importa como -12,5 (parser próprio do TRNAMT: só ponto = decimal)');
+  // ---- parser próprio do TRNAMT: só ponto = decimal; só vírgula = decimal; os dois = o ÚLTIMO separador é o decimal
+  const trnamt = async (amt) => (await parse(page, 'parseOFX', ofxSGML([trn({ dt: '20260905', amt, name: 'x', fitid: 'T' + amt })]))).transacoes.map(t => t.valor);
+  for(const [raw, esperado] of [['-45.90', -45.9], ['0.5', 0.5], ['.5', 0.5], ['12.500', 12.5], ['-0.001', -0.001], ['-12.500', -12.5], ['1.234,56', 1234.56], ['-1.234,56', -1234.56], ['1,234.56', 1234.56], ['1.234.567,89', 1234567.89],
+    ['-1234,56', -1234.56], ['12,5', 12.5], ['5970', 5970], ['+7.25', 7.25], ['R$ 12,50', 12.5], ['-R$ 1.000,00', -1000], ['5.', 5], ['1500.00', 1500]]){
+    eq(await trnamt(raw), [esperado], `TRNAMT ${JSON.stringify(raw)} → ${esperado}`);
+  }
+  for(const raw of ['1.2.3', '1,2,3', '--5', '12abc', '1.234,56,7', 'R$', '-', '1e5', '0x10']){
+    eq(await trnamt(raw), [], `TRNAMT inválido ${JSON.stringify(raw)}: a transação é REJEITADA (antes o parseFloat aceitava lixo no fim)`);
+  }
+  r = await parse(page, 'parseOFX', ofxSGML([trn({ dt: '20260905', amt: '-12.500', name: 'a', fitid: 'A' }), trn({ dt: '20260906', amt: 'xx', name: 'b', fitid: 'B' }), trn({ dt: '20260907', amt: '3,50', name: 'c', fitid: 'C' })]));
+  eq(r.transacoes.map(t => [t.fitid, t.valor]), [['A', -12.5], ['C', 3.5]], 'um TRNAMT inválido derruba só a própria transação; as outras seguem');
 
   // ================= parseCSVBolsoCerto =================
   console.log('3. parseCSVBolsoCerto');
