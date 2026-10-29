@@ -82,7 +82,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   com `via`), relógio para trás, `assinatura` ausente/corrompida, merge no sync. PostHog é um stub em memória
   (`window.posthog` com `__SV`), nada vai à rede. Prefixos: `[BUG-CONHECIDO]` (parece errado hoje) e
   `[PROVISORIO-FASE2]` (vale só sem backend/cobrança — vai falhar de propósito quando a Fase 2 entrar).
-- `test-categorias` (202) — **reconstrução (Bloco 3)**: `normalizarCategoriasUsuario`; adicionar (vazio, espaços, 30/31,
+- `test-categorias` (219) — **reconstrução (Bloco 3)**: `normalizarCategoriasUsuario`; adicionar (vazio, espaços, 30/31,
   duplicata em outra caixa, reservadas, cores da paleta); renomear (vínculos em lançamentos, orçamento e contas fixas,
   restaurar, colisões); excluir (sem uso, com uso + destino, destino padrão, cadeia, renomeada, `Outros`); nomes hostis
   (HTML/aspas/emoji/barra) em ~10 telas; limites de orçamento (0, vazio, alto, vírgula/ponto, `Infinity`); "Orçamento em
@@ -126,6 +126,12 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] resposta 200 com corpo VAZIO … também faz o aparelho novo sobrescrever o Drive…` → `leitura 200 com corpo vazio: o Drive NÃO recebe nenhuma escrita (…)`
 - `[BUG-CONHECIDO] erro 500 ao LISTAR os arquivos: …CRIA outro "bolsodados"…` → `erro 500 ao LISTAR: NÃO cria outro "bolso-certo-dados.json"` (+ `listagem 500: …`)
 - (sem tag, comportamento mudou) `arquivo do Drive corrompido: o local é mantido e sobe para o Drive (reparando o arquivo)` → `arquivo do Drive corrompido (JSON inválido): o Drive NÃO recebe nenhuma escrita (…)` + `corrompido: o arquivo do Drive continua como estava`
+
+**Pacote A (categoria do palpite)** — `tests/test-categorias.js`
+- `[BUG-CONHECIDO] palpitarCategoria devolve o nome PADRÃO ("Alimentação") mesmo depois de renomeada para "Comida"/oculta…` → `palpitarCategoria passa pelo mapa de renomes: "IFOOD pedido" → "Comida"`
+- `[BUG-CONHECIDO] registro rápido: o palpite aplica "Alimentação" (nome padrão) a um select que só tem "Comida" → o select fica SEM valor…` → `registro rápido: o palpite escolhe "Comida" no select (a categoria renomeada)`
+- `[BUG-CONHECIDO] … e o gasto é salvo com categoria VAZIA ("")…` → `… e o gasto é salvo em "Comida" (nunca com categoria vazia)`
+- (novos) palpite com categoria oculta/excluída → "Outros"; importação de extrato respeita o renome; formulário completo, registro rápido e conta que se repete com select vazio → "Outros"; 3 checks `[BUG-CONHECIDO]` de resíduo (dado antigo com `""`).
 
 **Pacote H (backup)**
 - `[BUG-CONHECIDO] o TEMA vindo de um backup/Drive é aplicado na tela mas NÃO é gravado em bc_tema…` → `o TEMA vindo de um backup/Drive é gravado em bc_tema (e não só aplicado na tela)`
@@ -657,6 +663,15 @@ category from keywords in the description (`PALPITE_CATEGORIA` regex list). Entr
 `adicionar()` — no installments, no attachment, no fixo flag — but it does go through
 `commitTransacoes()` (toast + undo) and is guarded by `podeEditar()`. Measured: `+` tap to
 confirmation toast is ~1.2s.
+
+**Categoria do palpite (pacote A, leva 1):** `palpitarCategoria()` devolve SEMPRE uma categoria que existe na lista: passa por
+`nomeCategoriaPadrao()` (renome Alimentação→Comida → "Comida") e, se a padrão foi ocultada/excluída, cai em `'Outros'` (sem palavra-chave
+casada continua `null`). Antes devolvia o nome padrão cru; o `<select>` não tinha essa opção, ficava vazio e o gasto era salvo com
+`categoria: ""`. Além disso `adicionar()`, `salvarRapido()`, `criarRecorrente()` e `confirmarImportacao()` aplicam `|| 'Outros'`: **nunca
+se grava categoria vazia**. Lançamentos antigos JÁ gravados com `""` **não são migrados** (decisão): aparecem com chip vazio na
+tabela, nome vazio em "Para onde foi o dinheiro"/orçamento, dica "Sua maior categoria de gasto é , …", e `editar()` abre o
+formulário na 1ª categoria da lista (salvar sem reparar troca a categoria em silêncio) — 3 checks `[BUG-CONHECIDO]` de resíduo em
+`test-categorias`.
 
 ### Onboarding guiado
 

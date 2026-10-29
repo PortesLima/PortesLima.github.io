@@ -2513,7 +2513,7 @@ async function adicionar(){
   const tipo = document.getElementById('tipo').value;
   const desc = document.getElementById('descricao').value.trim();
   const valorTotal = parseValorBR(document.getElementById('valor').value);
-  const categoria = tipo === 'receita' ? 'Receita' : document.getElementById('categoria').value;
+  const categoria = tipo === 'receita' ? 'Receita' : (document.getElementById('categoria').value || 'Outros'); // nunca grava categoria vazia
   const conta = document.getElementById('conta').value;
   const dataISO = document.getElementById('dataInput').value || hojeISO();
   const status = document.getElementById('status').value;
@@ -2605,8 +2605,16 @@ const PALPITE_CATEGORIA = [
   [/\b(emprestimo|empréstimo|financiamento|parcela|consignado)/i, 'Empréstimos'],
   [/\b(doacao|doação|dizimo|dízimo|oferta|vaquinha)/i, 'Doação'],
 ];
+// Devolve SEMPRE uma categoria que existe na lista (ou null se nenhuma palavra-chave casou): passa pelo mapa de
+// renomes (Alimentação renomeada para Comida → "Comida") e, se a padrão foi ocultada/excluída, cai em "Outros".
+// Antes devolvia o nome padrão cru, que não existia mais no select → o lançamento era salvo com categoria "".
 function palpitarCategoria(desc){
-  for(const [re, cat] of PALPITE_CATEGORIA){ if(re.test(desc)) return cat; }
+  for(const [re, cat] of PALPITE_CATEGORIA){
+    if(re.test(desc)){
+      const nome = nomeCategoriaPadrao(cat);
+      return categoriasAtivas().includes(nome) ? nome : 'Outros';
+    }
+  }
   return null;
 }
 
@@ -2654,7 +2662,7 @@ function salvarRapido(){
   const desc = document.getElementById('rapDesc').value.trim();
   if(isNaN(valor) || valor <= 0){ alert('Informe um valor válido.'); return; }
   const conta = document.getElementById('rapConta').value;
-  const categoria = rapidoTipo === 'receita' ? 'Receita' : document.getElementById('rapCategoria').value;
+  const categoria = rapidoTipo === 'receita' ? 'Receita' : (document.getElementById('rapCategoria').value || 'Outros'); // nunca grava categoria vazia
   const descFinal = desc || (rapidoTipo === 'receita' ? 'Receita' : categoria);
   const dataISO = hojeISO();
   salvarSnapshot();
@@ -2971,7 +2979,7 @@ function criarRecorrente(){
   const tipo = document.getElementById('recTipo').value;
   const desc = document.getElementById('recDesc').value.trim();
   const valor = parseValorBR(document.getElementById('recValor').value);
-  const categoria = tipo==='receita' ? 'Receita' : document.getElementById('recCategoria').value;
+  const categoria = tipo==='receita' ? 'Receita' : (document.getElementById('recCategoria').value || 'Outros'); // nunca grava categoria vazia
   if(!desc || isNaN(valor) || valor<=0){ alert('Preencha a descrição e o valor da conta fixa.'); return; }
   recorrentes.push({id:uid(), tipo, desc, valor, categoria});
   document.getElementById('recDesc').value='';
@@ -5443,7 +5451,7 @@ function confirmarImportacao(){
       tipo: ehReceita ? 'receita' : 'gasto',
       desc: it.nova.desc,
       valor: Math.abs(it.nova.valor),
-      categoria: ehReceita ? 'Receita' : it.categoria,
+      categoria: ehReceita ? 'Receita' : (it.categoria || 'Outros'),
       conta: p.conta,
       data: it.nova.data,
       fixo: false,

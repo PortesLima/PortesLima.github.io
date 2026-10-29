@@ -225,16 +225,75 @@ const alertasOrc = (page) => page.evaluate(() => [...document.querySelectorAll('
   await page.evaluate(() => cancelarEdicao());
   eq(await page.evaluate(() => [...document.getElementById('categoria').options].some(o => o.value === 'Fantasma')), true, '[BUG-CONHECIDO] a opção transitória "Fantasma (fora da lista)" continua no select depois de cancelar a edição (só some no próximo popularSelectsEstaticos); esperado: removê-la');
 
-  // palpite de categoria × renome
+  // palpite de categoria × renome/ocultação (pacote A): o palpite passa pelo mapa de renomes e nunca devolve
+  // uma categoria que não existe na lista; e salvar nunca grava categoria vazia
   await reset(page);
+  eq(await page.evaluate(() => palpitarCategoria('IFOOD pedido')), 'Alimentação', 'sem renome: o palpite segue "Alimentação"');
+  eq(await page.evaluate(() => palpitarCategoria('xyz sem palavra chave')), null, 'sem palavra-chave: nenhum palpite (null)');
   await renomear(page, 'Alimentação', 'Comida');
-  const palp = await page.evaluate(() => palpitarCategoria('IFOOD pedido'));
-  eq(palp, 'Alimentação', '[BUG-CONHECIDO] palpitarCategoria devolve o nome PADRÃO ("Alimentação") mesmo depois de renomeada para "Comida"/oculta: o lançamento rápido/importado cai numa categoria que não existe mais na lista (esperado: "Comida")');
+  eq(await page.evaluate(() => palpitarCategoria('IFOOD pedido')), 'Comida', 'palpitarCategoria passa pelo mapa de renomes: "IFOOD pedido" → "Comida"');
   await page.evaluate(() => abrirModalRapido());
   await page.evaluate(() => { document.getElementById('rapValor').value = '10'; document.getElementById('rapDesc').value = 'ifood'; rapidoAtualizarPalpite(); });
-  eq(await page.evaluate(() => document.getElementById('rapCategoria').value), '', '[BUG-CONHECIDO] registro rápido: o palpite aplica "Alimentação" (nome padrão) a um select que só tem "Comida" → o select fica SEM valor (""); esperado: "Comida"');
+  eq(await page.evaluate(() => document.getElementById('rapCategoria').value), 'Comida', 'registro rápido: o palpite escolhe "Comida" no select (a categoria renomeada)');
+  ok(/Categoria sugerida: Comida/.test(await page.evaluate(() => document.getElementById('rapPalpite').textContent)), 'e a dica diz "Categoria sugerida: Comida"');
   await page.evaluate(() => salvarRapido());
-  eq(await page.evaluate(() => transacoes[0].categoria), '', '[BUG-CONHECIDO] … e o gasto é salvo com categoria VAZIA (""), fora de qualquer lista, orçamento ou gráfico; esperado: "Comida"');
+  eq(await page.evaluate(() => transacoes[0].categoria), 'Comida', '… e o gasto é salvo em "Comida" (nunca com categoria vazia)');
+  // categoria padrão ocultada (excluída sem uso): cai em "Outros"
+  await reset(page);
+  await excluir(page, 'Alimentação');
+  eq(await page.evaluate(() => palpitarCategoria('IFOOD pedido')), 'Outros', 'categoria padrão OCULTADA: o palpite cai em "Outros"');
+  await page.evaluate(() => abrirModalRapido());
+  await page.evaluate(() => { document.getElementById('rapValor').value = '10'; document.getElementById('rapDesc').value = 'ifood'; rapidoAtualizarPalpite(); });
+  eq(await page.evaluate(() => document.getElementById('rapCategoria').value), 'Outros', 'registro rápido com a categoria sugerida oculta: o select vai para "Outros"');
+  await page.evaluate(() => salvarRapido());
+  eq(await page.evaluate(() => transacoes[0].categoria), 'Outros', '… e salva em "Outros"');
+  // padrão renomeada e depois excluída com destino: nada de nome antigo
+  await reset(page, { tx: [T(1, 'Alimentação')] });
+  await renomear(page, 'Alimentação', 'Comida'); await excluir(page, 'Comida'); await mover(page, 'Lazer');
+  eq(await page.evaluate(() => palpitarCategoria('ifood')), 'Outros', 'renomeada e depois excluída: o palpite cai em "Outros"');
+  // outros palpites: transporte renomeado
+  await reset(page);
+  await renomear(page, 'Transporte', 'Deslocamento');
+  eq(await page.evaluate(() => [palpitarCategoria('uber viagem'), palpitarCategoria('netflix')]), ['Deslocamento', 'Assinaturas'], 'cada palpite usa o nome efetivo da SUA categoria (Transporte→Deslocamento; Assinaturas intacta)');
+  // importação de extrato usa o mesmo palpite
+  await reset(page);
+  await renomear(page, 'Alimentação', 'Comida');
+  const catImport = await page.evaluate(async () => {
+    await iniciarImportacao('Outros', new File(['<OFX><BANKTRANLIST><STMTTRN><DTPOSTED>20260906<TRNAMT>-20.00<FITID>A1<NAME>IFOOD PEDIDO</BANKTRANLIST></OFX>'], 'a.ofx'));
+    const c = importacaoPendente.itens.map(i => i.categoria); fecharModalImportar(); return c;
+  });
+  eq(catImport, ['Comida'], 'importação de extrato: a categoria sugerida também respeita o renome');
+  // salvar nunca grava categoria vazia (fallback "Outros")
+  await reset(page);
+  await page.evaluate(() => abrirModalRapido());
+  await page.evaluate(() => { document.getElementById('rapCategoria').innerHTML = ''; document.getElementById('rapValor').value = '5'; document.getElementById('rapDesc').value = 'qualquer'; salvarRapido(); });
+  eq(await page.evaluate(() => transacoes[0].categoria), 'Outros', 'registro rápido com select de categoria vazio: salva em "Outros" (nunca "")');
+  await page.evaluate(async () => { document.getElementById('categoria').innerHTML = ''; document.getElementById('tipo').value = 'gasto'; document.getElementById('descricao').value = 'form sem categoria'; document.getElementById('valor').value = '7'; document.getElementById('conta').value = 'Outros'; await adicionar(); });
+  eq(await page.evaluate(() => transacoes[0].categoria), 'Outros', 'formulário completo com select de categoria vazio: salva em "Outros"');
+  await page.evaluate(() => { document.getElementById('recCategoria').innerHTML = ''; document.getElementById('recTipo').value = 'gasto'; document.getElementById('recDesc').value = 'fixa sem categoria'; document.getElementById('recValor').value = '9'; criarRecorrente(); });
+  eq(await page.evaluate(() => recorrentes[recorrentes.length - 1].categoria), 'Outros', 'conta que se repete com select vazio: salva em "Outros"');
+  await page.evaluate(() => { document.getElementById('tipo').value = 'receita'; });
+  eq(await page.evaluate(async () => { document.getElementById('descricao').value = 'salario'; document.getElementById('valor').value = '100'; await adicionar(); return transacoes[0].categoria; }), 'Receita', 'receita continua sempre com a categoria "Receita"');
+  // lançamentos JÁ gravados com categoria "" NÃO são migrados (decisão do pacote A) — como o app os mostra hoje
+  await reset(page, { tx: [T(1, '', 90), T(2, 'Alimentação', 10)] });
+  eq(await page.evaluate(() => transacoes.map(t => t.categoria)), ['', 'Alimentação'], 'o lançamento antigo com categoria "" continua com "" (nenhuma migração automática)');
+  await page.evaluate(() => { mudarAbaPrincipal('lancamentos'); render(); });
+  const vazia = await page.evaluate(() => {
+    const tab = [...document.querySelectorAll('#corpoTabela tr')].map(tr => (tr.querySelector('.col-cat') || {}).textContent.trim());
+    mudarAbaPrincipal('geral'); render();
+    return {
+      tabela: tab,
+      paraOnde: [...document.querySelectorAll('#paraOndeLista .po-nome')].map(e => e.textContent),
+      orc: [...document.querySelectorAll('#orcamentos .orc-label')].map(e => e.textContent),
+      dica: [...document.querySelectorAll('#listaDicas .alert')].map(a => a.textContent).find(t => /maior categoria/.test(t)) || '',
+      filtro: [...document.getElementById('filtroCategoria').options].some(o => o.value === ''  && o.textContent !== 'Todas categorias'),
+    };
+  });
+  eq([vazia.tabela.includes(''), vazia.paraOnde.includes(''), vazia.orc.includes('')], [true, true, true], '[BUG-CONHECIDO] resíduo (não migrado de propósito): lançamento antigo com categoria "" aparece com chip vazio na tabela e com NOME VAZIO em "Para onde foi o dinheiro" e na lista de orçamento');
+  ok(/maior categoria de gasto é\s*,/.test(vazia.dica), '[BUG-CONHECIDO] resíduo: a dica sai quebrada — "Sua maior categoria de gasto é , representando 90% do total gasto no mês."');
+  await page.evaluate(() => editar(1));
+  eq(await page.evaluate(() => document.getElementById('categoria').value), 'Moradia', '[BUG-CONHECIDO] resíduo: editar() um lançamento com categoria "" abre o formulário com a 1ª categoria da lista ("Moradia") — salvar sem reparar TROCARIA a categoria em silêncio');
+  await page.evaluate(() => cancelarEdicao());
 
   // ================= 5. nomes hostis =================
   console.log('5. nomes com HTML, aspas e emoji');
