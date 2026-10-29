@@ -82,6 +82,12 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   com `via`), relógio para trás, `assinatura` ausente/corrompida, merge no sync. PostHog é um stub em memória
   (`window.posthog` com `__SV`), nada vai à rede. Prefixos: `[BUG-CONHECIDO]` (parece errado hoje) e
   `[PROVISORIO-FASE2]` (vale só sem backend/cobrança — vai falhar de propósito quando a Fase 2 entrar).
+- `test-categorias` (202) — **reconstrução (Bloco 3)**: `normalizarCategoriasUsuario`; adicionar (vazio, espaços, 30/31,
+  duplicata em outra caixa, reservadas, cores da paleta); renomear (vínculos em lançamentos, orçamento e contas fixas,
+  restaurar, colisões); excluir (sem uso, com uso + destino, destino padrão, cadeia, renomeada, `Outros`); nomes hostis
+  (HTML/aspas/emoji/barra) em ~10 telas; limites de orçamento (0, vazio, alto, vírgula/ponto, `Infinity`); "Orçamento em
+  risco" e alertas em 79/80/100/101 %; persistência (recarregar, `montarEstado`, `aplicarDadosImportados`, backup por arquivo,
+  blob antigo). 14 `[BUG-CONHECIDO]` (escape de HTML em 6 telas, `palpitarCategoria` × renome, 80 % em ponto flutuante…).
 
 A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
 em `tests/` desde o início**.
