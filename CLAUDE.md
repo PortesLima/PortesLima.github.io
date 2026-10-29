@@ -97,14 +97,14 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   cru, ida e volta) e os 3 PDFs (`exportarPDF`/`Anual`/`IR`) com o jsPDF real e o construtor espiado (texto desenhado por
   `doc.text`, páginas, tamanho; `save()` interceptado): totais e contagem de linhas batem com a tela, mês/ano vazio, 70
   linhas em várias páginas, texto hostil. 6 `[BUG-CONHECIDO]`.
-- `test-estado` (228) — **reconstrução (Bloco 5)**: guard das chaves de armazenamento (toda `STORAGE_*` está no funil ou é
+- `test-estado` (236) — **reconstrução (Bloco 5)**: guard das chaves de armazenamento (toda `STORAGE_*` está no funil ou é
   local de propósito: `pin`, `onboardingVisto`, `cambioCache`; chaves `bc_*` diretas: `bc_aviso_venc_dispensado`,
   `bc_tel_expirado2`) e dos 13 campos de `montarEstado()`; cada campo por `aplicarDadosImportados` → storage → recarregar →
   backup → 2º aparelho limpo; funções `salvar*` na chave certa; `importarBackupJSON` com entrada cancelada/inválida/vazia/
   antiga/com chaves extras/tipos errados/muito grande; desfazer de 1 nível (extrato, parcelada, backup); sync com o Drive
   simulado em memória (`context.route` em `googleapis.com`: last-write-wins, 2 aparelhos, erros 401/500/vazio/corrompido);
   PIN (ativar, inválidos, errado, trocar, fora do backup/Drive); `?readonly=1` (sem escrita, sem telemetria). Depois da
-  leva 1 (G, H, G2) restam 4 `[BUG-CONHECIDO]` aqui (conflito entre 2 aparelhos, PIN "Esqueci", link só de leitura ×2).
+  leva 1 (G, H, G2) e o P3 da leva 2 restam 2 `[BUG-CONHECIDO]` aqui (conflito entre 2 aparelhos e PIN "Esqueci o PIN").
 - `test-responsivo` (227) — **reconstrução (Bloco 6)**: sem rolagem horizontal em 360/390/768/1280 × tema claro/escuro × vazio/cheio
   (com as 3 barras do topo) × abas (+ Análise) e nos 11 modais (guard: a tabela de modais cobre todo `.modal-bg`); barra inferior
   e FAB medidos por `elementFromPoint`/`visualViewport`/`offsetTop` (não por `getBoundingClientRect().bottom`), com a altura do
@@ -126,6 +126,11 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] resposta 200 com corpo VAZIO … também faz o aparelho novo sobrescrever o Drive…` → `leitura 200 com corpo vazio: o Drive NÃO recebe nenhuma escrita (…)`
 - `[BUG-CONHECIDO] erro 500 ao LISTAR os arquivos: …CRIA outro "bolsodados"…` → `erro 500 ao LISTAR: NÃO cria outro "bolso-certo-dados.json"` (+ `listagem 500: …`)
 - (sem tag, comportamento mudou) `arquivo do Drive corrompido: o local é mantido e sobe para o Drive (reparando o arquivo)` → `arquivo do Drive corrompido (JSON inválido): o Drive NÃO recebe nenhuma escrita (…)` + `corrompido: o arquivo do Drive continua como estava`
+
+**Leva 2 · P3 (link só de leitura)** — `tests/test-estado.js`
+- `[BUG-CONHECIDO] abrir o link só de leitura num aparelho SEM dados inicia o teste de 15 dias (grava bc_assinatura)…` → `abrir o link só de leitura num aparelho SEM dados NÃO grava nada: não inicia o teste de 15 dias (antes gravava bc_assinatura)` (+ `… sem trialInicio, sem faixa de contagem regressiva`)
+- `[BUG-CONHECIDO] com o Drive SEM arquivo, o link só de leitura CRIA o arquivo e sobe o estado local…` → `com o Drive SEM arquivo, o link só de leitura NÃO cria o arquivo nem sobe o estado local (zero escritas no Drive)`
+- (novos) PostHog nem é inicializado em modo leitura (e é, 1 vez, fora dele); o assistente de primeiros passos não aparece; o que vem do Drive fica só na memória (storage intacto, sem `bc_drive_usa`/`bc_drive_pendente`); Drive com `{}` não é inicializado; `adicionar()` pelo console muda a memória mas **nada persiste**.
 
 **Leva 2 · P2 (backup visível com o trial vencido)** — `tests/test-trial.js`
 - `[BUG-CONHECIDO] com o trial vencido e o modal dispensado, NENHUM botão de backup fica visível…` → `com o trial vencido e o modal dispensado, o menu ⚙️ mostra "Baixar backup (.json)" (um único botão de exportar)` + `o item de exportar backup NÃO tem .editable-only` + `clicar gera o arquivo (versao 1, com os lançamentos), fecha o menu e funciona com o app bloqueado`
@@ -331,6 +336,14 @@ DOM. `render()` is large and populates elements by id — moving an element betw
    mexe na memória** ("Não coube no armazenamento do aparelho. Nada foi alterado."). Importar zera `snapshotAnterior`
    (o "Desfazer" perde a validade). O arquivo exportado traz `versao: 1` (ausência = 1; versão maior é recusada pedindo
    para atualizar o app). O tema vindo do backup/Drive agora é gravado em `bc_tema`.
+
+   **Link só de leitura — `?readonly=1` (P3, leva 2):** `modoLeitura()` é o ponto único. Nesse modo **nada é gravado**:
+   `setJSON` devolve `true` sem gravar (o app trabalha só em memória; o que vem do Drive não persiste), o trial **não começa**
+   (`carregarAssinatura` não grava `trialInicio`), o SDK do PostHog **nem é inicializado** (`posthog.init` no `<head>`), o assistente
+   de primeiros passos não aparece, `driveAgendarSync`/`driveSalvarAgora` não escrevem, `driveMarcaSet`/`driveUsaSet` não gravam e
+   `driveEncontrarOuCriarArquivo` **não cria** o arquivo (sem arquivo no Drive não há o que ler: status "ok", sem faixa vermelha). A leitura
+   do Drive continua permitida. Exceção conhecida: dispensar o banner de vencimentos (✕) grava `bc_aviso_venc_dispensado` direto no
+   \`localStorage\` (preferência de UI do aparelho).
 3. **Manual JSON backup** (`exportarBackupJSON` / `importarBackupJSON`) — a full-state export/
    import users can trigger by hand.
 

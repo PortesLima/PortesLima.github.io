@@ -24,7 +24,7 @@
 <script>
   !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
   var BC_PH_KEY = 'phc_DjJkAukpMc3knrfxJaiUaWif8wsp5FDspttUazfqjE65'; // Project API Key (pública) — projeto US Cloud
-  if(BC_PH_KEY.indexOf('phc_COLE') !== 0){
+  if(BC_PH_KEY.indexOf('phc_COLE') !== 0 && new URLSearchParams(location.search).get('readonly') !== '1'){ // link só de leitura: sem SDK, sem chaves no storage
     try{
       posthog.init(BC_PH_KEY, {
         api_host: 'https://us.i.posthog.com',
@@ -1670,10 +1670,10 @@ let driveUltimaTentativa = -Infinity;
 const CHAVE_DRIVE_PENDENTE = 'bc_drive_pendente';
 const CHAVE_DRIVE_USA = 'bc_drive_usa';
 function driveMarcaGet(){ try{ return localStorage.getItem(CHAVE_DRIVE_PENDENTE) === '1'; }catch(e){ return false; } }
-function driveMarcaSet(){ try{ localStorage.setItem(CHAVE_DRIVE_PENDENTE, '1'); }catch(e){} }
+function driveMarcaSet(){ if(modoLeitura()) return; try{ localStorage.setItem(CHAVE_DRIVE_PENDENTE, '1'); }catch(e){} }
 function driveMarcaLimpar(){ try{ localStorage.removeItem(CHAVE_DRIVE_PENDENTE); }catch(e){} }
 function driveUsaGet(){ try{ return localStorage.getItem(CHAVE_DRIVE_USA) === '1'; }catch(e){ return false; } }
-function driveUsaSet(){ try{ localStorage.setItem(CHAVE_DRIVE_USA, '1'); }catch(e){} }
+function driveUsaSet(){ if(modoLeitura()) return; try{ localStorage.setItem(CHAVE_DRIVE_USA, '1'); }catch(e){} }
 let driveFalhaCorrompido = false; // a leitura falhou por JSON inválido/formato inesperado (arquivo ilegível), não por rede
 let driveConflitoDados = null;    // blob do Drive guardado enquanto a pessoa escolhe (modal #modalDriveConflito)
 function aparelhoTemDados(){
@@ -1824,6 +1824,8 @@ async function driveEncontrarOuCriarArquivo(){
   if(!data || !Array.isArray(data.files)) throw new Error('drive: listagem inesperada');
   if(data.files.length > 0){
     driveFileId = data.files[0].id;
+  }else if(modoLeitura()){
+    driveFileId = null; // somente leitura: não existe arquivo e NÃO se cria um
   }else{
     const metadata = { name: DRIVE_FILENAME, mimeType:'application/json' };
     const boundary = 'bolsocerto';
@@ -1948,6 +1950,9 @@ async function driveSincronizarInicial(){
   let lendo = true;
   try{
     await driveEncontrarOuCriarArquivo();
+    if(!driveFileId){ // só no modo leitura: sem arquivo no Drive, não há o que ler (e nada a escrever)
+      lendo = false; atualizarStatusGoogle('ok'); return;
+    }
     const res = await driveApi(`drive/v3/files/${driveFileId}?alt=media`);
     const texto = await res.text();
     // corpo vazio, JSON inválido ou formato estranho = "não sei": NUNCA é tratado como "arquivo sem dados"
@@ -1988,6 +1993,7 @@ async function driveSincronizarInicial(){
   }
 }
 function driveAgendarSync(){
+  if(modoLeitura()) return; // link só de leitura nunca escreve no Drive
   // G2: em aparelho que já usa o Drive, toda alteração fica "marcada" (persistente) até um envio confirmado —
   // mesmo sem internet/sem token. Se o app fechar antes de subir, a próxima conexão pergunta em vez de substituir.
   if(driveUsaGet()) driveMarcaSet();
@@ -2001,6 +2007,7 @@ function driveAgendarSync(){
 }
 async function driveSalvarAgora(){
   if(!accessToken || !driveFileId) return;
+  if(modoLeitura()) return; // link só de leitura nunca escreve no Drive
   if(!driveLeituraOk) return; // trava de escrita
   driveUltimaTentativa = performance.now();
   try{
@@ -2079,6 +2086,10 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function chaveMes(dataISO){ return dataISO.slice(0,7); }
+// Link de compartilhamento (?readonly=1): NADA é gravado — nem storage, nem Drive, nem trial, nem telemetria.
+function modoLeitura(){
+  try{ return new URLSearchParams(location.search).get('readonly') === '1'; }catch(e){ return false; }
+}
 function hojeISO(){
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -2093,7 +2104,7 @@ function hojeISO(){
 const RASTREAR_PROPS_OK = ['dias_de_trial', 'via'];
 function rastrear(evento, props){
   try{
-    if(new URLSearchParams(location.search).get('readonly') === '1') return;
+    if(modoLeitura()) return;
     if(!window.posthog || typeof posthog.capture !== 'function') return;
     let limpo;
     if(props && typeof props === 'object'){
@@ -2238,6 +2249,7 @@ async function getJSON(key, fallback){
 // devolve true se gravou, false se falhou (cota do localStorage etc.). A maioria dos chamadores ignora o
 // retorno (continua "falha em silêncio"); a importação de backup/Drive confere e reverte.
 async function setJSON(key, val){
+  if(modoLeitura()) return true; // link só de leitura nunca grava (o app trabalha só em memória)
   try{ const r = await window.storage.set(key, JSON.stringify(val)); return r !== false; }catch(e){ return false; }
 }
 
@@ -5055,7 +5067,7 @@ async function entrarNoApp(){
   // se não há PIN, verificarPinInicial já mostrou o app — vai direto para os registros
   if(document.getElementById('conteudoApp').style.display !== 'none'){
     mudarAbaPrincipal('lancamentos');
-    verificarOnboarding(); // wizard guiado, com o app já visível atrás do modal
+    if(!modoLeitura()) verificarOnboarding(); // wizard guiado, com o app já visível atrás do modal (escreve: fora do link só de leitura)
   }
 }
 async function verificarPinInicial(){
@@ -5604,7 +5616,7 @@ async function carregarAssinatura(){
     assinatura = { status:'trial', trialInicio:null, assinouEm:null, ...guardada };
   }
   // primeira abertura de sempre: marca o início do teste
-  if(!assinatura.trialInicio && !assinatura.assinouEm){
+  if(!assinatura.trialInicio && !assinatura.assinouEm && !modoLeitura()){ // quem só consulta pelo link não consome o teste de 15 dias
     assinatura.trialInicio = hojeISO();
     await setJSON(STORAGE_ASSINATURA, assinatura);
     driveAgendarSync();

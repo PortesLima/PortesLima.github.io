@@ -661,7 +661,7 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
     await page.clock.setFixedTime(new Date(FIX));
     const semente = Object.fromEntries(Object.entries(FULL).filter(([k]) => k !== 'moeda' && k !== 'tema').map(([k, v]) => [k, JSON.stringify(v)]));
     await page.addInitScript(`(function(){
-      window.__ev = []; window.posthog = { __SV: 1, __loaded: true, init: function(){}, capture: function(n){ window.__ev.push(n); } };
+      window.__ev = []; window.__init = 0; window.posthog = { __SV: 1, __loaded: true, init: function(){ window.__init++; }, capture: function(n){ window.__ev.push(n); } };
       if(!localStorage.getItem('bc_semeado')){
         localStorage.setItem('bc_semeado', '1'); localStorage.setItem('bc_onboardingVisto', 'true');
         const s = ${JSON.stringify(semente)}; for(const k in s) localStorage.setItem('bc_' + k, s[k]);
@@ -681,6 +681,10 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
   await R.page.evaluate(() => { for(const a of ['geral', 'lancamentos', 'orcamento', 'metas', 'geral']) mudarAbaPrincipal(a); mudarSubAbaGeral('analise'); mudarSubAbaGeral('resumo'); mesAtual = '2026-08'; render(); });
   eq(await R.page.evaluate(() => window.__w.filter(k => !/bc_semeado/.test(k))), [], 'navegar (abas, sub-abas, mês) NÃO grava nada');
   eq(await R.page.evaluate(() => { rastrear('qualquer'); return window.__ev; }), [], 'rastrear() é no-op');
+  eq(await R.page.evaluate(() => window.__init), 0, 'o SDK do PostHog NEM é inicializado no link só de leitura (o init criaria chaves no localStorage)');
+  const normal = await abrirRO({ query: '' });
+  eq(await normal.page.evaluate(() => window.__init), 1, 'fora do modo leitura o PostHog é inicializado normalmente (1 vez)');
+  await normal.ctx.close();
   // sem semente: o primeiro acesso grava a assinatura (trial)
   const RV = await (async () => {
     const ctx = await browser.newContext({ timezoneId: 'America/Sao_Paulo' }); await bloquearPosthog(ctx);
@@ -691,23 +695,43 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
     await page.waitForFunction(() => getComputedStyle(document.getElementById('telaInicial')).display === 'none');
     return { ctx, page };
   })();
-  eq(await RV.page.evaluate(() => window.__w.filter(k => k !== 'bc_onboardingVisto').sort()), ['bc_assinatura'], '[BUG-CONHECIDO] abrir o link só de leitura num aparelho SEM dados inicia o teste de 15 dias (grava bc_assinatura): quem só consulta consome o trial; esperado: nenhuma escrita em modo leitura');
+  eq(await RV.page.evaluate(() => window.__w.filter(k => k !== 'bc_onboardingVisto')), [], 'abrir o link só de leitura num aparelho SEM dados NÃO grava nada: não inicia o teste de 15 dias (antes gravava bc_assinatura)');
+  eq(await RV.page.evaluate(() => [localStorage.getItem('bc_assinatura'), assinatura.trialInicio, assinatura.status, getComputedStyle(document.getElementById('barraTrial')).display]), [null, null, 'trial', 'none'], '… sem trialInicio, sem faixa de contagem regressiva; o app abre normalmente em leitura');
   await RV.ctx.close();
+  const RO2 = await (async () => {
+    const ctx = await browser.newContext({ timezoneId: 'America/Sao_Paulo' }); await bloquearPosthog(ctx);
+    const page = await ctx.newPage(); await page.clock.setFixedTime(new Date(FIX));
+    await page.addInitScript(`window.__w = []; const o = Storage.prototype.setItem; Storage.prototype.setItem = function(k,v){ if(this === localStorage) window.__w.push(k); return o.call(this,k,v); };`);
+    await page.goto(URLAPP + '&readonly=1', { waitUntil: 'load' });
+    await page.locator('#btnEntrarApp').click({ timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('telaInicial')).display === 'none');
+    return { ctx, page };
+  })();
+  eq(await RO2.page.evaluate(() => [getComputedStyle(document.getElementById('modalOnboarding')).display, window.__w]), ['none', []], 'sem a flag de onboarding, o link só de leitura NÃO mostra o assistente de primeiros passos (ele escreve) e não grava nada');
+  await RO2.ctx.close();
   // Drive em modo leitura
   const dr1 = criarDrive(JSON.stringify({ ...FULL, transacoes: [T(500)] }));
   const R2 = await abrirRO({ query: '&readonly=1', drive: dr1 });
   await conectar(R2.page);
   eq([dr1.posts, dr1.patches.length, await R2.page.evaluate(() => transacoes.map(t => t.id))], [0, 0, [500]], 'com Drive que já tem dados: só baixa — nenhum POST/PATCH');
+  eq(await R2.page.evaluate(() => [window.__w.filter(k => !/bc_semeado/.test(k)), JSON.parse(localStorage.getItem('bc_transacoes')).length, localStorage.getItem('bc_drive_usa'), localStorage.getItem('bc_drive_pendente')]), [[], FULL.transacoes.length, null, null], '… e o que veio do Drive fica só na memória: nenhuma escrita no storage do aparelho (o storage segue com o que já tinha; sem bc_drive_usa/bc_drive_pendente)');
   await R2.ctx.close();
   const dr2 = criarDrive(null);
   const R3 = await abrirRO({ query: '&readonly=1', drive: dr2 });
   await conectar(R3.page);
-  eq([dr2.posts, dr2.arquivo !== null], [1, true], '[BUG-CONHECIDO] com o Drive SEM arquivo, o link só de leitura CRIA o arquivo e sobe o estado local — é uma escrita no Drive; esperado: não escrever em modo leitura');
+  eq([dr2.posts, dr2.patches.length, dr2.arquivo], [0, 0, null], 'com o Drive SEM arquivo, o link só de leitura NÃO cria o arquivo nem sobe o estado local (zero escritas no Drive)');
+  eq(await R3.page.evaluate(() => (document.getElementById('barraDrive').textContent || '').length), 0, '… e não acusa falha: não há faixa vermelha (não ter arquivo não é erro em modo leitura)');
   await R3.ctx.close();
+  const dr3 = criarDrive('{}');
+  const R5 = await abrirRO({ query: '&readonly=1', drive: dr3 });
+  await conectar(R5.page);
+  eq([dr3.posts, dr3.patches.length, dr3.arquivo], [0, 0, '{}'], 'Drive com arquivo {} (sem dados): o modo leitura também NÃO o inicializa com o estado local');
+  await R5.ctx.close();
   // as ações de escrita continuam existindo como funções (a barreira é visual) — como no trial
   const R4 = await abrirRO({ query: '&readonly=1' });
   await R4.page.evaluate(async () => { document.getElementById('descricao').value = 'via console'; document.getElementById('valor').value = '5'; document.getElementById('conta').value = 'Nubank'; await adicionar(); });
-  eq(await R4.page.evaluate(() => transacoes.some(t => t.desc === 'via console')), true, 'caracterização: adicionar() chamado pelo console grava mesmo com ?readonly=1 (a barreira é só CSS, como no soft-block do trial)');
+  eq(await R4.page.evaluate(() => transacoes.some(t => t.desc === 'via console')), true, 'caracterização: adicionar() chamado pelo console altera a MEMÓRIA mesmo com ?readonly=1 (a barreira de função é só CSS, como no soft-block do trial)');
+  eq(await R4.page.evaluate(() => [window.__w.filter(k => !/bc_semeado/.test(k)), JSON.parse(localStorage.getItem('bc_transacoes')).some(t => t.desc === 'via console')]), [[], false], '… mas NADA é persistido: com ?readonly=1 o setJSON não grava (nem pelo console)');
   await R4.ctx.close();
   await R.ctx.close();
 
