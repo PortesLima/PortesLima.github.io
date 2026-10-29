@@ -332,47 +332,95 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
   // 5.5 erros do Drive
   console.log('5b. Drive devolvendo erro');
   const dadosNoDrive = JSON.stringify({ ...FULL });
-  // PATCH com erro
+  const msgLeitura = '🔴 Não consegui falar com o Drive — seus dados locais estão preservados';
+  const barra = (page) => page.evaluate(() => { const b = document.getElementById('barraDrive'); return { visivel: !!b && getComputedStyle(b).display !== 'none', txt: b ? (b.querySelector('span') || {}).textContent : null, botao: !!(b && b.querySelector('#btnDriveRetry')) }; });
+  const mutar = (page, id) => page.evaluate(i => { transacoes.push({ id: i, tipo: 'gasto', desc: 'm' + i, valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-02', status: 'pago' }); salvarTx(); }, id);
+  const esperaBotao = (page, trecho) => page.waitForFunction(t => document.getElementById('btnGoogle').textContent.includes(t), trecho);
+  // driveApi lança erro tipado em qualquer !res.ok
+  drive = criarDrive(dadosNoDrive); drive.modo.lista = 500;
+  X = await novoAparelho(browser, { drive });
+  eq(await X.page.evaluate(async () => { accessToken = 't'; try{ await driveApi('drive/v3/files?q=x'); return null; }catch(e){ return { status: e.status, msg: e.message }; } }), { status: 500, msg: 'drive http 500' }, 'driveApi lança erro tipado (status 500) em qualquer resposta !ok');
+  await X.ctx.close();
+  // PATCH com erro: o status NÃO mente
   drive = criarDrive(dadosNoDrive);
   X = await novoAparelho(browser, { drive });
   await conectar(X.page);
   drive.modo.patch = 500;
-  await X.page.evaluate(() => { transacoes.push({ id: 900, tipo: 'gasto', desc: 'x', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-02', status: 'pago' }); salvarTx(); });
+  await mutar(X.page, 900);
   await drive.aguardar(() => drive.tentativasPatch >= 1);
   eq([drive.patches.length, JSON.parse(drive.arquivo).transacoes.some(t => t.id === 900)], [0, false], 'PATCH respondido com erro 500: o Drive NÃO recebeu o lançamento');
   eq(await X.page.evaluate(() => transacoes.some(t => t.id === 900)), true, 'o dado local permanece (memória)');
-  eq(await botaoGoogle(X.page), '🟢 Sincronizado com Drive', '[BUG-CONHECIDO] mesmo com o PATCH devolvendo 500 o botão mostra "Sincronizado com Drive" (driveApi só trata o 401; driveSalvarAgora nunca checa res.ok): a pessoa acha que salvou e não salvou; esperado: "Erro ao sincronizar"');
+  await esperaBotao(X.page, 'Não sincronizou');
+  eq(await botaoGoogle(X.page), '🔴 Não sincronizou', 'PATCH com 500: o botão mostra "🔴 Não sincronizou" (nunca "Sincronizado")');
+  eq((await barra(X.page)).visivel && (await barra(X.page)).botao, true, 'e a faixa do Drive aparece com o botão "Tentar de novo"');
   drive.modo.patch = null;
-  await X.page.evaluate(() => { transacoes.push({ id: 901, tipo: 'gasto', desc: 'y', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-02', status: 'pago' }); salvarTx(); });
+  await X.page.click('#btnDriveRetry');
   await drive.aguardar(() => drive.patches.length >= 1);
-  eq(JSON.parse(drive.arquivo).transacoes.filter(t => t.id >= 900).map(t => t.id), [900, 901], 'a próxima alteração reenvia o estado inteiro (inclusive o que falhou antes)');
+  eq(JSON.parse(drive.arquivo).transacoes.some(t => t.id === 900), true, '"Tentar de novo" reenvia o que ficou pendente (sem precisar de nova alteração)');
+  await esperaBotao(X.page, 'Sincronizado');
+  eq([await botaoGoogle(X.page), (await barra(X.page)).visivel], ['🟢 Sincronizado com Drive', false], 'depois de enviar: "Sincronizado" e a faixa some');
+  drive.modo.patch = 500; await mutar(X.page, 901); await drive.aguardar(() => drive.tentativasPatch >= 2);
+  drive.modo.patch = null; await mutar(X.page, 902); await drive.aguardar(() => drive.patches.length >= 2);
+  eq(JSON.parse(drive.arquivo).transacoes.filter(t => t.id >= 900).map(t => t.id), [900, 901, 902], 'a próxima alteração (próximo debounce) também reenvia o estado inteiro, inclusive o que falhou antes');
   await X.ctx.close();
-  // leitura com erro 500 num aparelho NOVO (vazio)
-  drive = criarDrive(dadosNoDrive);
-  X = await novoAparelho(browser, { drive });
-  drive.modo.media = 500;
-  await conectar(X.page);
-  eq(JSON.parse(drive.arquivo).transacoes.length, 0, '[BUG-CONHECIDO] erro 500 ao LER o arquivo do Drive num aparelho novo: o app trata a resposta de erro como "arquivo vazio" e SOBE o estado vazio do aparelho por cima — o Drive perde todos os dados; esperado: checar res.ok e não escrever');
+  // leitura com falha: Drive intacto, local preservado, trava de escrita, recuperação
+  const LOCAL1 = { id: 1, tipo: 'gasto', desc: 'Só no local', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-01', status: 'pago' };
+  const falhaLeitura = async (rotulo, ajustar) => {
+    drive = criarDrive(dadosNoDrive); ajustar(drive);
+    X = await novoAparelho(browser, { drive });
+    await X.page.evaluate(async l => { transacoes = [l]; await salvarTx(); }, LOCAL1);
+    await conectar(X.page);
+    const intacto = drive.arquivo === dadosNoDrive || drive.arquivo === '{"transacoes": [corrompido';
+    eq([drive.patches.length, drive.posts, intacto], [0, 0, true], rotulo + ': o Drive NÃO recebe nenhuma escrita (sem PATCH, sem arquivo novo, conteúdo intacto)');
+    eq(await X.page.evaluate(() => transacoes.map(t => t.id)), [1], rotulo + ': os dados locais ficam como estavam');
+    const b = await barra(X.page);
+    eq([b.visivel, b.txt, b.botao], [true, msgLeitura, true], rotulo + ': faixa "Não consegui falar com o Drive — seus dados locais estão preservados" + botão "Tentar de novo"');
+    ok(/🔴/.test(await botaoGoogle(X.page)), rotulo + ': o botão de status fica vermelho (não "Sincronizado")');
+    // trava de escrita: sem leitura bem-sucedida nada sobe, nem por mutação nem por chamada direta
+    await mutar(X.page, 77);
+    eq(await X.page.evaluate(() => syncTimer), null, rotulo + ': mutação sem leitura OK não agenda sincronização');
+    await X.page.evaluate(async () => { await driveSalvarAgora(); });
+    eq(drive.patches.length, 0, rotulo + ': driveSalvarAgora() direto também não escreve (trava de escrita)');
+    return X;
+  };
+  X = await falhaLeitura('leitura 500', d => { d.modo.media = 500; });
+  // repetição limitada a 1 por 60 s, e também ao voltar ao primeiro plano
+  const lista0 = drive.listas;
+  await X.page.evaluate(async () => { await driveRetentarSeNecessario(); await driveRetentarSeNecessario(); });
+  eq(drive.listas - lista0, 0, 'tentar de novo automático respeita o intervalo de 60 s (a tentativa acabou de acontecer: nenhuma nova)');
+  await X.page.evaluate(() => { window.__pn0 = performance.now.bind(performance); performance.now = () => window.__pn0() + 61000; });
+  await X.page.evaluate(async () => { await driveRetentarSeNecessario(); await driveRetentarSeNecessario(); });
+  eq(drive.listas - lista0, 1, 'passados 60 s: UMA nova tentativa (a 2ª chamada seguida não repete)');
+  const gets0 = drive.gets;
+  await X.page.evaluate(() => { performance.now = () => window.__pn0() + 122000; });
+  await X.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await drive.aguardar(() => drive.listas - lista0 >= 2 && drive.gets > gets0); // a tentativa chegou até a leitura (que falha)
+  await X.page.evaluate(() => { performance.now = window.__pn0; }); // restaura o relógio da página
+  ok(true, 'visibilitychange (voltar ao primeiro plano) dispara a nova tentativa');
+  // recuperação na 2ª tentativa
+  drive.modo.media = null;
+  await X.page.click('#btnDriveRetry');
+  await esperaBotao(X.page, 'Sincronizado');
+  eq(await X.page.evaluate(() => transacoes.map(t => t.id).sort()), FULL.transacoes.map(t => t.id).sort(), 'recuperou: a leitura bem-sucedida traz o conteúdo do Drive (last-write-wins: o que só existia no aparelho é substituído — limitação documentada, sem merge)');
+  eq((await barra(X.page)).visivel, false, 'recuperou: a faixa some');
+  eq(drive.arquivo, dadosNoDrive, 'e o Drive continua com o conteúdo original (nada foi sobrescrito no caminho)');
+  await mutar(X.page, 78); await drive.aguardar(() => drive.patches.length >= 1);
+  eq(JSON.parse(drive.arquivo).transacoes.some(t => t.id === 78), true, 'depois da leitura OK as escritas voltam a funcionar');
   await X.ctx.close();
-  // resposta vazia (200, corpo vazio)
-  drive = criarDrive(dadosNoDrive); drive.modo.vazio = true;
-  X = await novoAparelho(browser, { drive });
-  await conectar(X.page);
-  eq(drive.patches.length >= 1 && JSON.parse(drive.arquivo).transacoes.length === 0, true, '[BUG-CONHECIDO] resposta 200 com corpo VAZIO (falha de rede/proxy) também faz o aparelho novo sobrescrever o Drive com o estado vazio');
+  X = await falhaLeitura('leitura 200 com corpo vazio', d => { d.modo.vazio = true; }); await X.ctx.close();
+  X = await falhaLeitura('arquivo do Drive corrompido (JSON inválido)', d => { d.arquivo = '{"transacoes": [corrompido'; });
+  eq(drive.arquivo, '{"transacoes": [corrompido', 'corrompido: o arquivo do Drive continua como estava (não é "reparado" às cegas)'); await X.ctx.close();
+  // listagem com erro: nunca cria o 2º arquivo
+  X = await falhaLeitura('listagem 500', d => { d.modo.lista = 500; });
+  eq(drive.posts, 0, 'erro 500 ao LISTAR: NÃO cria outro "bolso-certo-dados.json"');
   await X.ctx.close();
-  // corpo corrompido
-  drive = criarDrive('{"transacoes": [corrompido');
+  // JSON válido sem "transacoes" ({}): leitura OK, arquivo sem dados → o local sobe para inicializar, como antes
+  drive = criarDrive('{}');
   X = await novoAparelho(browser, { drive });
-  await X.page.evaluate(async () => { transacoes = [{ id: 1, tipo: 'gasto', desc: 'Local', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-01', status: 'pago' }]; await salvarTx(); });
+  await X.page.evaluate(async l => { transacoes = [l]; await salvarTx(); }, LOCAL1);
   await conectar(X.page);
   await drive.aguardar(() => drive.patches.length >= 1);
-  eq([await X.page.evaluate(() => transacoes.map(t => t.id)), JSON.parse(drive.arquivo).transacoes.map(t => t.id)], [[1], [1]], 'arquivo do Drive corrompido: o local é mantido e sobe para o Drive (reparando o arquivo)');
-  await X.ctx.close();
-  // listagem com erro
-  drive = criarDrive(dadosNoDrive); drive.modo.lista = 500;
-  X = await novoAparelho(browser, { drive });
-  await conectar(X.page);
-  eq(drive.posts, 1, '[BUG-CONHECIDO] erro 500 ao LISTAR os arquivos: o app acha que o arquivo não existe e CRIA outro "bolsodados" (arquivo duplicado no Drive da pessoa); esperado: checar res.ok');
+  eq(JSON.parse(drive.arquivo).transacoes.map(t => t.id), [1], 'arquivo {} (leitura OK, sem dados): o local sobe para inicializar o arquivo');
   await X.ctx.close();
   // 401 sem renovação
   drive = criarDrive(dadosNoDrive); drive.modo.lista = 401;

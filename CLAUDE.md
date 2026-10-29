@@ -240,6 +240,15 @@ DOM. `render()` is large and populates elements by id — moving an element betw
    available across devices. Sync is one-way-at-a-time and debounced: any mutation calls
    `driveAgendarSync()`, which waits ~1.2s (`syncTimer`) then PATCHes the whole state via
    `driveSalvarAgora()`. There is no merge logic — the last write wins.
+
+   **Regras de proteção (pacote G, leva 1):** `driveApi` lança erro tipado (`e.status`) em qualquer `!res.ok`. "Arquivo não
+   existe" só vale para listagem OK e vazia; resposta de erro, corpo vazio ou JSON inválido = "não sei" → o app **não escreve
+   nada** no Drive, segue com os dados locais e mostra a faixa `#barraDrive` ("🔴 Não consegui falar com o Drive — seus dados
+   locais estão preservados" + **Tentar de novo**). **Trava de escrita:** `driveLeituraOk` (em memória) só vira `true` após uma
+   leitura inicial bem-sucedida; sem ela `driveAgendarSync`/`driveSalvarAgora` não escrevem. PATCH com falha mostra
+   "🔴 Não sincronizou" (nunca "Sincronizado" sem `res.ok`). Nova tentativa automática ao voltar ao primeiro plano
+   (`visibilitychange`), no máx. 1 a cada 60 s (`performance.now`, porque `Date` é congelado nos testes). Nunca cria um 2º
+   arquivo se a listagem falhou. Limitação mantida: ao recuperar a leitura, o Drive **substitui** o local (sem merge).
 3. **Manual JSON backup** (`exportarBackupJSON` / `importarBackupJSON`) — a full-state export/
    import users can trigger by hand.
 

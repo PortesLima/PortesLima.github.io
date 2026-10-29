@@ -596,7 +596,7 @@
   #chipVisaoContas, #btnVisaoPendentes{ scroll-margin-top:12px; }
   #barraVencimentos .bv-txt{ flex:1 1 200px; min-width:0; overflow-wrap:anywhere; }
   #barraVencimentos .bv-acoes{ display:flex; gap:8px; flex-shrink:0; }
-  @media (max-width:1023px){ #barraVencimentos button{ min-height:44px; min-width:44px; } }
+  @media (max-width:1023px){ #barraVencimentos button, #barraDrive button{ min-height:44px; min-width:44px; } }
   .aviso-op{ display:flex; align-items:center; gap:10px; min-height:44px; font-size:14px; color:var(--text); cursor:pointer; }
   .aviso-op input{ flex:none; width:20px; height:20px; margin:0; }
   .empty-chart{ display:flex; align-items:center; justify-content:center; height:200px; color:var(--muted); font-size:12.5px; text-align:center; padding:0 20px; }
@@ -983,6 +983,7 @@
   </div>
   <div id="barraAtualizar" class="barra-trial" style="display:none;"></div>
   <div id="barraVencimentos" class="barra-trial" style="display:none;" role="status"></div>
+  <div id="barraDrive" class="barra-trial urgente" style="display:none;" role="status"></div>
 
   <div id="painelBackup" class="card editable-only" style="display:none; margin-bottom:14px;">
     <h2>Backup dos dados</h2>
@@ -1632,6 +1633,15 @@ const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_FILENAME = 'bolso-certo-dados.json';
 let accessToken = null;
 let driveFileId = null;
+// Proteção do dado na nuvem (pacote G): erro de rede/servidor NUNCA pode virar "arquivo vazio".
+//  - driveLeituraOk: trava de escrita — nada é escrito no Drive antes de uma leitura inicial bem-sucedida
+//    na sessão (em memória, não persiste).
+//  - driveFalhaMotivo: 'leitura' | 'escrita' | null — o que a faixa #barraDrive mostra.
+//  - driveUltimaTentativa: performance.now() da última tentativa (limita a nova tentativa automática a 1/min).
+let driveLeituraOk = false;
+let drivePendente = false;
+let driveFalhaMotivo = null;
+let driveUltimaTentativa = -Infinity;
 let tokenClient = null;
 let syncTimer = null;
 
@@ -1698,10 +1708,33 @@ function atualizarStatusGoogle(status){
     if(sync) sync.textContent = 'Última sync: ' + agora.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
   }
   else if(status==='erro') txt = '⚠️ Erro ao sincronizar';
+  else if(status==='falha-leitura') txt = '🔴 Drive indisponível';
+  else if(status==='falha-escrita') txt = '🔴 Não sincronizou';
   else if(status==='expirado') txt = '🔄 Sessão expirada, clique para reconectar';
   else txt = '🔗 Conectar Google Drive';
   btn.textContent = txt;
   if(btnMenu) btnMenu.textContent = txt;
+  renderBarraDrive();
+}
+// faixa global (como #barraVencimentos): aparece só enquanto há falha real de leitura/escrita no Drive
+function renderBarraDrive(){
+  const b = document.getElementById('barraDrive');
+  if(!b) return;
+  if(!accessToken || !driveFalhaMotivo){ b.style.display = 'none'; b.textContent = ''; return; }
+  const texto = driveFalhaMotivo === 'leitura'
+    ? '🔴 Não consegui falar com o Drive — seus dados locais estão preservados'
+    : '🔴 Não sincronizou — suas alterações estão salvas neste aparelho e serão enviadas na próxima tentativa';
+  let span = b.querySelector('span');
+  if(!span || !b.querySelector('#btnDriveRetry')){ // monta uma vez; depois só troca o texto (o botão não é recriado)
+    b.textContent = '';
+    span = document.createElement('span');
+    const btn = document.createElement('button');
+    btn.className = 'small'; btn.id = 'btnDriveRetry'; btn.type = 'button'; btn.textContent = 'Tentar de novo';
+    btn.onclick = () => driveTentarDeNovo();
+    b.appendChild(span); b.appendChild(btn);
+  }
+  if(span.textContent !== texto) span.textContent = texto;
+  b.style.display = 'flex';
 }
 function montarEstado(){
   return {
@@ -1724,13 +1757,23 @@ async function driveApi(path, opts={}, jaTentouRenovar){
     atualizarStatusGoogle('expirado');
     throw new Error('token expirado');
   }
+  // qualquer outra resposta que não seja sucesso é erro (antes só o 401 era tratado, e um 500 virava
+  // "arquivo vazio" lá na frente). O status HTTP fica em e.status.
+  if(!res.ok){
+    const e = new Error('drive http ' + res.status);
+    e.status = res.status;
+    throw e;
+  }
   return res;
 }
 async function driveEncontrarOuCriarArquivo(){
   const q = encodeURIComponent(`name='${DRIVE_FILENAME}' and trashed=false`);
   const res = await driveApi(`drive/v3/files?q=${q}&spaces=drive&fields=files(id,name)`);
   const data = await res.json();
-  if(data.files && data.files.length > 0){
+  // "arquivo não existe" só vale para uma listagem que voltou OK e com a lista vazia; qualquer
+  // outra forma de resposta é "não sei" e NUNCA cria um 2º arquivo.
+  if(!data || !Array.isArray(data.files)) throw new Error('drive: listagem inesperada');
+  if(data.files.length > 0){
     driveFileId = data.files[0].id;
   }else{
     const metadata = { name: DRIVE_FILENAME, mimeType:'application/json' };
@@ -1742,6 +1785,7 @@ async function driveEncontrarOuCriarArquivo(){
       body
     });
     const d2 = await res2.json();
+    if(!d2 || !d2.id) throw new Error('drive: criação sem id');
     driveFileId = d2.id;
   }
 }
@@ -1794,45 +1838,87 @@ async function aplicarDadosImportados(dados, {manterContasSeVazio}={}){
 }
 
 async function driveSincronizarInicial(){
+  driveUltimaTentativa = performance.now();
+  driveLeituraOk = false; // trava de escrita até esta leitura ser confirmada
+  let lendo = true;
   try{
     await driveEncontrarOuCriarArquivo();
     const res = await driveApi(`drive/v3/files/${driveFileId}?alt=media`);
     const texto = await res.text();
-    let dados = {};
-    try{ dados = texto ? JSON.parse(texto) : {}; }catch(e){ dados = {}; }
+    // corpo vazio, JSON inválido ou formato estranho = "não sei": NUNCA é tratado como "arquivo sem dados"
+    if(!texto || !texto.trim()) throw new Error('drive: arquivo vazio');
+    let dados;
+    try{ dados = JSON.parse(texto); }catch(e){ throw new Error('drive: JSON inválido'); }
+    if(!dados || typeof dados !== 'object' || Array.isArray(dados)) throw new Error('drive: formato inesperado');
+    lendo = false;
+    driveLeituraOk = true; // leitura confirmada: a partir daqui o app pode escrever
+    driveFalhaMotivo = null;
     if(dados.transacoes){
       await aplicarDadosImportados(dados, {manterContasSeVazio:true});
+      drivePendente = false; // o aparelho agora espelha o Drive
       if(moedaAtual !== 'BRL' && !cotacaoAtualizada) await carregarCotacoes();
       render();
     }else{
-      await driveSalvarAgora();
+      await driveSalvarAgora(); // arquivo legítimo, mas sem dados (ex.: {}): sobe o local para inicializar
     }
-    atualizarStatusGoogle('ok');
+    if(!driveFalhaMotivo) atualizarStatusGoogle('ok');
   }catch(e){
     console.error(e);
-    atualizarStatusGoogle('erro');
+    if(lendo && e.message !== 'token expirado'){
+      driveFalhaMotivo = 'leitura';
+      atualizarStatusGoogle('falha-leitura');
+    }else{
+      atualizarStatusGoogle('erro');
+    }
   }
 }
 function driveAgendarSync(){
   if(!accessToken) return;
+  drivePendente = true;
+  // sem leitura inicial bem-sucedida nada é escrito (evita sobrescrever o Drive com estado vazio)
+  if(!driveLeituraOk) return;
   atualizarStatusGoogle('pendente');
   clearTimeout(syncTimer);
   syncTimer = setTimeout(driveSalvarAgora, 1200);
 }
 async function driveSalvarAgora(){
   if(!accessToken || !driveFileId) return;
+  if(!driveLeituraOk) return; // trava de escrita
+  driveUltimaTentativa = performance.now();
   try{
     await driveApi(`upload/drive/v3/files/${driveFileId}?uploadType=media`, {
       method:'PATCH',
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify(montarEstado())
     });
+    drivePendente = false;
+    driveFalhaMotivo = null;
     atualizarStatusGoogle('ok');
   }catch(e){
     console.error('Falha ao salvar no Drive', e);
-    if(e.message !== 'token expirado') atualizarStatusGoogle('erro');
+    if(e.message !== 'token expirado'){
+      driveFalhaMotivo = 'escrita';
+      drivePendente = true; // continua pendente: o próximo debounce (ou "Tentar de novo") reenvia o estado inteiro
+      atualizarStatusGoogle('falha-escrita');
+    }
   }
 }
+// botão "Tentar de novo" da faixa #barraDrive: ignora o intervalo mínimo
+async function driveTentarDeNovo(){
+  if(!accessToken){ entrarGoogle(); return; }
+  if(!driveLeituraOk) await driveSincronizarInicial();
+  else await driveSalvarAgora();
+}
+// nova tentativa automática (ao voltar ao primeiro plano): só se há falha e passou ≥ 60 s da última tentativa
+async function driveRetentarSeNecessario(){
+  if(!accessToken || !driveFalhaMotivo) return false;
+  if(performance.now() - driveUltimaTentativa < 60000) return false;
+  await driveTentarDeNovo();
+  return true;
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') driveRetentarSeNecessario();
+});
 
 function chaveMes(dataISO){ return dataISO.slice(0,7); }
 function hojeISO(){
