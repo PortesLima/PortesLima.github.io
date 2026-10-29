@@ -5273,10 +5273,11 @@ function parseOFX(texto){
     return { transacoes: [] }; // OFX válido, mas sem movimento no período
   }
   const out = [];
+  let ignoradas = 0; // blocos descartados por data ou valor inválido (a pré-visualização avisa quantos)
   for(const bloco of blocos){
     const data = ofxData(ofxCampo(bloco, 'DTPOSTED'));
     const valor = parseTrnAmt(ofxCampo(bloco, 'TRNAMT'));
-    if(!data || isNaN(valor)) continue;
+    if(!data || isNaN(valor)){ ignoradas++; continue; }
     const nome = ofxCampo(bloco, 'NAME');
     const memo = ofxCampo(bloco, 'MEMO');
     let desc;
@@ -5285,7 +5286,7 @@ function parseOFX(texto){
     desc = desc.replace(/\s+/g, ' ').trim();
     out.push({ data, desc, valor, fitid: ofxCampo(bloco, 'FITID') || null });
   }
-  return { transacoes: out };
+  return ignoradas ? { transacoes: out, ignoradas } : { transacoes: out };
 }
 // divide uma linha CSV com separador ';' e aspas ("" = aspa literal)
 function csvLinha(linha){
@@ -5309,19 +5310,20 @@ function parseCSVBolsoCerto(texto){
   const iData = cab.indexOf('data'), iTipo = cab.indexOf('tipo'), iDesc = cab.indexOf('descrição'), iVal = cab.indexOf('valor');
   if(iData < 0 || iDesc < 0 || iVal < 0) return { transacoes: [], erro: 'csv-formato' };
   const out = [];
+  let ignoradas = 0;
   for(let i = 1; i < linhas.length; i++){
     const c = csvLinha(linhas[i]);
     const data = (c[iData] || '').trim();
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(data)) continue;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(data)){ ignoradas++; continue; }
     let valor = parseValorBR(c[iVal]);
-    if(isNaN(valor)) continue;
+    if(isNaN(valor)){ ignoradas++; continue; }
     const tipo = (iTipo >= 0 ? c[iTipo] : '').trim().toLowerCase();
     if(tipo === 'gasto' || tipo === 'transferencia') valor = -Math.abs(valor);
     else if(tipo === 'receita') valor = Math.abs(valor);
     // sem tipo: mantém o sinal do próprio campo Valor
     out.push({ data, desc: (c[iDesc] || 'Lançamento importado').replace(/\s+/g, ' ').trim(), valor, fitid: null });
   }
-  return { transacoes: out };
+  return ignoradas ? { transacoes: out, ignoradas } : { transacoes: out };
 }
 // normaliza descrição p/ comparação: minúscula, sem acento, sem pontuação, espaços colapsados
 function normDesc(s){
@@ -5407,6 +5409,7 @@ async function iniciarImportacao(conta, arquivo){
   importacaoPendente = {
     conta, formato,
     jaImportados,
+    ignoradas: res.ignoradas || 0,
     itens: conciliado.map(r => {
       const tipoNova = r.nova.valor < 0 ? 'gasto' : 'receita';
       return {
@@ -5429,10 +5432,15 @@ function renderModalImportar(){
   const lista = document.getElementById('importLista');
   const rodape = document.getElementById('importRodape');
 
+  // perder lançamento em silêncio é inaceitável: o que o arquivo trouxe com data/valor inválido é contado e avisado
+  const avisoIgn = p.ignoradas ? `${p.ignoradas} lançamento${p.ignoradas === 1 ? ' do arquivo foi ignorado' : 's do arquivo foram ignorados'} (data ou valor inválido)` : '';
   if(p.itens.length === 0){
-    topo.textContent = p.jaImportados > 0
+    topo.textContent = (p.jaImportados > 0
       ? `Extrato de ${p.conta}: todos os ${p.jaImportados} lançamentos deste arquivo já estão no app.`
-      : `Extrato de ${p.conta}: nenhum lançamento encontrado. Confira se você exportou o intervalo certo no seu banco.`;
+      : (p.ignoradas > 0
+        ? `Extrato de ${p.conta}: nenhum lançamento válido neste arquivo.`
+        : `Extrato de ${p.conta}: nenhum lançamento encontrado. Confira se você exportou o intervalo certo no seu banco.`))
+      + (avisoIgn ? ' ' + avisoIgn + '.' : '');
     lista.innerHTML = '';
     rodape.innerHTML = `<button class="secondary" onclick="fecharModalImportar()" style="width:100%;">Fechar</button>`;
     return;
@@ -5441,7 +5449,8 @@ function renderModalImportar(){
   const datas = p.itens.map(i => i.nova.data).sort();
   topo.innerHTML = `Extrato de <b>${escHtml(p.conta)}</b> · ${p.itens.length} lançamento${p.itens.length===1?'':'s'} para revisar`
     + `<div style="font-size:11px; color:var(--muted2); margin-top:2px;">${fmtDataBR(datas[0])} a ${fmtDataBR(datas[datas.length-1])}`
-    + (p.jaImportados > 0 ? ` · ${p.jaImportados} já estava(m) no app` : '') + `</div>`;
+    + (p.jaImportados > 0 ? ` · ${p.jaImportados} já estava(m) no app` : '') + `</div>`
+    + (avisoIgn ? `<div style="font-size:11px; color:var(--amber); margin-top:2px;">⚠ ${avisoIgn}</div>` : '');
 
   const opcoesCat = [...categoriasAtivas(), 'Receita'].map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
   lista.innerHTML = p.itens.map((it, idx) => {

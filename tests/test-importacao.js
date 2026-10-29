@@ -71,7 +71,8 @@ const enviar = (page, conta, nome, conteudo, latin1 = false) => page.evaluate(as
     trn({ dt: '20260908', amt: '-9.99', name: 'boa', fitid: 'B3' }),
   ]));
   eq(r.transacoes.map(t => t.fitid), ['B3'], 'bloco sem data / com valor inválido é pulado; o bom segue');
-  r = await parse(page, 'parseOFX', ofxSGML([trn({ dt: '20260905', amt: '-3.00', name: 'Loja   com\tespaços' })]));
+  eq(r.ignoradas, 2, 'parseOFX conta quantos blocos foram ignorados por data ou valor inválido (ignoradas = 2)');
+  eq('ignoradas' in (await parse(page, 'parseOFX', ofxSGML([trn({ dt: '20260905', amt: '-3.00', name: 'ok', fitid: 'K' })]))), false, 'sem nenhum descartado: o resultado não traz "ignoradas"');  r = await parse(page, 'parseOFX', ofxSGML([trn({ dt: '20260905', amt: '-3.00', name: 'Loja   com\tespaços' })]));
   eq(r.transacoes[0].desc, 'Loja com espaços', 'espaços/tabs colapsados na descrição');
 
   // ================= parseValorBR =================
@@ -110,7 +111,8 @@ const enviar = (page, conta, nome, conteudo, latin1 = false) => page.evaluate(as
   r = await parse(page, 'parseCSVBolsoCerto', cab + '\n' + [lin('05/09/2026', 'gasto', 'data br', '1,00'), lin('2026-09-05', 'gasto', 'valor ruim', 'xx'), lin('2026-09-08', 'gasto', 'boa', '2,00')].join('\n'));
   eq(r.transacoes.map(t => t.desc), ['boa'], 'linhas com data fora de YYYY-MM-DD ou valor NaN são descartadas');
   eq((await parse(page, 'parseCSVBolsoCerto', cab)).erro, 'csv-vazio', 'só cabeçalho → csv-vazio');
-  eq((await parse(page, 'parseCSVBolsoCerto', '')).erro, 'csv-vazio', 'vazio → csv-vazio');
+  r = await parse(page, 'parseCSVBolsoCerto', cab + '\n' + [lin('05/09/2026', 'gasto', 'data br', '1,00'), lin('2026-09-05', 'gasto', 'valor ruim', 'xx'), lin('2026-09-08', 'gasto', 'boa', '2,00')].join('\n'));
+  eq([r.transacoes.length, r.ignoradas], [1, 2], 'parseCSVBolsoCerto conta as linhas descartadas por data ou valor inválido (ignoradas = 2)');  eq((await parse(page, 'parseCSVBolsoCerto', '')).erro, 'csv-vazio', 'vazio → csv-vazio');
   eq((await parse(page, 'parseCSVBolsoCerto', 'Data;Descrição\n2026-09-05;x')).erro, 'csv-formato', 'sem coluna Valor → csv-formato');
   eq((await parse(page, 'parseCSVBolsoCerto', 'Data;Descricao;Valor\n2026-09-05;x;1,00')).erro, 'csv-formato', 'cabeçalho "Descricao" sem acento → csv-formato (exige "Descrição")');
   r = await parse(page, 'parseCSVBolsoCerto', 'Data;Descrição;Valor\n2026-09-05;;3,00');
@@ -194,6 +196,31 @@ const enviar = (page, conta, nome, conteudo, latin1 = false) => page.evaluate(as
   f = await enviar(page, 'Nubank', 'cp1252.ofx', ofxSGML([trn({ dt: '20260905', amt: '-10.00', fitid: 'W1', name: 'PADARIA SÃO JOÃO AÇAÍ' })]), true);
   eq(f.itens[0].desc, 'PADARIA SÃO JOÃO AÇAÍ', 'arquivo windows-1252 é decodificado (ã/ç/í) sem "�"');
   await page.evaluate(() => fecharModalImportar());
+  const topoIgn = () => page.evaluate(() => ({ n: importacaoPendente && importacaoPendente.ignoradas, topo: document.getElementById('importTopo').textContent.replace(/\s+/g, ' ').trim() }));
+  const bom = trn({ dt: '20260905', amt: '-10.00', fitid: 'V1', name: 'valido' });
+  const ruim = (k) => trn({ dt: '20260905', amt: 'xx', fitid: 'R' + k, name: 'invalido ' + k });
+  await enviar(page, 'Nubank', 'ign2.ofx', ofxSGML([bom, ruim(1), ruim(2)]));
+  let ig = await topoIgn();
+  eq(ig.n, 2, 'importação com 2 lançamentos inválidos: importacaoPendente.ignoradas = 2');
+  ok(ig.topo.includes('2 lançamentos do arquivo foram ignorados (data ou valor inválido)'), 'a pré-visualização avisa "2 lançamentos do arquivo foram ignorados (data ou valor inválido)"');
+  eq(await page.evaluate(() => document.querySelectorAll('#importLista .import-item').length), 1, '… e lista só o lançamento válido');
+  await page.evaluate(() => fecharModalImportar());
+  await enviar(page, 'Nubank', 'ign1.ofx', ofxSGML([bom, ruim(1)]));
+  ig = await topoIgn();
+  ok(ig.topo.includes('1 lançamento do arquivo foi ignorado (data ou valor inválido)'), 'no singular: "1 lançamento do arquivo foi ignorado (data ou valor inválido)"');
+  await page.evaluate(() => fecharModalImportar());
+  await enviar(page, 'Nubank', 'ign0.ofx', ofxSGML([bom]));
+  ig = await topoIgn();
+  ok(!/ignorado/.test(ig.topo), 'arquivo sem nenhum lançamento inválido: o aviso NÃO aparece');
+  await page.evaluate(() => fecharModalImportar());
+  await enviar(page, 'Nubank', 'ignTodos.ofx', ofxSGML([ruim(1), ruim(2)]));
+  ig = await topoIgn();
+  ok(/nenhum lançamento válido/.test(ig.topo) && ig.topo.includes('2 lançamentos do arquivo foram ignorados'), 'arquivo só com lançamentos inválidos: diz que não há lançamento válido E quantos foram ignorados (não parece "extrato vazio")');
+  await page.evaluate(() => fecharModalImportar());
+  await enviar(page, 'Nubank', 'ignCsv.csv', cab + '\n' + [lin('2026-09-05', 'gasto', 'boa', '1,00'), lin('31/12/2026', 'gasto', 'data br', '2,00')].join('\n'));
+  ig = await topoIgn();
+  ok(ig.n === 1 && ig.topo.includes('1 lançamento do arquivo foi ignorado'), 'CSV: o aviso também aparece (1 linha com data inválida)');
+  await page.evaluate(() => fecharModalImportar());  await page.evaluate(() => fecharModalImportar());
 
   // ================= confirmarImportacao =================
   console.log('6. confirmarImportacao');
