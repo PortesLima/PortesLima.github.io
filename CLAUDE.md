@@ -88,6 +88,15 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   (HTML/aspas/emoji/barra) em ~10 telas; limites de orçamento (0, vazio, alto, vírgula/ponto, `Infinity`); "Orçamento em
   risco" e alertas em 79/80/100/101 %; persistência (recarregar, `montarEstado`, `aplicarDadosImportados`, backup por arquivo,
   blob antigo). 14 `[BUG-CONHECIDO]` (escape de HTML em 6 telas, `palpitarCategoria` × renome, 80 % em ponto flutuante…).
+- `test-saldos` (85) — **reconstrução (Bloco 4)**: `efeitoNoSaldo`, `saldoAtualConta`/`saldoContaEm` (saldo inicial negativo e com
+  data futura, transferências nas duas pontas, pendente/vencido/futuro fora), faixa "Você tem hoje" e card "Fim do mês" contra
+  um cenário com as contas à mão, ponto flutuante (0,1+0,2), ciclo de fatura (fechamento/vencimento, dia do fechamento,
+  dez→jan, fev/bissexto), card de faturas e parcelas × fatura. Usa `emulateMedia({reducedMotion:'reduce'})` para o texto dos
+  KPIs não passar pelo tween. 9 `[BUG-CONHECIDO]`.
+- `test-pdf` (81) — **reconstrução (Bloco 4)**: `exportarCSV` (BOM, `;`, aspas, quebra de linha, acentos, status efetivo, BRL
+  cru, ida e volta) e os 3 PDFs (`exportarPDF`/`Anual`/`IR`) com o jsPDF real e o construtor espiado (texto desenhado por
+  `doc.text`, páginas, tamanho; `save()` interceptado): totais e contagem de linhas batem com a tela, mês/ano vazio, 70
+  linhas em várias páginas, texto hostil. 6 `[BUG-CONHECIDO]`.
 
 A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
 em `tests/` desde o início**.
