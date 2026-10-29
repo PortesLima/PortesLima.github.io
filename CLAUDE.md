@@ -222,6 +222,8 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup troca os dados importados pelos antigos…` → `clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup NÃO troca os dados importados pelos antigos`
 - Efeito em outros scripts (sem tag; o comportamento "campo ausente zera" mudou de propósito): `test-avisos-vencimento` `blob antigo -> 3 true` → `blob antigo (sem o campo) -> MANTÉM as preferências locais`; `test-regressao-minima` `blob antigo (sem o campo): 3 true` / `…persistido no storage` → `…MANTÉM as preferências locais` / `…o storage continua com a preferência local`; `test-categorias` `blob antigo … → shape vazio`, `… volta às 12 padrão`, `blob {} → defaults`, `…com lixo → defaults` → mantêm o local / `{}` não muda nada / lixo é REJEITADO; `test-trial` `remoto com assinatura não-objeto é ignorada` → o blob inteiro é REJEITADO (`backup-invalido`).
 
+**Resumo da leva 2 (publicada como `2026-10-29.25`):** P1 `parseTrnAmt` (OFX), P1b contagem de ignoradas na importação, P2 backup visível com o teste vencido, P3 link só de leitura sem gravar, P4 escape de HTML (`test-escape`), P5 centavos/consistência (`cent()`), P6 exportação (CSV sem fórmula, PDF mensal com filtro de conta). Suíte: 22 scripts (`run-all`) "tudo verde". **Checks `[BUG-CONHECIDO]` restantes: 44** (principalmente a11y e responsivo = Leva 3, mais trial e estado; os 2 de estado são conflito entre 2 aparelhos e "Esqueci o PIN").
+
 A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
 em `tests/` desde o início**.
 
