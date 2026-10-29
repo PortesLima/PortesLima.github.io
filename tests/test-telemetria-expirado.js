@@ -1,7 +1,7 @@
 // trial_expirado: flag novo bc_tel_expirado2 (a .22 renomeou o antigo para reenviar o evento
 // de aparelhos que o perderam pela chave errada). Envia 1x ao abrir; ao reabrir, não repete.
 const path = require('path'), zlib = require('zlib');
-const { chromium, ok, res } = require('./lib');
+const { chromium, ok, res, interceptarPosthog } = require('./lib');
 const FILE = require('url').pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href + '?v=1';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 function eventos(bufs){
@@ -11,19 +11,20 @@ function eventos(bufs){
     try{ const p = JSON.parse(s); return Array.isArray(p) ? p : p.batch || [p]; }catch(e){ return []; }
   }).map(e => e.event);
 }
-async function abrirUmaVez(ctx){
-  const page = await ctx.newPage(); const posts = [];
-  page.on('request', r => { if(r.method() === 'POST' && /us\.i\.posthog\.com\/e\//.test(r.url())) posts.push(r.postDataBuffer()); });
+async function abrirUmaVez(ctx, posts){
+  const page = await ctx.newPage();
   await page.goto(FILE, { waitUntil: 'load' });
   await page.locator('#btnEntrarApp').click({ timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(5000);
   const flags = await page.evaluate(() => ({ v1: localStorage.getItem('bc_tel_expirado'), v2: localStorage.getItem('bc_tel_expirado2') }));
   await page.close();
-  return { evs: eventos(posts), flags };
+  return { evs: eventos(posts.splice(0)), flags };
 }
 (async () => {
   const browser = await chromium.launch({ channel: 'msedge' });
   const ctx = await browser.newContext({ userAgent: UA });
+  const posts = [];
+  await interceptarPosthog(ctx, buf => posts.push(buf)); // POST /e/ respondido localmente
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
     if(!localStorage.getItem('bc_semeado')){ // semeia só na 1ª abertura; reabrir usa o storage real
@@ -33,11 +34,11 @@ async function abrirUmaVez(ctx){
       localStorage.setItem('bc_tel_expirado', '1'); // flag ANTIGO: evento perdido pela chave errada
     }
   });
-  const a = await abrirUmaVez(ctx);
+  const a = await abrirUmaVez(ctx, posts);
   ok(a.evs.filter(e => e === 'trial_expirado').length === 1, 'aparelho com flag antigo + trial expirado envia trial_expirado 1x ao abrir');
   ok(a.flags.v2 === '1', 'bc_tel_expirado2 = 1 após enviar');
   ok(!a.evs.includes('trial_iniciado'), 'trial_iniciado NÃO reenvia (trialInicio já existe)');
-  const b = await abrirUmaVez(ctx);
+  const b = await abrirUmaVez(ctx, posts);
   ok(!b.evs.includes('trial_expirado'), 'reabrir não envia trial_expirado de novo');
   ok(b.flags.v2 === '1', 'bc_tel_expirado2 continua 1');
   await browser.close();

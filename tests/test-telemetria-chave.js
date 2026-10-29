@@ -2,7 +2,7 @@
 // (PostHog US Cloud), e o token do POST real para /e/ também. Um 'J' virou '3' uma vez e a
 // telemetria inteira foi descartada em silêncio por ~2 meses.
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
-const { chromium, ok, res } = require('./lib');
+const { chromium, ok, res, interceptarPosthog } = require('./lib');
 const CHAVE_ESPERADA = 'phc_DjJkAukpMc3knrfxJaiUaWif8wsp5FDspttUazfqjE65';
 const FILE = require('url').pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href + '?v=1';
 
@@ -21,9 +21,9 @@ function corpo(buf){
   }
   const browser = await chromium.launch({ channel: 'msedge' });
   const ctx = await browser.newContext({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' }); // UA sem "HeadlessChrome" (o SDK também filtra por UA)
-  const page = await ctx.newPage();
   const posts = [];
-  page.on('request', r => { if(r.method() === 'POST' && /us\.i\.posthog\.com\/e\//.test(r.url())) posts.push(r.postDataBuffer()); });
+  await interceptarPosthog(ctx, buf => posts.push(buf)); // POST /e/ é respondido localmente, não sai pra rede
+  const page = await ctx.newPage();
   // o SDK descarta eventos de bot: mascara webdriver (e o UA, acima) só no teste
   await page.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => false }); });
   await page.goto(FILE, { waitUntil: 'load' });
