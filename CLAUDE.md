@@ -75,6 +75,13 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   (OFX/CSV/windows-1252, erros), `confirmarImportacao` (campos, toast, `desfazer`, substituir, mês de destino),
   reimportação, trial bloqueado, ida-e-volta `exportarCSV` → `parseCSVBolsoCerto`. Check de comportamento
   atual que parece bug leva o prefixo `[BUG-CONHECIDO]` (3 hoje: `parseValorBR` com ponto+3 dígitos).
+- `test-trial` (109) — **reconstrução (Bloco 2)**: primeira abertura (`trial_iniciado` 1x), fronteiras D+0/1/9/10/14/15/16/400
+  (D+15 ainda é trial; D+16 bloqueia), virada à meia-noite local, `body.readonly` (o que bloqueia: `adicionar`,
+  registro rápido, categorias, importar; o que continua: abas, filtros, CSV, 3 PDFs, ajuda, backup pelo modal),
+  `?readonly=1`, "Assinar" provisório, telemetria 1x (`trial_expirado` com `bc_tel_expirado2`, `assinar_clicado`
+  com `via`), relógio para trás, `assinatura` ausente/corrompida, merge no sync. PostHog é um stub em memória
+  (`window.posthog` com `__SV`), nada vai à rede. Prefixos: `[BUG-CONHECIDO]` (parece errado hoje) e
+  `[PROVISORIO-FASE2]` (vale só sem backend/cobrança — vai falhar de propósito quando a Fase 2 entrar).
 
 A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
 em `tests/` desde o início**.
