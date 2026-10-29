@@ -138,9 +138,6 @@ const setRelogio = async (page, iso) => { await page.clock.setFixedTime(new Date
   // saldo 400; 600 em 10 dias = 60/dia → dura 6 dias; folga = 20 − 6 = 14 > 5 → estoura, "dia 16"
   eq(await classe(page), 'estoura', 'saldo 400 a 60/dia (dura 6 dias, faltam 20) → "estoura"');
   ok(/acaba dia 16/.test(await txt(page, '#dsStatus')), '… e a frase diz "acaba dia 16"');
-  // BUG: o ritmo diário inclui gastos PENDENTES de datas futuras
-  await poe(page, { tx: [T(1, { valor: 100, data: '2026-09-03' }), T(2, { valor: 900, data: '2026-09-28', status: 'pendente', desc: 'Aluguel' })], contas: ['Nubank', 'Outros'], saldos: { Nubank: { valor: 1100, em: '2026-09-01' } } });
-  eq(await classe(page), 'estoura', '[BUG-CONHECIDO] o "ritmo atual" soma o aluguel PENDENTE de 28/09 como se já tivesse sido gasto (1000 em 10 dias = 100/dia → "acaba dia 20") — o ritmo real é 10/dia (esperado: "ok"); e esse mesmo aluguel já é descontado à parte no card "Fim do mês" (contagem dupla)');
 
   // ================= 4. Fim do mês =================
   console.log('4. "Fim do mês" (contas à mão)');
@@ -176,11 +173,62 @@ const setRelogio = async (page, iso) => { await page.clock.setFixedTime(new Date
     rec: [{ id: 1, tipo: 'gasto', desc: 'Net', valor: 100, categoria: 'Moradia' }, { id: 2, tipo: 'gasto', desc: 'Luz', valor: 60, categoria: 'Moradia' }, { id: 3, tipo: 'gasto', desc: 'Gás', valor: 90, categoria: 'Moradia' }],
   });
   eq((await linhas(page)).filter(l => /Fixos/.test(l[0])), [['  Fixos ainda não lançados', R(90)]], 'fixo conta como lançado por recorrenteId OU por desc+categoria no mês; lançamento de OUTRO mês não vale (só "Gás" falta)');
-  // sem saldo inicial → contagem dupla da receita pendente
-  await poe(page, { tx: [T(1, { tipo: 'receita', categoria: 'Receita', valor: 1000, data: '2026-09-02' }), T(2, { tipo: 'receita', categoria: 'Receita', valor: 500, data: '2026-09-30', status: 'pendente' }), T(3, { valor: 200, data: '2026-09-04' })], contas: ['Nubank', 'Outros'] });
-  // correto: tenho 1000 − 200 = 800; ainda recebo 500 → 1300
-  eqC(await num(page, 'livreValor'), 1800, '[BUG-CONHECIDO] sem saldo inicial, a receita PENDENTE de 500 é contada duas vezes: já está no "Resultado do mês até agora" (1500 − 200 = 1300) e entra de novo em "+ Ainda vai receber" → 1.800 (esperado 1.300)');
-  eqC(await num(page, 'dsValor'), 1300, '[BUG-CONHECIDO] e a faixa "Resultado do mês até agora" já mostra 1.300 contando a receita de 500 que AINDA NÃO entrou (esperado 800)');
+  // ================= pacote E: "sem saldo inicial" e o ritmo do "dura até" =================
+  // Condição exata no código: `temSaldoInicial(nome)` = saldosIniciais[nome] existe E typeof valor === 'number'.
+  //   conta sem entrada → "sem" · valor texto/null/ausente → "sem" · valor 0 → COM (partidaReal) · valor sem data → COM (conta todo o histórico)
+  //   · data futura → COM. "Sem saldo inicial" = NENHUMA conta atende essa condição (partidaReal=false → "Resultado do mês até agora").
+  // Cenário do recém-chegado: salário pago 1.000 (02/09), freela pendente 500 (30/09), mercado pago 200 (04/09).
+  const NOVO = [T(1, { tipo: 'receita', categoria: 'Receita', valor: 1000, data: '2026-09-02' }), T(2, { tipo: 'receita', categoria: 'Receita', valor: 500, data: '2026-09-30', status: 'pendente' }), T(3, { valor: 200, data: '2026-09-04' })];
+  const lerBandaEFim = async () => ({ banda: await txt(page, '#dsLabel'), ds: await num(page, 'dsValor'), livre: await num(page, 'livreValor'), titulo: await txt(page, '#livreTitulo') });
+  const casosSemSaldo = [
+    ['conta SEM entrada em saldosIniciais', {}],
+    ['entrada com valor em TEXTO ("100")', { Nubank: { valor: '100', em: '2026-09-01' } }],
+    ['entrada com valor null', { Nubank: { valor: null, em: '2026-09-01' } }],
+    ['entrada só com a data (sem valor)', { Nubank: { em: '2026-09-01' } }],
+  ];
+  for(const [rotulo, saldos] of casosSemSaldo){
+    await poe(page, { tx: NOVO, contas: ['Nubank', 'Outros'], saldos });
+    const r = await lerBandaEFim();
+    eq([r.banda, r.ds, r.livre], ['Resultado do mês até agora', 800, 1300], `sem saldo inicial (${rotulo}): "Resultado do mês até agora" = 800 (só o que JÁ entrou) e "Fim do mês" = 1.300 (a receita pendente de 500 conta UMA vez)`);
+  }
+  const casosComSaldo = [
+    ['valor 0 com data', { Nubank: { valor: 0, em: '2026-09-01' } }, 800, 1300],
+    ['valor 0 SEM data (conta todo o histórico)', { Nubank: { valor: 0 } }, 800, 1300],
+    ['valor 100 com data', { Nubank: { valor: 100, em: '2026-09-01' } }, 900, 1400],
+    ['valor 100 com data FUTURA (nada anterior conta)', { Nubank: { valor: 100, em: '2026-09-20' } }, 100, 600],
+  ];
+  for(const [rotulo, saldos, esperadoDs, esperadoLivre] of casosComSaldo){
+    await poe(page, { tx: NOVO, contas: ['Nubank', 'Outros'], saldos });
+    const r = await lerBandaEFim();
+    eq([r.banda, r.ds, r.livre], ['Você tem hoje', esperadoDs, esperadoLivre], `COM saldo inicial (${rotulo}): "Você tem hoje" = ${esperadoDs} e "Fim do mês" = ${esperadoLivre} (a receita pendente conta uma vez)`);
+  }
+  // filtro de conta: a faixa respeita; o "Fim do mês" ignora o filtro
+  await poe(page, { tx: [...NOVO, T(9, { conta: 'Itaú', valor: 50, data: '2026-09-03' })], contas: ['Nubank', 'Itaú', 'Outros'], saldos: { Nubank: { valor: 0, em: '2026-09-01' } }, filtro: 'Itaú' });
+  let rf = await lerBandaEFim();
+  eq([rf.banda, rf.ds], ['Resultado do mês até agora', -50], 'filtro numa conta SEM saldo (Itaú) enquanto outra tem: a faixa cai em "Resultado do mês até agora" só dessa conta (−50: nenhuma receita nela)');
+  eq(rf.livre, 1300, '… e o "Fim do mês" ignora o filtro de conta (usa as contas com saldo: Nubank 800 + 500 pendente = 1.300)');
+  // + uma conta a pagar pendente: 800 + 500 − 100 = 1.200
+  const NOVO2 = [...NOVO, T(4, { valor: 100, data: '2026-09-20', status: 'pendente', desc: 'Internet' })];
+  await poe(page, { tx: NOVO2, contas: ['Nubank', 'Outros'], saldos: {} });
+  let r2 = await lerBandaEFim();
+  eq([r2.ds, r2.livre], [800, 1200], 'recém-chegado com a receita pendente E uma conta a pagar (100): hoje 800 · fim do mês 800 + 500 − 100 = 1.200 (cada valor uma vez só)');
+  eq((await linhas(page)).slice(0, 4), [['Resultado do mês até agora', R(800)], ['+ Ainda vai receber', R(500)], ['− Ainda falta pagar', R(100)], ['  Contas a vencer', R(100)]], 'detalhe do card: 800 + 500 − 100 (a receita pendente aparece só na linha "Ainda vai receber")');
+  // sem receita pendente: nada muda (regressão do caminho comum)
+  await poe(page, { tx: [NOVO[0], NOVO[2]], contas: ['Nubank', 'Outros'], saldos: {} });
+  r2 = await lerBandaEFim();
+  eq([r2.ds, r2.livre], [800, 800], 'sem receita pendente: hoje 800 e fim do mês 800 (inalterado)');
+  // receita pendente vencida (data passada, não recebida) também não é "o que você tem hoje"
+  await poe(page, { tx: [NOVO[0], T(5, { tipo: 'receita', categoria: 'Receita', valor: 300, data: '2026-09-05', status: 'pendente' })], contas: ['Nubank', 'Outros'], saldos: {} });
+  r2 = await lerBandaEFim();
+  eq([r2.ds, r2.livre], [1000, 1300], 'receita pendente JÁ VENCIDA (05/09, não recebida): não entra em "hoje" (1.000) e entra uma vez em "ainda vai receber" (1.300)');
+  // "dura até": o ritmo usa só o que já foi PAGO até hoje
+  await poe(page, { tx: [...NOVO, T(6, { valor: 900, data: '2026-09-28', status: 'pendente', desc: 'Aluguel' })], contas: ['Nubank', 'Outros'], saldos: {} });
+  eq(await classe(page), 'ok', 'novo usuário com aluguel pendente de 900 no dia 28: o ritmo é 200 pagos / 10 dias = R$ 20/dia → "ok" (o aluguel NÃO entra no ritmo)');
+  ok((await txt(page, '#dsStatus')).includes('No ritmo atual (R$ 20,00/dia), seu dinheiro dura até o fim do mês com folga.'), 'e a frase diz "No ritmo atual (R$ 20,00/dia), seu dinheiro dura até o fim do mês com folga."');
+  await poe(page, { tx: [T(1, { valor: 100, data: '2026-09-03' }), T(2, { valor: 900, data: '2026-09-28', status: 'pendente', desc: 'Aluguel' })], contas: ['Nubank', 'Outros'], saldos: { Nubank: { valor: 1100, em: '2026-09-01' } } });
+  eq(await classe(page), 'ok', 'com saldo inicial: o aluguel PENDENTE de 28/09 não entra no ritmo (100 pagos em 10 dias = 10/dia) → "ok"');
+  await poe(page, { tx: [T(1, { valor: 600, data: '2026-09-03' }), T(2, { valor: 50, data: '2026-09-04', status: 'pendente' }), T(3, { valor: 50, data: '2026-09-25' })], contas: ['Nubank', 'Outros'], saldos: { Nubank: { valor: 1000, em: '2026-09-01' } } });
+  ok(/acaba dia 16/.test(await txt(page, '#dsStatus')), 'pago com data FUTURA (25/09) e pendente também não contam no ritmo: só os 600 pagos até hoje → 60/dia, saldo 400 → "acaba dia 16" (igual ao caso sem eles)');
 
   // ================= 5. ponto flutuante =================
   console.log('5. ponto flutuante — somas que fecham ao centavo');

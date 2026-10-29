@@ -3853,11 +3853,15 @@ function renderDobraSaldo(){
     saldoHoje = contasComSaldo.reduce((s,n)=>s+saldoAtualConta(n), 0);
     partidaReal = true;
   }else{
-    const rec = somarPorTipoNoMes(transacoes, 'receita', chaveCorrente);
+    // "Resultado do mês ATÉ AGORA": só o que já foi recebido/pago (a receita pendente ainda não está na mão — ela entra
+    // uma única vez em "ainda vai receber" do card "Fim do mês"). Respeita o filtro de conta (antes só os gastos respeitavam).
+    const recebido = transacoes
+      .filter(t => t.tipo==='receita' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t)==='pago' && (!conta || t.conta===conta))
+      .reduce((s,t)=>s+t.valor,0);
     const gastoPago = transacoes
       .filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t)==='pago' && (!conta || t.conta===conta))
       .reduce((s,t)=>s+t.valor,0);
-    saldoHoje = rec - gastoPago;
+    saldoHoje = recebido - gastoPago;
     partidaReal = false;
   }
 
@@ -3882,8 +3886,12 @@ function renderDobraSaldo(){
   const ultimoDia = ultimoDiaMes(anoC, mesC-1);
   const diasAteFimMes = ultimoDia - diaHoje;
 
+  // ritmo = só o que JÁ foi pago até hoje. Gasto pendente (a vencer ou vencido) e pago com data futura não entram:
+  // as contas em aberto já são descontadas à parte no card "Fim do mês" (antes o aluguel pendente do dia 28
+  // virava "gasto até agora" e a frase "dura até" ficava alarmista, com contagem dupla).
+  const hojeIso = hojeISO();
   const gastoMesAteAgora = transacoes
-    .filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente && (!conta || t.conta===conta))
+    .filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t)==='pago' && t.data <= hojeIso && (!conta || t.conta===conta))
     .reduce((s,t)=>s+t.valor,0);
   const mediaDiaria = diaHoje > 0 ? gastoMesAteAgora / diaHoje : 0;
   // no começo do mês (< 5 dias) a média diária projeta mal — um gasto grande vira
@@ -3999,7 +4007,11 @@ function renderLivreParaGastar(){
     saldoHoje = contasComSaldo.reduce((s,nome)=>s+saldoAtualConta(nome), 0);
     partidaReal = true;
   }else{
-    const recMes = somarPorTipoNoMes(transacoes, 'receita', chaveCorrente);
+    // sem saldo inicial: só o que JÁ entrou/foi pago. A receita pendente vem logo abaixo em `receitaAReceber` — contá-la
+    // aqui também a somava DUAS vezes (1.800 em vez de 1.300 no cenário do teste).
+    const recMes = transacoes
+      .filter(t => t.tipo==='receita' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t)==='pago')
+      .reduce((s,t)=>s+t.valor,0);
     const gastoPagoMes = transacoes
       .filter(t => t.tipo==='gasto' && chaveMes(t.data)===chaveCorrente && statusEfetivo(t)==='pago')
       .reduce((s,t)=>s+t.valor,0);

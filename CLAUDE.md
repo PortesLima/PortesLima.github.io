@@ -88,7 +88,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   (HTML/aspas/emoji/barra) em ~10 telas; limites de orçamento (0, vazio, alto, vírgula/ponto, `Infinity`); "Orçamento em
   risco" e alertas em 79/80/100/101 %; persistência (recarregar, `montarEstado`, `aplicarDadosImportados`, backup por arquivo,
   blob antigo). 14 `[BUG-CONHECIDO]` (escape de HTML em 6 telas, `palpitarCategoria` × renome, 80 % em ponto flutuante…).
-- `test-saldos` (95) — **reconstrução (Bloco 4)**: `efeitoNoSaldo`, `saldoAtualConta`/`saldoContaEm` (saldo inicial negativo e com
+- `test-saldos` (110) — **reconstrução (Bloco 4)**: `efeitoNoSaldo`, `saldoAtualConta`/`saldoContaEm` (saldo inicial negativo e com
   data futura, transferências nas duas pontas, pendente/vencido/futuro fora), faixa "Você tem hoje" e card "Fim do mês" contra
   um cenário com as contas à mão, ponto flutuante (0,1+0,2), ciclo de fatura (fechamento/vencimento, dia do fechamento,
   dez→jan, fev/bissexto), card de faturas e parcelas × fatura. Usa `emulateMedia({reducedMotion:'reduce'})` para o texto dos
@@ -126,6 +126,12 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] resposta 200 com corpo VAZIO … também faz o aparelho novo sobrescrever o Drive…` → `leitura 200 com corpo vazio: o Drive NÃO recebe nenhuma escrita (…)`
 - `[BUG-CONHECIDO] erro 500 ao LISTAR os arquivos: …CRIA outro "bolsodados"…` → `erro 500 ao LISTAR: NÃO cria outro "bolso-certo-dados.json"` (+ `listagem 500: …`)
 - (sem tag, comportamento mudou) `arquivo do Drive corrompido: o local é mantido e sobe para o Drive (reparando o arquivo)` → `arquivo do Drive corrompido (JSON inválido): o Drive NÃO recebe nenhuma escrita (…)` + `corrompido: o arquivo do Drive continua como estava`
+
+**Pacote E ("Fim do mês" e "dura até")** — `tests/test-saldos.js`
+- `[BUG-CONHECIDO] o "ritmo atual" soma o aluguel PENDENTE de 28/09 como se já tivesse sido gasto…` → `com saldo inicial: o aluguel PENDENTE de 28/09 não entra no ritmo (100 pagos em 10 dias = 10/dia) → "ok"` (+ `novo usuário com aluguel pendente de 900 no dia 28: … R$ 20/dia → "ok"`)
+- `[BUG-CONHECIDO] sem saldo inicial, a receita PENDENTE de 500 é contada duas vezes…` → `sem saldo inicial (…): "Resultado do mês até agora" = 800 … e "Fim do mês" = 1.300 (a receita pendente de 500 conta UMA vez)` (×4 formas de "sem": sem entrada, valor texto, valor null, só data)
+- `[BUG-CONHECIDO] e a faixa "Resultado do mês até agora" já mostra 1.300 contando a receita de 500 que AINDA NÃO entrou…` → coberto pelo mesmo check (faixa = 800)
+- (novos) COM saldo inicial 0 com/sem data, 100, 100 com data futura; filtro de conta; recém-chegado com receita pendente + conta a pagar (1.200); receita pendente já vencida; pago com data futura fora do ritmo. Os valores de referência 3.329,20 / 2.329,20 / 110,91 NÃO mudaram.
 
 **Pacote D (`addMeses`)** — `tests/test-saldos.js`
 - `[BUG-CONHECIDO] addMeses("2026-01-31", 1) = 03/03 (o JS estoura fevereiro); esperado 28/02 — uma compra parcelada no dia 31 pula uma fatura inteira` → `addMeses("2026-01-31", 1) = 28/02 (limita ao último dia do mês de destino…)`
@@ -634,6 +640,17 @@ Two adjacent elements at the top of Resumo, both current-month-only (hidden othe
   is called from `renderLivreParaGastar()`, so marking the next bill paid (Item A's toast flow)
   re-renders and the line advances to the following one. Hidden with the whole card when
   `mesAtual !== chaveCorrente`. Tested in `test-proximo-pagamento` (26 checks).
+
+**"Sem saldo inicial" (pacote E, leva 1) — a condição exata no código:** `temSaldoInicial(nome)` = `saldosIniciais[nome]` existe **e**
+`typeof valor === 'number'`. Logo: conta sem entrada → "sem"; entrada com valor texto/`null`/ausente (ex.: só a data) → "sem"; **valor 0 → COM** saldo
+inicial (`partidaReal`); valor sem data `em` → COM (conta todo o histórico); `em` futura → COM (o saldo é só o `valor`, nada anterior conta).
+"Sem saldo inicial" = NENHUMA conta atende isso. Nesse caso a faixa vira "Resultado do mês até agora" e o "Fim do mês" parte do mesmo número.
+**Esse número é só o que JÁ entrou/foi pago** (receita `pago` − gasto `pago` do mês; respeita o filtro de conta na faixa, o "Fim do mês" ignora o
+filtro). A receita pendente entra UMA vez, em "+ Ainda vai receber". Antes a receita pendente estava nos dois lugares (1.800 em vez de 1.300) — o
+erro afetava justamente quem ainda não configurou saldo (quem está nos 15 dias de teste); com saldo inicial já estava certo. O **ritmo** da frase
+"dura até" (`gastoMesAteAgora`) é só o gasto **pago com data ≤ hoje** ÷ dia do mês: gasto pendente (a vencer ou vencido) e pago com data futura
+não entram (já estão descontados no "Fim do mês"). A faixa respeita o filtro de conta; com o filtro numa conta SEM saldo enquanto outra tem, a faixa
+cai em "Resultado do mês até agora" daquela conta e o "Fim do mês" segue usando as contas com saldo (inconsistência conhecida, sem tag).
 
 The band and headline answer different questions on purpose (how much I *have* / how much *is
 left after paying what's due*) — kept visually distinct: band is blue, headline is green/red.
