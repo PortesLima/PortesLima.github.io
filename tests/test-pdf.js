@@ -83,9 +83,10 @@ const exportarCSV = (page) => page.evaluate(async () => {
   ok(L.every(l => l.length === 9), 'TODAS as linhas têm 9 campos (aspas, ";" e quebra de linha dentro do texto não desalinham)');
   eq(L.length, 8, '1 cabeçalho + 7 lançamentos');
   eq(L.slice(1).map(l => l[0]), ['2026-08-31', '2026-09-01', '2026-09-02', '2026-09-06', '2026-09-07', '2026-09-15', '2026-09-30'], 'ordenado por data crescente');
+  const HOSTIL_CSV = HOSTIL.replace(/\n/g, ' ');   // quebra de linha no texto vira espaço na exportação
   const porDesc = Object.fromEntries(L.slice(1).map(l => [l[2], l]));
-  eq(porDesc[HOSTIL].slice(2, 9), [HOSTIL, 'Alimentação', 'Conta; "A"', 'pago', '1234,50', 'sim', 'a;b'], 'descrição com ";", aspas e quebra de linha sai íntegra; conta e tag com ";" também; valor "1234,50"; fixo "sim"');
-  ok(csv.texto.includes('"Almoço; ""Bar do Zé""\nsegunda linha, café"'), 'aspas duplicadas ("") e a quebra de linha ficam DENTRO das aspas');
+  eq(porDesc[HOSTIL_CSV].slice(2, 9), [HOSTIL_CSV, 'Alimentação', 'Conta; "A"', 'pago', '1234,50', 'sim', 'a;b'], 'descrição com ";" e aspas sai íntegra e a quebra de linha vira espaço (antes: ficava dentro das aspas); conta e tag com ";" também; valor "1234,50"; fixo "sim"');
+  ok(csv.texto.includes('"Almoço; ""Bar do Zé"" segunda linha, café"') && !/Zé""\n/.test(csv.texto), 'aspas duplicadas ("") ficam DENTRO das aspas e o texto não tem mais quebra de linha');
   eq(porDesc['Ação, coração & pão — 100% ünïcödé'][2], 'Ação, coração & pão — 100% ünïcödé', 'acentos, vírgula, & e travessão preservados');
   eq(porDesc['Conta vencida'][5], 'vencido', 'status exportado = statusEfetivo (pendente com data passada → "vencido")');
   eq(porDesc['Conta futura'][5], 'pendente', 'pendente futuro → "pendente"');
@@ -100,11 +101,18 @@ const exportarCSV = (page) => page.evaluate(async () => {
   // injeção de fórmula
   await poe(page, { tx: [T(1, { desc: '=HYPERLINK("http://x","clique")' }), T(2, { desc: '+1+1' }), T(3, { desc: '-2+3' }), T(4, { desc: '@SUM(1)' }), T(5, { desc: 'normal' })] });
   const f = csvParse((await exportarCSV(page)).texto).slice(1).map(l => l[2]).sort();
-  eq(f.filter(d => /^[=+\-@]/.test(d)).length, 4, '[BUG-CONHECIDO] descrições que começam com = + - @ são exportadas SEM neutralização (Excel/Sheets as executam como fórmula — "CSV injection"); esperado: prefixar com apóstrofo');
+  eq([f.filter(d => /^[=+\-@]/.test(d)).length, f.filter(d => /^'[=+\-@]/.test(d)).length], [0, 4], 'descrições que começam com = + - @ saem com apóstrofo na frente (Excel/Sheets não as executam como fórmula; antes: sem neutralização)');
+  await poe(page, { tx: [T(1, { desc: 'ok', conta: '=A1', tag: '@x', categoria: '+Lazer', valor: 5 }), T(2, { desc: "'normal", valor: 6 })] });
+  const g = csvParse((await exportarCSV(page)).texto).slice(1);
+  eq(g.find(l => l[2] === 'ok').filter((_, i) => [3, 4, 8].includes(i)), ['+Lazer'.replace(/^/, "'"), "'=A1", "'@x"], 'categoria, conta e etiqueta também são neutralizadas (e o VALOR numérico não é tocado)');
+  eq(g.find(l => l[2] === "'normal")[2], "'normal", 'apóstrofo que não protege fórmula fica como está');
   // ida e volta pelo parser do app
   await poe(page, { tx: [T(1, { desc: HOSTIL, valor: 1234.5 }), T(2, { desc: 'Simples; com "aspas"', valor: 10 }), REC(3, { desc: 'Salário', valor: 5000 })] });
   const rt = await page.evaluate(async () => { let cap; const o = URL.createObjectURL; URL.createObjectURL = b => { cap = b; return o.call(URL, b); }; exportarCSV(); URL.createObjectURL = o; return parseCSVBolsoCerto(await cap.text()).transacoes.map(t => [t.desc, t.valor]); });
-  eq(rt.map(x => x[0]).sort(), ['Salário', 'Simples; com "aspas"'], '[BUG-CONHECIDO] ida e volta pelo parseCSVBolsoCerto PERDE o lançamento cuja descrição tem quebra de linha (o parser corta o texto em linhas antes de olhar as aspas) — some em silêncio; esperado: 3 lançamentos');
+  eq(rt.map(x => x[0]).sort(), [HOSTIL_CSV, 'Salário', 'Simples; com "aspas"'].sort(), 'ida e volta pelo parseCSVBolsoCerto traz os 3 lançamentos (a descrição com quebra de linha agora volta com espaço; antes SUMIA em silêncio)');
+  await poe(page, { tx: [T(1, { desc: '=1+1', valor: 3 }), T(2, { desc: '-abc', valor: 4 }), T(3, { desc: "'x", valor: 5 })] });
+  const rf = await page.evaluate(async () => { let cap; const o = URL.createObjectURL; URL.createObjectURL = b => { cap = b; return o.call(URL, b); }; exportarCSV(); URL.createObjectURL = o; return parseCSVBolsoCerto(await cap.text()).transacoes.map(t => t.desc).sort(); });
+  eq(rf, ["'x", '-abc', '=1+1'], 'ida e volta de descrições com = + - @: o parser tira o apóstrofo que a exportação pôs (e só ele)');
   eq(rt.find(x => x[0] === 'Simples; com "aspas"')[1], -10, 'sem quebra de linha, ";" e aspas sobrevivem à ida e volta');
 
   // ================= 2. PDF mensal =================
@@ -152,12 +160,20 @@ const exportarCSV = (page) => page.evaluate(async () => {
   await poe(page, { tx: SET.filter(t => !/agosto/.test(t.desc)), contas: ['Outros', 'Itaú'] });
   r = await pdf(page, 'exportarPDF');
   ok(!S(r).some(s => /Somando o que/.test(s)), 'sem movimento no mês anterior: a linha "Somando o que sobrou" NÃO aparece');
-  // filtro de conta: a tela filtra, o PDF não
+  // filtro de conta: o PDF mensal acompanha a tela; anual e IR ficam em "Todas as contas"
   await poe(page, { tx: SET, contas: ['Outros', 'Itaú'], filtro: 'Itaú' });
   const telaItau = [await txt(page, '#kpiReceita'), await txt(page, '#kpiGasto')];
   r = await pdf(page, 'exportarPDF');
   eq(telaItau, [R(0), R(1354.5)], 'tela com o filtro de conta = Itaú: Entrou 0 (as receitas estão em "Outros"), Saiu 1.354,50 (120 + 1.234,50)');
-  ok(tem(r, R(3500)) && tem(r, R(1754.5)) && !tem(r, R(1354.5)), '[BUG-CONHECIDO] o PDF mensal IGNORA o filtro de conta do topo: sai com Entrou 3.500 / Saiu 1.754,50 (todas as contas) enquanto a tela mostra só o Itaú; esperado: respeitar o filtro (ou avisar)');
+  ok(tem(r, R(0)) && tem(r, R(1354.5)) && !tem(r, R(3500)) && !tem(r, R(1754.5)), 'o PDF mensal RESPEITA o filtro de conta do topo: Entrou R$ 0 / Saiu 1.354,50, igual à tela (antes: 3.500 / 1.754,50 de todas as contas)');
+  ok(tem(r, 'Relatório mensal') && tem(r, '· Conta: Itaú'), 'o cabeçalho do PDF mensal diz "Conta: Itaú" ao lado do título');
+  const ra = await pdf(page, 'exportarPDFAnual');
+  ok(tem(ra, '· Todas as contas') && !tem(ra, 'Conta: Itaú'), 'o PDF anual ignora o filtro e diz "Todas as contas" no cabeçalho');
+  const ri = await pdf(page, 'exportarPDFIR');
+  ok(tem(ri, '· Todas as contas'), 'o PDF de IR diz "Todas as contas" no cabeçalho');
+  await poe(page, { tx: SET, contas: ['Outros', 'Itaú'], filtro: '' });
+  r = await pdf(page, 'exportarPDF');
+  ok(tem(r, '· Todas as contas') && tem(r, R(3500)) && tem(r, R(1754.5)), 'sem filtro de conta, o PDF mensal soma todas as contas e diz "Todas as contas"');
   // mês vazio
   await poe(page, { tx: [], mes: '2026-09' });
   r = await pdf(page, 'exportarPDF');
@@ -189,7 +205,7 @@ const exportarCSV = (page) => page.evaluate(async () => {
   ok(longa && longa.s.endsWith('…') && longa.s.length < 200 && longa.w <= 78.01, `descrição de 200 caracteres é truncada com "…" e cabe na coluna (${longa && longa.w.toFixed(1)} ≤ 78 mm)`);
   ok(tem(r, 'Ação café coração 🍕 € ő') || S(r).some(s => s.startsWith('Ação café coração')), 'acentos preservados na descrição');
   ok(tem(r, '<img src=x onerror=alert(1)> & "q"'), 'HTML na descrição é desenhado como texto');
-  ok(S(r).some(s => s.includes('\n')), '[BUG-CONHECIDO] descrição com quebra de linha vai crua para doc.text, que a desenha em 2 linhas e invade a linha seguinte da tabela; esperado: trocar a quebra por espaço');
+  ok(!S(r).some(x => x.includes('\n')) && S(r).some(x => x === 'quebra de linha'), 'descrição com quebra de linha vira UMA linha de texto (espaço no lugar da quebra; antes ia crua para doc.text e invadia a linha seguinte)');
   ok(S(r).includes('C'.repeat(16)), 'categoria longa é cortada em 16 caracteres no chip');
   // ponto flutuante
   await poe(page, { tx: [REC(1, { valor: 0.3 }), T(2, { valor: 0.1 }), T(3, { valor: 0.2 })] });

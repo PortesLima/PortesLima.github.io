@@ -93,7 +93,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   um cenário com as contas à mão, ponto flutuante (0,1+0,2), ciclo de fatura (fechamento/vencimento, dia do fechamento,
   dez→jan, fev/bissexto), card de faturas e parcelas × fatura. Usa `emulateMedia({reducedMotion:'reduce'})` para o texto dos
   KPIs não passar pelo tween. 9 `[BUG-CONHECIDO]`.
-- `test-pdf` (85) — **reconstrução (Bloco 4)**: `exportarCSV` (BOM, `;`, aspas, quebra de linha, acentos, status efetivo, BRL
+- `test-pdf` (93) — **reconstrução (Bloco 4)**: `exportarCSV` (BOM, `;`, aspas, quebra de linha, acentos, status efetivo, BRL
   cru, ida e volta) e os 3 PDFs (`exportarPDF`/`Anual`/`IR`) com o jsPDF real e o construtor espiado (texto desenhado por
   `doc.text`, páginas, tamanho; `save()` interceptado): totais e contagem de linhas batem com a tela, mês/ano vazio, 70
   linhas em várias páginas, texto hostil. 6 `[BUG-CONHECIDO]`.
@@ -174,6 +174,15 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] orçamento com valor 0 não conta como uso… chave órfã { Lazer: 0 }` → `orçamento com valor 0 = "sem limite": a categoria some SEM painel e a chave { Lazer: 0 } é limpa do orçamento` (0 segue **não** contando como uso; excluir a categoria apaga a chave)
 - `[BUG-CONHECIDO] a opção transitória "Fantasma (fora da lista)" continua no select depois de cancelar a edição…` → `a opção transitória "Fantasma (fora da lista)" some do select ao cancelar a edição` (`data-transitoria`, removida em `cancelarEdicao`)
 - Fora do P5 (não refeito): persistência do tema (já no pacote H).
+
+**Leva 2 · P6 (exportação CSV e PDF)** — `tests/test-pdf.js`
+- **CSV:** `csvTexto()` (antes de `exportarCSV`) nos campos de **texto** (descrição, categoria, conta, etiqueta): quebra de linha vira espaço e, se começa com `=`, `+`, `-` ou `@`, ganha um `'` na frente. O campo **Valor** não passa por aí (o sinal de "-12,50" é legítimo). `parseCSVBolsoCerto` tira o `'` da descrição **só** quando ele protege `= + - @` (um `'x` comum fica como está).
+- **PDF:** `pdfTruncar` e o chip de categoria normalizam quebra de linha/espaços repetidos em 1 espaço. `exportarPDF` (mensal) **respeita o filtro de conta do topo** (mês e "mês anterior"); `pdfCabecalho(doc, titulo, ref, escopo)` escreve o escopo ao lado do título em chamada de texto à parte ("· Conta: Itaú" / "· Todas as contas"; o título continua exatamente "Relatório mensal"). Anual e IR ignoram o filtro e dizem "· Todas as contas".
+- `[BUG-CONHECIDO] descrições que começam com = + - @ são exportadas SEM neutralização…` → `descrições que começam com = + - @ saem com apóstrofo na frente (…; antes: sem neutralização)` (+ novos: categoria/conta/etiqueta idem e o valor numérico intacto; `'normal` fica como está)
+- `[BUG-CONHECIDO] ida e volta pelo parseCSVBolsoCerto PERDE o lançamento cuja descrição tem quebra de linha…` → `ida e volta pelo parseCSVBolsoCerto traz os 3 lançamentos (a descrição com quebra de linha agora volta com espaço; antes SUMIA em silêncio)` (+ novo: ida e volta de `=1+1`, `-abc`, `'x`)
+- (sem tag, texto mudou) `descrição com ";", aspas e quebra de linha sai íntegra…` → `… e a quebra de linha vira espaço (antes: ficava dentro das aspas)`; `aspas duplicadas ("") e a quebra de linha ficam DENTRO das aspas` → `aspas duplicadas ("") ficam DENTRO das aspas e o texto não tem mais quebra de linha`
+- `[BUG-CONHECIDO] o PDF mensal IGNORA o filtro de conta do topo…` → `o PDF mensal RESPEITA o filtro de conta do topo: Entrou R$ 0 / Saiu 1.354,50, igual à tela (antes: 3.500 / 1.754,50 de todas as contas)` (+ novos: cabeçalho "Conta: Itaú"; anual e IR "Todas as contas" mesmo com filtro; sem filtro o mensal soma tudo e diz "Todas as contas")
+- `[BUG-CONHECIDO] descrição com quebra de linha vai crua para doc.text…` → `descrição com quebra de linha vira UMA linha de texto (espaço no lugar da quebra; antes ia crua para doc.text e invadia a linha seguinte)`
 
 
 **Pacote E ("Fim do mês" e "dura até")** — `tests/test-saldos.js`

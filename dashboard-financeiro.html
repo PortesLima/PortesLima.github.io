@@ -3047,10 +3047,16 @@ function removerRecorrente(id){
   render();
 }
 
+// campo de TEXTO do CSV: quebra de linha vira espaço; começo em = + - @ ganha apóstrofo (Excel/Sheets não executam como fórmula).
+// Campos numéricos (valor) não passam por aqui — o sinal de "-12,50" é legítimo.
+function csvTexto(s){
+  s = String(s == null ? '' : s).replace(/[\r\n]+/g, ' ');
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
 function exportarCSV(){
   const linhas = [['Data','Tipo','Descrição','Categoria','Conta','Status','Valor','Fixo','Tag']];
   transacoes.slice().sort((a,b)=>a.data.localeCompare(b.data)).forEach(t=>{
-    linhas.push([t.data, t.tipo, t.desc, categoriaExibida(t), t.conta||'', statusEfetivo(t), t.valor.toFixed(2).replace('.',','), t.fixo?'sim':'não', t.tag||'']);
+    linhas.push([t.data, t.tipo, csvTexto(t.desc), csvTexto(categoriaExibida(t)), csvTexto(t.conta||''), statusEfetivo(t), t.valor.toFixed(2).replace('.',','), t.fixo?'sim':'não', csvTexto(t.tag||'')]);
   });
   const csv = linhas.map(l => l.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
@@ -4628,19 +4634,20 @@ function pdfLogo(doc, x, y){
 }
 // trunca um texto com reticências para caber em maxW (mm) na fonte/tamanho atuais
 function pdfTruncar(doc, texto, maxW){
-  texto = String(texto || '');
+  texto = String(texto || '').replace(/\s+/g, ' ').trim();   // quebra de linha/espaços repetidos viram 1 espaço
   if(doc.getTextWidth(texto) <= maxW) return texto;
   while(texto.length > 1 && doc.getTextWidth(texto + '…') > maxW) texto = texto.slice(0, -1);
   return texto.replace(/\s+$/, '') + '…';
 }
 // cabeçalho de página (marca + referência + data de geração); retorna o Y após ele
-function pdfCabecalho(doc, titulo, referencia){
+function pdfCabecalho(doc, titulo, referencia, escopo){
   const M = 14, W = doc.internal.pageSize.getWidth();
   pdfLogo(doc, M, 12);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...PDF_COR.texto);
   doc.text('Bolso Certo', M + 11, 18);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...PDF_COR.muted);
   doc.text(titulo, M + 11, 23);
+  if(escopo) doc.text(pdfTruncar(doc, '· ' + escopo, 62), M + 11 + doc.getTextWidth(titulo) + 2, 23);
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...PDF_COR.azul);
   doc.text(referencia, W - M, 18, { align: 'right' });
@@ -4752,7 +4759,7 @@ function pdfLinhaLancamento(doc, t, y, i, colX){
 
   // categoria como chip colorido (fundo claro da cor + texto na cor)
   const cor = ehTransf ? PDF_COR.azul : pdfHexRgb(corCategoria(categoriaExibida(t)));
-  const cat = categoriaExibida(t).substring(0, 16);
+  const cat = categoriaExibida(t).replace(/\s+/g, ' ').trim().substring(0, 16);
   doc.setFontSize(7.5);
   const chipW = doc.getTextWidth(cat) + 4;
   const temG = typeof doc.GState === 'function';
@@ -4775,16 +4782,18 @@ function exportarPDF(){
   const M = 14, W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
   const refLabel = fmtMesLabel(mesAtual);
 
-  const doMes = transacoes.filter(t => chaveMes(t.data) === mesAtual);
+  const conta = contaAtivaFiltro();   // o relatório mensal acompanha o filtro de conta da tela
+  const escopo = conta ? 'Conta: ' + conta : 'Todas as contas';
+  const doMes = transacoes.filter(t => chaveMes(t.data) === mesAtual && (!conta || t.conta === conta));
   const receitas = somarPorTipo(doMes, 'receita');
   const gastos = somarPorTipo(doMes, 'gasto');
 
   // "sobrou/faltou do mês anterior" — mesma conta do card "Este mês" (inclui pendentes)
   const chAnt = mesAnterior(mesAtual);
-  const doMesAnt = transacoes.filter(t => chaveMes(t.data) === chAnt);
+  const doMesAnt = transacoes.filter(t => chaveMes(t.data) === chAnt && (!conta || t.conta === conta));
   const saldoAnt = somarPorTipo(doMesAnt, 'receita') - somarPorTipo(doMesAnt, 'gasto');
 
-  let y = pdfCabecalho(doc, 'Relatório mensal', refLabel);
+  let y = pdfCabecalho(doc, 'Relatório mensal', refLabel, escopo);
   y = pdfResumoMes(doc, y, refLabel, receitas, gastos, saldoAnt);
 
   // ---- Lançamentos ----
@@ -4805,7 +4814,7 @@ function exportarPDF(){
     linhas.forEach((t, i) => {
       if(y > Hp - 20){
         doc.addPage();
-        y = pdfCabecalho(doc, 'Relatório mensal', refLabel) + 2;
+        y = pdfCabecalho(doc, 'Relatório mensal', refLabel, escopo) + 2;
         y = pdfTabelaHeader(doc, y, colX);
       }
       y = pdfLinhaLancamento(doc, t, y, i, colX);
@@ -4827,7 +4836,7 @@ function exportarPDFAnual(){
   const doc = new jsPDF();
   const M = 14, W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
 
-  let y = pdfCabecalho(doc, 'Relatório anual', ano);
+  let y = pdfCabecalho(doc, 'Relatório anual', ano, 'Todas as contas');
 
   // resumo do ano: saldo como número-herói
   const positivo = saldoAno >= 0;
@@ -4864,7 +4873,7 @@ function exportarPDFAnual(){
     const rec = somarPorTipo(doMes, 'receita');
     const gas = somarPorTipo(doMes, 'gasto');
     const sal = rec - gas;
-    if(y > Hp - 20){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano) + 2; }
+    if(y > Hp - 20){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano, 'Todas as contas') + 2; }
     if(linhaIdx % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_COR.texto);
     doc.text(fmtMesLabel(chave), colM.mes, y);
@@ -4878,7 +4887,7 @@ function exportarPDFAnual(){
 
   // ---- Gastos por categoria no ano ----
   y += 8;
-  if(y > Hp - 30){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano) + 2; }
+  if(y > Hp - 30){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano, 'Todas as contas') + 2; }
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...PDF_COR.texto);
   doc.text('Gastos por categoria no ano', M, y);
   y += 6;
@@ -4890,7 +4899,7 @@ function exportarPDFAnual(){
   const porCategoria = {};
   doAno.filter(t => t.tipo === 'gasto').forEach(t => { const c = categoriaExibida(t); porCategoria[c] = (porCategoria[c] || 0) + t.valor; });
   Object.entries(porCategoria).sort((a,b) => b[1] - a[1]).forEach(([cat, total], i) => {
-    if(y > Hp - 20){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano) + 2; }
+    if(y > Hp - 20){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano, 'Todas as contas') + 2; }
     if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
     const cor = pdfHexRgb(corCategoria(cat));
     doc.setFontSize(7.5);
@@ -4924,10 +4933,10 @@ function exportarPDFIR(){
   const M = 14, W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
   // quebra de página: se não cabe mais `min` mm, abre página nova e devolve o Y após o cabeçalho
   const quebra = (yAtual, min = 20) => yAtual > Hp - min
-    ? pdfCabecalho(doc, 'Apoio para declaração de IR', ano) + 2
+    ? pdfCabecalho(doc, 'Apoio para declaração de IR', ano, 'Todas as contas') + 2
     : yAtual;
 
-  let y = pdfCabecalho(doc, 'Apoio para declaração de IR', ano);
+  let y = pdfCabecalho(doc, 'Apoio para declaração de IR', ano, 'Todas as contas');
 
   // ---- aviso legal em destaque ----
   doc.setFillColor(...PDF_COR.zebra);
@@ -5337,7 +5346,7 @@ function parseCSVBolsoCerto(texto){
     if(tipo === 'gasto' || tipo === 'transferencia') valor = -Math.abs(valor);
     else if(tipo === 'receita') valor = Math.abs(valor);
     // sem tipo: mantém o sinal do próprio campo Valor
-    out.push({ data, desc: (c[iDesc] || 'Lançamento importado').replace(/\s+/g, ' ').trim(), valor, fitid: null });
+    out.push({ data, desc: (c[iDesc] || 'Lançamento importado').replace(/^'(?=[=+\-@])/, '').replace(/\s+/g, ' ').trim() || 'Lançamento importado', valor, fitid: null });
   }
   return ignoradas ? { transacoes: out, ignoradas } : { transacoes: out };
 }
