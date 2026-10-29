@@ -215,7 +215,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
   const canv = await page.evaluate(() => [...document.querySelectorAll('canvas')].filter(c => window.__a11y.visivel(c)).map(c => ({ id: c.id, role: c.getAttribute('role'), label: (c.getAttribute('aria-label') || '').length })));
   ok(canv.length >= 4 && canv.every(c => c.role === 'img' && c.label > 15), `todos os ${canv.length} <canvas> visíveis da Análise têm role="img" e aria-label descritivo`);
   eq(await page.evaluate(() => document.querySelectorAll('img').length), 0, 'não há <img> no app (nada sem alt); o visualizador de comprovante é uma janela à parte');
-  eq(await page.evaluate(() => /<img[^>]*alt=/.test(verAnexo.toString())), false, '[BUG-CONHECIDO] a janela do comprovante (verAnexo) escreve a <img> SEM alt (e sem lang/título acessível na janela); esperado: alt="Comprovante de …"');
+  eq(await page.evaluate(() => /<img[^>]*alt=/.test(verAnexo.toString())), true, 'a janela do comprovante (verAnexo) escreve a <img> com alt="Comprovante: …" (escapado)');
 
   // ================= 6. alvos de toque =================
   console.log('6. alvos de toque (≥ 44×44, celular)');

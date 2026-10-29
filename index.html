@@ -1412,10 +1412,13 @@ function categoriaExibida(t){
   if(t.categoria) return t.categoria;
   return t.tipo === 'receita' ? 'Receita' : t.tipo === 'transferencia' ? 'Transferência' : 'Outros';
 }
+// A cor da categoria entra em atributos style="...": só #hex (3 ou 6 dígitos) é aceita. Qualquer outra coisa (vinda de backup/Drive
+// adulterado, ex.: `red;" onmouseover="...`) cai numa cor segura em vez de abrir um atributo novo.
+function corHexValida(c){ return typeof c === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c); }
 // cor de qualquer categoria (por nome EFETIVO): adicionada → padrão (via renome reverso) → cinza.
 function corCategoria(nome){
   const add = (categoriasUsuario.adicionadas || []).find(x => x.nome === nome);
-  if(add) return add.cor;
+  if(add) return corHexValida(add.cor) ? add.cor : '#8b93a3';
   if(CORES_PADRAO[nome]) return CORES_PADRAO[nome];
   // pode ser uma padrão renomeada: acha o padrão cujo nome efetivo é `nome`
   const padrao = CATEGORIAS_PADRAO.find(p => nomeCategoriaPadrao(p) === nome);
@@ -1431,7 +1434,7 @@ function proximaCorCategoria(){
 function normalizarCategoriasUsuario(v){
   const base = { adicionadas: [], renomes: {}, ocultas: [] };
   if(!v || typeof v !== 'object') return base;
-  if(Array.isArray(v.adicionadas)) base.adicionadas = v.adicionadas.filter(x => x && x.nome).map(x => ({ nome: String(x.nome), cor: x.cor || proximaCorCategoria() }));
+  if(Array.isArray(v.adicionadas)) base.adicionadas = v.adicionadas.filter(x => x && x.nome).map(x => ({ nome: String(x.nome), cor: corHexValida(x.cor) ? x.cor : proximaCorCategoria() }));
   if(v.renomes && typeof v.renomes === 'object') for(const [k,nv] of Object.entries(v.renomes)){ if(CATEGORIAS_PADRAO.includes(k) && nv && nv !== k) base.renomes[k] = String(nv); }
   if(Array.isArray(v.ocultas)) base.ocultas = v.ocultas.filter(c => CATEGORIAS_PADRAO.includes(c) && c !== 'Outros');
   return base;
@@ -1500,7 +1503,7 @@ function renderListaCategorias(){
     linhas.push({ chave: 'p:' + p, padraoOrigem: p, nome: nomeCategoriaPadrao(p), ehPadrao: true, cor: corCategoria(nomeCategoriaPadrao(p)) });
   });
   (categoriasUsuario.adicionadas || []).forEach((x, i) => {
-    linhas.push({ chave: 'a:' + i, idx: i, nome: x.nome, ehPadrao: false, cor: x.cor });
+    linhas.push({ chave: 'a:' + i, idx: i, nome: x.nome, ehPadrao: false, cor: corCategoria(x.nome) });
   });
   el.innerHTML = linhas.map(l => {
     const uso = contarUsoCategoria(l.nome);
@@ -1511,7 +1514,7 @@ function renderListaCategorias(){
       <input type="text" value="${escHtml(l.nome)}" data-chave="${l.chave}" aria-label="Nome da categoria"
         style="flex:1; min-width:0;" onchange="renomearCategoria(this.dataset.chave, this.value)">
       <span style="font-size:10.5px; color:var(--muted2); flex:none; white-space:nowrap;">${usoTxt}</span>
-      ${podeExcluir ? `<button class="iconbtn del" title="Excluir categoria" onclick="excluirCategoria('${l.chave}')">&times;</button>` : '<span style="width:28px; flex:none;"></span>'}
+      ${podeExcluir ? `<button class="iconbtn del" title="Excluir categoria" data-chave="${l.chave}" onclick="excluirCategoria(this.dataset.chave)">&times;</button>` : '<span style="width:28px; flex:none;"></span>'}
     </div>`;
   }).join('');
 }
@@ -2298,9 +2301,9 @@ function popularSelectsEstaticos(){
   preserva('categoria', opts);
   preserva('recCategoria', opts);
   preserva('filtroCategoria', '<option value="">Todas categorias</option><option>Receita</option><option>Transferência</option>' + opts);
-  document.getElementById('conta').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
-  document.getElementById('contaDestino').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
-  document.getElementById('contaFiltro').innerHTML = '<option value="">Todas as contas</option>' + contas.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('conta').innerHTML = contas.map(c=>`<option>${escHtml(c)}</option>`).join('');
+  document.getElementById('contaDestino').innerHTML = contas.map(c=>`<option>${escHtml(c)}</option>`).join('');
+  document.getElementById('contaFiltro').innerHTML = '<option value="">Todas as contas</option>' + contas.map(c=>`<option>${escHtml(c)}</option>`).join('');
   document.getElementById('dataInput').value = hojeISO();
 
   const anoHoje = parseInt(hojeISO().slice(0,4));
@@ -2446,6 +2449,13 @@ async function editarSaldoInicialConta(nome, valorTxt, dataTxt){
   renderListaContas();
   render();
 }
+// O nome da conta vai UMA vez, escapado, em data-conta no cartão; os handlers leem `contaDoCard(this)` em vez de embutir o
+// nome entre aspas dentro do onclick/onchange (que quebrava com aspas no nome e permitia injeção de atributo/JS).
+function contaDoCard(el){ return el.closest('[data-conta]').dataset.conta; }
+function salvarSaldoDoCard(el){
+  const card = el.closest('[data-conta]');
+  editarSaldoInicialConta(card.dataset.conta, card.querySelector('.si-val').value, card.querySelector('.si-em').value);
+}
 function renderListaContas(){
   const el = document.getElementById('listaContas');
   el.innerHTML = contas.map(nome=>{
@@ -2454,35 +2464,33 @@ function renderListaContas(){
     const ini = saldosIniciais[nome];
     const saldoAtual = saldoAtualConta(nome);
     const temIni = temSaldoInicial(nome);
-    const esc = nome.replace(/'/g,"\\'");
     const corSaldo = saldoAtual >= 0 ? 'var(--green)' : 'var(--red)';
-    return `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px;">
+    return `<div class="conta-card" data-conta="${escHtml(nome)}" style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <b style="font-size:13px;">${nome}${ehCartao?' 💳':''}</b>
+        <b style="font-size:13px;">${escHtml(nome)}${ehCartao?' 💳':''}</b>
         <div style="display:flex; align-items:center; gap:8px;">
           ${temIni ? `<span style="font-size:12.5px; font-weight:600; color:${corSaldo};">${fmt(saldoAtual)}</span>` : ''}
-          <button class="iconbtn del" onclick="removerConta('${esc}')" title="Remover">&times;</button>
+          <button class="iconbtn del" onclick="removerConta(contaDoCard(this))" title="Remover">&times;</button>
         </div>
       </div>
       <div class="row conta-linha-saldo" style="margin-top:8px;">
         <label class="conta-campo">
           <span class="campo-legenda">Saldo inicial</span>
           <input type="text" inputmode="decimal" placeholder="ex: 1.200,00" value="${ini ? ini.valor.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}"
-            id="si-val-${esc}"
-            onchange="editarSaldoInicialConta('${esc}', this.value, document.getElementById('si-em-${esc}').value)"></label>
+            class="si-val" onchange="salvarSaldoDoCard(this)"></label>
         <label class="conta-campo">
           <span class="campo-legenda">Data do saldo</span>
-          <input type="date" value="${ini && ini.em ? ini.em : ''}" id="si-em-${esc}"
-            onchange="editarSaldoInicialConta('${esc}', document.getElementById('si-val-${esc}').value, this.value)"></label>
+          <input type="date" value="${ini && ini.em ? ini.em : ''}" class="si-em"
+            onchange="salvarSaldoDoCard(this)"></label>
       </div>
       ${temIni ? `<div style="font-size:10.5px; color:var(--muted2); margin-top:2px;">Saldo hoje = saldo inicial ${fmt(ini.valor)} ${saldoAtual-ini.valor>=0?'+':'−'} ${fmt(Math.abs(saldoAtual-ini.valor))} de movimento desde ${ini.em ? ini.em.split('-').reverse().join('/') : 'sempre'}.</div>` : ''}
       ${ehCartao ? `<div class="row" style="margin-top:8px;">
-        <label class="chk">Fecha dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaFechamento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${esc}','diaFechamento',this.value)"></label>
-        <label class="chk">Vence dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaVencimento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao('${esc}','diaVencimento',this.value)"></label>
+        <label class="chk">Fecha dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaFechamento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao(contaDoCard(this),'diaFechamento',this.value)"></label>
+        <label class="chk">Vence dia <input type="number" inputmode="numeric" min="1" max="31" value="${det.diaVencimento||''}" style="width:50px; flex:none;" onchange="editarDiasCartao(contaDoCard(this),'diaVencimento',this.value)"></label>
       </div>` : ''}
       <div class="conta-card-acoes">
         <label class="btn-importar-extrato">📄 Importar extrato (OFX/CSV)
-          <input type="file" accept=".ofx,.csv,text/*" onchange="iniciarImportacao('${esc}', this.files[0]); this.value='';">
+          <input type="file" accept=".ofx,.csv,text/*" onchange="iniciarImportacao(contaDoCard(this), this.files[0]); this.value='';">
         </label>
       </div>
     </div>`;
@@ -2650,7 +2658,7 @@ function abrirModalRapido(){
   rapidoSetTipo('gasto');
   document.getElementById('rapValor').value = '';
   document.getElementById('rapDesc').value = '';
-  document.getElementById('rapConta').innerHTML = contas.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('rapConta').innerHTML = contas.map(c=>`<option>${escHtml(c)}</option>`).join('');
   document.getElementById('rapCategoria').innerHTML = categoriasAtivas().map(c=>`<option>${escHtml(c)}</option>`).join('');
   document.getElementById('rapPalpite').textContent = '';
   document.getElementById('modalRapido').style.display = 'flex';
@@ -2694,7 +2702,7 @@ function salvarRapido(){
   transacoes.unshift({ id: uid(), tipo: rapidoTipo, desc: descFinal, valor, categoria, conta, data: dataISO, fixo:false, status:'pago', anexo:null, tag:null });
   fecharModalRapido();
   rastrear('lancamento_criado', { via: 'rapido' });
-  commitTransacoes(`${rapidoTipo === 'receita' ? 'Receita' : 'Gasto'} de ${fmt(valor)} em ${categoria}`, { irParaMes: chaveMes(dataISO) });
+  commitTransacoes(`${rapidoTipo === 'receita' ? 'Receita' : 'Gasto'} de ${fmt(valor)} em ${escHtml(categoria)}`, { irParaMes: chaveMes(dataISO) });
 }
 
 function editar(id){
@@ -2760,7 +2768,7 @@ function remover(id){
   // lançamento simples: sem confirm — o toast oferece "Desfazer" por 6s
   salvarSnapshot();
   transacoes = transacoes.filter(x => x.id !== id);
-  commitTransacoes(`"${t.desc}" excluído`);
+  commitTransacoes(`"${escHtml(t.desc)}" excluído`);
 }
 function fecharModalExcluirParcela(){
   idExclusaoPendente = null;
@@ -2988,7 +2996,7 @@ function addValorMeta(id){
   salvarMetas();
   // sem undo: reverter só transacoes deixaria m.valorAtual inconsistente
   snapshotAnterior = null;
-  commitTransacoes(`${fmt(v)} guardado em "${m.nome}"`, { comUndo:false });
+  commitTransacoes(`${fmt(v)} guardado em "${escHtml(m.nome)}"`, { comUndo:false });
 }
 function removerMeta(id){
   metas = metas.filter(m=>m.id!==id);
@@ -3018,7 +3026,7 @@ function lancarRecorrente(id){
   if(!r) return;
   salvarSnapshot();
   transacoes.unshift({id:uid(), tipo:r.tipo, desc:r.desc, valor:r.valor, categoria:r.categoria, conta:contas[0], data:mesAtual+'-05', fixo:true, recorrenteId:r.id});
-  commitTransacoes(`"${r.desc}" lançado neste mês`);
+  commitTransacoes(`"${escHtml(r.desc)}" lançado neste mês`);
 }
 function recorrenteJaLancadoEm(r, lista, chave){
   // recorrenteId é a ligação confiável; desc+categoria é o fallback para lançamentos
@@ -3228,7 +3236,7 @@ function render(){
       `<div class="parcela total"><span>Total que você tem de ${fmtMesLabel(mesAtual)}</span><b>${total>=0?'':'− '}${fmt(Math.abs(total))}</b></div>`;
 
     // trilha de auditoria: como o resultado do mês anterior foi calculado (mesma conta que saldoAnt)
-    const notaConta = conta ? ` <span class="aud-nota">Considerando só a conta ${conta}.</span>` : '';
+    const notaConta = conta ? ` <span class="aud-nota">Considerando só a conta ${escHtml(conta)}.</span>` : '';
     const sinalResAnt = saldoAnt >= 0 ? '+' : '−';
     document.getElementById('saldoAuditoria').innerHTML =
       `<div class="aud-titulo">Como calculamos "${verboAnt} de ${fmtMesLabel(chaveAnt)}"</div>` +
@@ -3335,7 +3343,7 @@ function render(){
       const pct = Math.round((t.valor/maiorValor)*100);
       return `<div class="orc-row">
         <div class="orc-label" style="width:22px; color:var(--muted); font-weight:600;">${i+1}º</div>
-        <div class="orc-label" style="width:150px;">${t.desc}</div>
+        <div class="orc-label" style="width:150px;">${escHtml(t.desc)}</div>
         <div class="orc-track"><div class="orc-fill" style="width:${pct}%; background:${corCat}"></div></div>
         <div class="orc-val">${fmt(t.valor)}</div>
       </div>`;
@@ -3390,9 +3398,9 @@ function render(){
       }
       tr.innerHTML = `
         <td class="col-check editable-only"><label><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" aria-label="Selecionar lançamento" ${(statusEf==='pago'||ehTransf)?'disabled':''}></label></td>
-        <td class="col-desc">${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}${tagAntiga}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
-        <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corCat}">${categoriaExibida(t)}</span></td>
-        <td class="col-conta" data-label="Conta" style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
+        <td class="col-desc">${escHtml(t.desc)}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${escHtml(t.tag)}</span>`:''}${tagAntiga}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
+        <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corCat}">${escHtml(categoriaExibida(t))}</span></td>
+        <td class="col-conta" data-label="Conta" style="color:var(--muted); font-size:11.5px;">${escHtml(t.conta||'-')}</td>
         <td class="col-status" data-label="Status">${statusTag}</td>
         <td class="col-valor ${cor}" data-label="Valor" style="font-weight:600;">${sinal} ${fmt(t.valor)}</td>
         <td class="col-acoes"><div class="actions editable-only">
@@ -3602,7 +3610,7 @@ function renderOrcamentos(porCat){
       ? `<div class="orc-nota">${[notaMedia, comparativo].filter(Boolean).join('')}</div>` : '';
     return `<div class="orc-item">
       <div class="orc-row">
-        <div class="orc-label">${c}</div>
+        <div class="orc-label">${escHtml(c)}</div>
         <div class="orc-track"><div class="orc-fill" style="width:${limite?pct:0}%; background:${corBarra}"></div></div>
         <div class="orc-val">${fmt(gasto)}${limite ? ' / '+fmt(limite) : ''}</div>
       </div>
@@ -3647,7 +3655,7 @@ function renderFaturas(){
     const total = gastosCiclo.reduce((s,t)=>s+t.valor,0);
     const vencTxt = ciclo.vencimentoISO ? fmtDataBR(ciclo.vencimentoISO) : 'não definido';
     return `<div class="orc-row">
-      <div class="orc-label">${nome}</div>
+      <div class="orc-label">${escHtml(nome)}</div>
       <div class="meta-sub" style="flex:1;"><span>Fecha em ${fmtDataBR(ciclo.fimISO)} · vence ${vencTxt}</span></div>
       <div class="orc-val">${fmt(total)}</div>
     </div>`;
@@ -3668,7 +3676,7 @@ function renderMetas(){
       economiaTxt = `<div class="meta-economia" style="color:var(--green)">Meta alcançada! 🎉</div>`;
     }
     return `<div class="meta-card">
-      <div class="meta-top"><b>${m.nome}</b><span>${pct}%</span></div>
+      <div class="meta-top"><b>${escHtml(m.nome)}</b><span>${pct}%</span></div>
       <div class="meta-track"><div class="meta-fill" style="width:${pct}%"></div></div>
       <div class="meta-sub">
         <span>${fmt(m.valorAtual)} de ${fmt(m.valorAlvo)}${m.prazo ? ' · até '+fmtDataBR(m.prazo) : ''}</span>
@@ -3772,7 +3780,7 @@ function renderRecorrentes(){
   el.innerHTML = recorrentes.map(r=>{
     const cor = r.tipo==='receita' ? 'var(--green)' : 'var(--red)';
     return `<div class="rec-row">
-      <div class="rec-info"><b>${r.desc}</b><div>${r.categoria} · <span style="color:${cor}">${fmt(r.valor)}</span></div></div>
+      <div class="rec-info"><b>${escHtml(r.desc)}</b><div>${escHtml(r.categoria)} · <span style="color:${cor}">${fmt(r.valor)}</span></div></div>
       <div class="actions">
         <button class="small secondary" onclick="lancarRecorrente(${r.id})">Lançar este mês</button>
         <button class="iconbtn del" onclick="removerRecorrente(${r.id})">&times;</button>
@@ -3788,7 +3796,7 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   const vencidos = doMes.filter(t => statusEfetivo(t)==='vencido');
   if(vencidos.length > 0){
     const totalVencido = vencidos.reduce((s,t)=>s+t.valor,0);
-    alertas.push({tipo:'danger', ico:'⏰', html:`Você tem <b>${vencidos.length} conta(s) vencida(s)</b> somando ${fmt(totalVencido)}: ${vencidos.map(t=>t.desc).join(', ')}.`});
+    alertas.push({tipo:'danger', ico:'⏰', html:`Você tem <b>${vencidos.length} conta(s) vencida(s)</b> somando ${fmt(totalVencido)}: ${vencidos.map(t=>escHtml(t.desc)).join(', ')}.`});
   }
   const proximosDias = 5;
   const aVencer = doMes.filter(t => {
@@ -3798,7 +3806,7 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   });
   if(aVencer.length > 0){
     const totalAVencer = aVencer.reduce((s,t)=>s+t.valor,0);
-    alertas.push({tipo:'warning', ico:'📅', html:`<b>${aVencer.length} pagamento(s)</b> vencem nos próximos ${proximosDias} dias, totalizando ${fmt(totalAVencer)}: ${aVencer.map(t=>t.desc).join(', ')}.`});
+    alertas.push({tipo:'warning', ico:'📅', html:`<b>${aVencer.length} pagamento(s)</b> vencem nos próximos ${proximosDias} dias, totalizando ${fmt(totalAVencer)}: ${aVencer.map(t=>escHtml(t.desc)).join(', ')}.`});
   }
 
   if(totalReceita > 0 && saldo < 0){
@@ -3808,9 +3816,9 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
     const limite = orcamentos[cat];
     if(!limite) return;
     if(val >= limite){
-      alertas.push({tipo:'danger', ico:'⚠', html:`Categoria <b>${cat}</b> estourou o orçamento: ${fmt(val)} de ${fmt(limite)} previstos.`});
+      alertas.push({tipo:'danger', ico:'⚠', html:`Categoria <b>${escHtml(cat)}</b> estourou o orçamento: ${fmt(val)} de ${fmt(limite)} previstos.`});
     }else if(val >= limite*0.8){
-      alertas.push({tipo:'warning', ico:'!', html:`Categoria <b>${cat}</b> já usou ${Math.round(val/limite*100)}% do orçamento (${fmt(val)} de ${fmt(limite)}).`});
+      alertas.push({tipo:'warning', ico:'!', html:`Categoria <b>${escHtml(cat)}</b> já usou ${Math.round(val/limite*100)}% do orçamento (${fmt(val)} de ${fmt(limite)}).`});
     }
   });
 
@@ -3819,7 +3827,7 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   if(mesAtual === chaveMes(hojeISO()) && hojeCheck.getDate() >= 3){
     const naoLancados = recorrentes.filter(r => !recorrenteJaLancadoEm(r, doMes, mesAtual));
     if(naoLancados.length > 0){
-      const nomes = naoLancados.map(r=>r.desc).join(', ');
+      const nomes = naoLancados.map(r=>escHtml(r.desc)).join(', ');
       alertas.push({tipo:'tip', ico:'🔁', html:`Lançamentos fixos ainda não registrados este mês: <b>${nomes}</b>. Use "Lançar este mês" na seção de fixos.`});
     }
   }
@@ -4249,7 +4257,7 @@ function renderSaldosContas(){
     const det = contasDetalhes[nome];
     const ehCartao = det && det.tipo === 'cartao';
     return `<div class="saldo-conta">
-      <div class="nome">${nome}${ehCartao?' 💳':''}</div>
+      <div class="nome">${escHtml(nome)}${ehCartao?' 💳':''}</div>
       <div class="val" style="color:${cor}">${fmt(atual)}</div>
       <div class="mov">${mov>=0?'+':'−'} ${fmt(Math.abs(mov))} desde o saldo inicial</div>
     </div>`;
@@ -4309,10 +4317,10 @@ function renderOrcamentoRisco(porCat){
     const estourou = o.gasto >= o.limite;
     const cor = estourou ? 'var(--red)' : 'var(--amber)';
     return `<div class="orc-row" role="button" tabindex="0"
-              onclick="irParaCategoria('${o.cat.replace(/'/g,"\\'")}')"
+              data-cat="${escHtml(o.cat)}" onclick="irParaCategoria(this.dataset.cat)"
               onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
               style="cursor:pointer;">
-      <div class="orc-label" style="width:110px;">${o.cat}</div>
+      <div class="orc-label" style="width:110px;">${escHtml(o.cat)}</div>
       <div class="orc-track"><div class="orc-fill" style="width:${Math.min(100,pct)}%; background:${cor}"></div></div>
       <div class="orc-val" style="color:${cor}">${estourou ? 'estourou' : pct+'%'} · ${fmt(o.gasto)} / ${fmt(o.limite)}</div>
     </div>`;
@@ -4475,9 +4483,9 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
     const vencida = statusEfetivo(prim) === 'vencido';
     const [y,m,d] = prim.data.split('-');
     if(vencida){
-      dicas.push({tipo:'danger', origem:'voce', ico:'🎯', html:`Pague primeiro <b>${prim.desc}</b> (${fmt(prim.valor)}, venceu em ${d}/${m}) — é a mais atrasada e some com o maior risco de juros/multa.`});
+      dicas.push({tipo:'danger', origem:'voce', ico:'🎯', html:`Pague primeiro <b>${escHtml(prim.desc)}</b> (${fmt(prim.valor)}, venceu em ${d}/${m}) — é a mais atrasada e some com o maior risco de juros/multa.`});
     }else{
-      dicas.push({tipo:'warning', origem:'voce', ico:'🎯', html:`Priorize <b>${prim.desc}</b> (${fmt(prim.valor)}, vence em ${d}/${m}) para se livrar dela primeiro e ganhar respiro no orçamento.`});
+      dicas.push({tipo:'warning', origem:'voce', ico:'🎯', html:`Priorize <b>${escHtml(prim.desc)}</b> (${fmt(prim.valor)}, vence em ${d}/${m}) para se livrar dela primeiro e ganhar respiro no orçamento.`});
     }
     if(abertas.length > 1){
       const restante = abertas.slice(1).reduce((s,t)=>s+t.valor,0);
@@ -4517,7 +4525,7 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
   if(candidatasCat.length > 0){
     const c = candidatasCat[0];
     const diffPct = Math.round(((c.val-c.media)/c.media)*100);
-    dicas.push({tipo:'tip', origem:'voce', ico:'💡', html:`<b>${c.cat}</b> está ${diffPct}% acima da sua média recente (${fmt(c.val)} vs ${fmt(c.media)}) — é onde você tem mais potencial de economia agora.`});
+    dicas.push({tipo:'tip', origem:'voce', ico:'💡', html:`<b>${escHtml(c.cat)}</b> está ${diffPct}% acima da sua média recente (${fmt(c.val)} vs ${fmt(c.media)}) — é onde você tem mais potencial de economia agora.`});
   }
 
   // 3) fim de ano: se o saldo acumulado do ano está apertado, sugerir congelar supérfluos até dezembro
@@ -4537,14 +4545,14 @@ function renderDicas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca){
     if(falta <= 0 || !m.prazo) return;
     const meses = mesesAte(m.prazo);
     if(meses > 0 && meses <= 3){
-      dicas.push({tipo:'warning', origem:'voce', ico:'⏳', html:`A meta <b>${m.nome}</b> vence em ${meses} mês(es) e ainda faltam ${fmt(falta)}. Guarde ${fmt(falta/meses)}/mês para chegar lá a tempo.`});
+      dicas.push({tipo:'warning', origem:'voce', ico:'⏳', html:`A meta <b>${escHtml(m.nome)}</b> vence em ${meses} mês(es) e ainda faltam ${fmt(falta)}. Guarde ${fmt(falta/meses)}/mês para chegar lá a tempo.`});
     }
   });
 
   const maiorCat = Object.entries(porCat).sort((a,b)=>b[1]-a[1])[0];
   if(maiorCat && totalGasto > 0){
     const pct = Math.round(maiorCat[1]/totalGasto*100);
-    dicas.push({tipo:'tip', origem:'voce', ico:'i', html:`Sua maior categoria de gasto é <b>${maiorCat[0]}</b>, representando ${pct}% do total gasto no mês.`});
+    dicas.push({tipo:'tip', origem:'voce', ico:'i', html:`Sua maior categoria de gasto é <b>${escHtml(maiorCat[0])}</b>, representando ${pct}% do total gasto no mês.`});
   }
   dicas.push({tipo:'tip', origem:'geral', ico:'i', html:'A regra 50/30/20 sugere destinar 50% da renda para necessidades, 30% para desejos e 20% para poupança/investimentos.'});
   if(taxaPoupanca < 20 && totalReceita > 0){
@@ -4580,7 +4588,7 @@ function verAnexo(id){
   const t = transacoes.find(x=>x.id===id);
   if(!t || !t.anexo) return;
   const win = window.open();
-  win.document.write(`<title>${t.desc}</title><body style="margin:0; background:#111; display:flex; align-items:center; justify-content:center; height:100vh;"><img src="${t.anexo}" style="max-width:100%; max-height:100%;"></body>`);
+  win.document.write(`<title>${escHtml(t.desc)}</title><body style="margin:0; background:#111; display:flex; align-items:center; justify-content:center; height:100vh;"><img src="${escHtml(t.anexo)}" alt="${escHtml('Comprovante: ' + t.desc)}" style="max-width:100%; max-height:100%;"></body>`);
 }
 
 // ---- Sistema visual compartilhado dos PDFs (mesmos tokens do app) ----
@@ -5538,7 +5546,7 @@ function confirmarImportacao(){
   });
   rastrear('extrato_importado', { via: p.formato });
   fecharModalImportar();
-  commitTransacoes(`${marcados.length} lançamento${marcados.length===1?'':'s'} importado${marcados.length===1?'':'s'} em ${p.conta}`, {
+  commitTransacoes(`${marcados.length} lançamento${marcados.length===1?'':'s'} importado${marcados.length===1?'':'s'} em ${escHtml(p.conta)}`, {
     comUndo: true,
     irParaMes: mesMaisRecente ? chaveMes(mesMaisRecente) : null,
   });

@@ -328,23 +328,23 @@ const alertasOrc = (page) => page.evaluate(() => [...document.querySelectorAll('
   });
   await page.evaluate(() => { mudarAbaPrincipal('lancamentos'); render(); mudarAbaPrincipal('metas'); render(); mudarAbaPrincipal('orcamento'); render(); mudarAbaPrincipal('geral'); render(); toggleOrcEdit(); renderListaCategorias(); });
   const vaza = await page.evaluate(() => Object.fromEntries(['#corpoTabela', '#orcamentos', '#listaOrcamentoRisco', '#paraOndeLista', '#recorrentes', '#alertas', '#listaDicas', '#orcEdit', '#listaCategorias'].map(s => [s, document.querySelectorAll(s + ' img[src="x"]').length])));
+    const nomes = { '#corpoTabela': 'tabela de Lançamentos (etiqueta da categoria)', '#orcamentos': 'lista de Orçamento por categoria', '#listaOrcamentoRisco': 'card "Orçamento em risco"', '#recorrentes': 'lista de contas fixas', '#alertas': 'alertas de orçamento', '#listaDicas': 'Dicas' };
   for(const s of ['#paraOndeLista', '#orcEdit', '#listaCategorias']) eq(vaza[s], 0, `${s}: nome da categoria escapado (sem HTML injetado)`);
-  const nomes = { '#corpoTabela': 'tabela de Lançamentos (etiqueta da categoria)', '#orcamentos': 'lista de Orçamento por categoria', '#listaOrcamentoRisco': 'card "Orçamento em risco"', '#recorrentes': 'lista de contas fixas', '#alertas': 'alertas de orçamento', '#listaDicas': 'Dicas' };
-  for(const [s, d] of Object.entries(nomes)) ok(vaza[s] > 0, `[BUG-CONHECIDO] ${d}: o nome da categoria entra SEM escapar e vira HTML (${vaza[s]} <img> injetado); esperado: escHtml`);
+  for(const [s, d] of Object.entries(nomes)) eq(vaza[s], 0, `${d}: o nome da categoria aparece como texto (escapado), nenhum <img> injetado`);
   // origem não confiável: cor vinda de um backup/Drive adulterado
   await page.evaluate(async () => { await aplicarDadosImportados({ categoriasUsuario: { adicionadas: [{ nome: 'Ruim', cor: 'red;" onmouseover="window.__cor=1' }] } }); renderListaCategorias(); });
-  eq(await page.evaluate(() => document.querySelectorAll('#listaCategorias [onmouseover]').length), 1, '[BUG-CONHECIDO] a cor de uma categoria importada (backup/Drive) entra no atributo style sem validação: aspas injetam atributo (onmouseover); esperado: aceitar só #hex');
+  eq(await page.evaluate(() => document.querySelectorAll('#listaCategorias [onmouseover]').length), 0, 'a cor de uma categoria importada (backup/Drive) só vale se for #hex: a cor com aspas é descartada e não injeta atributo (onmouseover)');
   // clique no "Orçamento em risco" com aspas/apóstrofo no nome
-  for(const [nome, funciona, d] of [["O'Brien", true, 'apóstrofo'], ['Lanche "rápido"', false, 'aspas duplas'], ['a\\b', false, 'barra invertida']]){
+  for(const [nome, funciona, d] of [["O'Brien", true, 'apóstrofo'], ['Lanche "rápido"', true, 'aspas duplas'], ['a\\b', true, 'barra invertida']]){
     await reset(page, { tx: [T(1, nome, 90)], orc: { [nome]: 100 }, cu: { adicionadas: [{ nome, cor: '#123456' }] } });
     await page.evaluate(() => { mudarAbaPrincipal('geral'); render(); });
     await page.evaluate(() => { const r = document.querySelector('#listaOrcamentoRisco .orc-row'); r && r.click(); });
     const filtro = await page.evaluate(() => document.getElementById('filtroCategoria').value);
-    eq(filtro === nome, funciona, `${funciona ? '' : '[BUG-CONHECIDO] '}"Orçamento em risco" → toque na linha com ${d} no nome ${funciona ? 'leva ao filtro certo' : 'NÃO filtra pela categoria (onclick inline quebra); esperado: filtrar'}`);
+    eq(filtro === nome, funciona, `"Orçamento em risco" → toque na linha com ${d} no nome leva ao filtro certo`);
   }
 
-  // os payloads acima geram erros ESPERADOS: <img src=x> (arquivo inexistente) e o onclick inline quebrado pelas aspas
-  eq([page.__erros.filter(e => /ERR_FILE_NOT_FOUND/.test(e)).length > 0, page.__erros.filter(e => /pageerror: .*Invalid or unexpected token/.test(e)).length], [true, 1], '[BUG-CONHECIDO] consequência observável dos payloads: <img src=x> tenta carregar "x" e o toque no risco com aspas dá SyntaxError na página');
+  // com tudo escapado, os payloads não geram nenhum erro: nem recurso inexistente (<img src=x>) nem SyntaxError de onclick
+  eq([page.__erros.filter(e => /ERR_FILE_NOT_FOUND/.test(e)).length, page.__erros.filter(e => /pageerror: .*Invalid or unexpected token/.test(e)).length], [0, 0], 'consequência observável dos payloads: nenhuma imagem "x" é buscada e nenhum SyntaxError na página');
   page.__erros.length = 0;
 
   // ================= 6. limites de orçamento =================

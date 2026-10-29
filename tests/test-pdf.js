@@ -182,8 +182,8 @@ const exportarCSV = (page) => page.evaluate(async () => {
   await poe(page, { tx: [T(1, { desc: 'X'.repeat(200), valor: 5 }), T(2, { desc: 'Ação café coração 🍕 € ő', valor: 6 }), T(3, { desc: '<img src=x onerror=alert(1)> & "q"', valor: 7 }), T(4, { desc: 'quebra\nde linha', valor: 8 }), T(5, { desc: 'Categoria longa', valor: 9, categoria: 'C'.repeat(40) })] });
   r = await pdf(page, 'exportarPDF');
   eq(r.erro, null, 'descrição de 200 caracteres, emoji, símbolos, HTML e quebra de linha: gera sem erro');
-  eq(await page.evaluate(() => document.querySelectorAll('#corpoTabela img[src="x"]').length), 1, '[BUG-CONHECIDO] a DESCRIÇÃO do lançamento também entra sem escapar na tabela de Lançamentos (mesma causa dos nomes de categoria): <img> injetado; esperado: escHtml');
-  eq(page.__erros.filter(e => /ERR_FILE_NOT_FOUND/.test(e)).length > 0, true, '… e o navegador tenta carregar "x" (erro de recurso esperado)');
+  eq(await page.evaluate(() => document.querySelectorAll('#corpoTabela img[src="x"]').length), 0, 'a DESCRIÇÃO do lançamento é escapada na tabela de Lançamentos: nenhum <img> injetado');
+  eq(page.__erros.filter(e => /ERR_FILE_NOT_FOUND/.test(e)).length, 0, '… e o navegador não tenta carregar "x" (nenhum erro de recurso)');
   page.__erros.length = 0;
   const longa = r.texts.find(t => t.x === 28 && t.s.startsWith('XXXX'));
   ok(longa && longa.s.endsWith('…') && longa.s.length < 200 && longa.w <= 78.01, `descrição de 200 caracteres é truncada com "…" e cabe na coluna (${longa && longa.w.toFixed(1)} ≤ 78 mm)`);

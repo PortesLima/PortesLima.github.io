@@ -116,6 +116,14 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   `canvas`/`img`, alvos de toque ≥ 44 px. 21 checks `[BUG-CONHECIDO]`. Nota: o app foca o 1º campo do registro rápido (`#rapValor`) e do assistente
   (`#onbContaNome`) **50 ms depois** de abrir (`setTimeout`); o teste espera o foco por condição (`waitForFunction`, limite 400 ms) — medir no instante 0
   era uma corrida intermitente. Os outros 10 modais não movem o foco.
+- `test-escape` (40) — **leva 2 · P4**: texto do usuário (descrição, etiqueta, conta, categoria, meta, cartão, cor) nunca vira HTML.
+  (1) **Guarda de código-fonte:** um scanner de template literals (multilinha e aninhados) lê o `index.html` e exige `escHtml(...)` em
+  todo `${...}` com nome de usuário dentro de HTML/toast, em `<option>${c}</option>` de contas e em `onclick="...'${...}'..."`. Exceções
+  declaradas **pela expressão**, cada uma com o motivo (hoje 2: `t.fixo?…` e `corCategoria(…)`). (2) **Dinâmico:** payloads `<img onerror>`,
+  `"><b id=…>`, `<script>`, aspas e barra invertida em todas as abas, Dicas, selects, modais, toasts, "Orçamento em risco" (toque), janela do
+  comprovante e cor importada; nada injetado, `window.__x` indefinido, sem `ERR_FILE_NOT_FOUND`. Regra para código novo: **qualquer texto do
+  usuário em template de HTML passa por `escHtml`; para handler inline use `data-*` + `this.dataset.x`, nunca o texto entre aspas no `onclick`;
+  cor só `#hex` (`corHexValida`)**.
 
 ### Checks `[BUG-CONHECIDO]` convertidos em checks do comportamento correto (nome antigo → nome novo)
 
@@ -143,6 +151,16 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] parseValorBR("-12.500") = -12500 (ponto+3 dígitos lido como milhar…)` → **mesmo comportamento, agora sem tag**: `parseValorBR("-12.500") = -12500 — INTENCIONAL na digitação` (o `parseValorBR` não muda; "12.500" digitado é doze mil e quinhentos). Idem `parseValorBR("0.500") = 500`. Não eram bug do `parseValorBR`: o bug era o OFX usá-lo.
 - (novos) 18 valores válidos e 9 inválidos de `TRNAMT` (`1.234,56`, `1,234.56`, `-1234,56`, `0.5`, `.5`, `R$ 12,50`, `1.2.3`, `12abc`, `1e5`…); um `TRNAMT` inválido derruba só a própria transação. Nota: hoje `12abc` e `1.2.3` eram ACEITOS pelo `parseFloat` (12 e 123); agora são rejeitados.
 - **P1b (commit à parte):** `parseOFX` e `parseCSVBolsoCerto` contam o que descartaram por data/valor inválido (`ignoradas`, só presente quando > 0), `importacaoPendente.ignoradas` o guarda e a pré-visualização avisa "N lançamento(s) do arquivo foi/foram ignorado(s) (data ou valor inválido)" (também quando o arquivo só tem lançamentos inválidos: "nenhum lançamento válido neste arquivo", em vez de parecer extrato vazio). Antes o descarte era silencioso. Sem `[BUG-CONHECIDO]` correspondente (comportamento novo).
+
+**Leva 2 · P4 (escape de HTML)** — `tests/test-categorias.js`, `tests/test-pdf.js`, `tests/test-escape.js` (novo)
+- `[BUG-CONHECIDO] <superfície>: o nome da categoria entra SEM escapar e vira HTML (N <img> injetado); esperado: escHtml` (×6: tabela, lista de Orçamento, "Orçamento em risco", contas fixas, alertas, Dicas) → `<superfície>: o nome da categoria aparece como texto (escapado), nenhum <img> injetado`
+- `[BUG-CONHECIDO] a cor de uma categoria importada (backup/Drive) entra no atributo style sem validação…` → `a cor de uma categoria importada (backup/Drive) só vale se for #hex: a cor com aspas é descartada e não injeta atributo (onmouseover)`
+- `[BUG-CONHECIDO] "Orçamento em risco" → toque na linha com aspas duplas / barra invertida no nome NÃO filtra pela categoria (onclick inline quebra)` (×2) → `"Orçamento em risco" → toque na linha com aspas duplas / barra invertida no nome leva ao filtro certo` (o apóstrofo já funcionava e segue)
+- `[BUG-CONHECIDO] consequência observável dos payloads: <img src=x> tenta carregar "x" e o toque no risco com aspas dá SyntaxError na página` → `consequência observável dos payloads: nenhuma imagem "x" é buscada e nenhum SyntaxError na página`
+- (`test-pdf`) `[BUG-CONHECIDO] a DESCRIÇÃO do lançamento também entra sem escapar na tabela de Lançamentos…` → `a DESCRIÇÃO do lançamento é escapada na tabela de Lançamentos: nenhum <img> injetado`; `… e o navegador tenta carregar "x" (erro de recurso esperado)` → `… e o navegador não tenta carregar "x" (nenhum erro de recurso)`
+- (`test-a11y`, efeito colateral) `[BUG-CONHECIDO] a janela do comprovante (verAnexo) escreve a <img> SEM alt…` → `a janela do comprovante (verAnexo) escreve a <img> com alt="Comprovante: …" (escapado)`
+- (novos) `test-escape`: guarda do código-fonte + dinâmico (acima). **Correção:** `escHtml` em ~45 pontos (5 toasts, 4 `<option>` de contas, `renderListaContas` reescrita com `data-conta` no lugar do nome em `onclick/id`, "Orçamento em risco" com `data-cat`, alertas, Dicas, tabela, orçamento, metas, fixas, saldos por conta, comprovante com `alt`/`<title>` escapados, botão excluir categoria com `data-chave`); `corHexValida` em `corCategoria`, `normalizarCategoriasUsuario` e `renderListaCategorias`.
+
 
 **Pacote E ("Fim do mês" e "dura até")** — `tests/test-saldos.js`
 - `[BUG-CONHECIDO] o "ritmo atual" soma o aluguel PENDENTE de 28/09 como se já tivesse sido gasto…` → `com saldo inicial: o aluguel PENDENTE de 28/09 não entra no ritmo (100 pagos em 10 dias = 10/dia) → "ok"` (+ `novo usuário com aluguel pendente de 900 no dia 28: … R$ 20/dia → "ok"`)
