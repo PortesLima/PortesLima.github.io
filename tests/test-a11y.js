@@ -153,7 +153,8 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
     await page.evaluate(MODAIS[id]); await quieto(page);
     const sem = await page.evaluate(id => { const m = document.getElementById(id), box = m.querySelector('.modal-box'); return { role: (m.getAttribute('role') || box.getAttribute('role')) === 'dialog' || (m.getAttribute('role') || box.getAttribute('role')) === 'alertdialog', modal: [m, box].some(e => e.getAttribute('aria-modal') === 'true'), nome: [m, box].some(e => e.getAttribute('aria-label') || e.getAttribute('aria-labelledby')) }; }, id);
     if(!(sem.role && sem.modal && sem.nome)) semSemantica.push(id);
-    const dentro = await page.evaluate(id => document.getElementById(id).contains(document.activeElement), id);
+    // o app foca o 1º campo de 2 modais 50 ms DEPOIS de abrir (setTimeout): espera o foco por condição (limite 400 ms), sem pausa fixa
+    const dentro = await page.waitForFunction(id => document.getElementById(id).contains(document.activeElement), id, { timeout: 400 }).then(() => true, () => false);
     if(!dentro) semFocoDentro.push(id);
     // trap: 12 Tabs; o foco sai do modal?
     let saiu = false;
@@ -166,7 +167,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
   await fecharTodos(page);
   eq(semSemantica, ids, '[BUG-CONHECIDO] NENHUM dos 11 modais tem role="dialog" + aria-modal="true" + nome (aria-label/aria-labelledby): o leitor de tela não sabe que abriu um diálogo; esperado: todos');
   eq(naoFecham, ids.filter(i => true), '[BUG-CONHECIDO] a tecla Esc NÃO fecha nenhum dos 11 modais (não há handler de Escape); esperado: fechar o modal aberto');
-  eq(semFocoDentro, ids, '[BUG-CONHECIDO] ao abrir qualquer modal o foco NÃO vai para dentro dele (fica no botão que abriu / body); esperado: mover o foco para o diálogo');
+  eq(semFocoDentro, ids.filter(i => !['modalRapido', 'modalOnboarding'].includes(i)), `[BUG-CONHECIDO] ao abrir ${ids.length - 2} dos ${ids.length} modais o foco NÃO vai para dentro dele (fica no botão que abriu / body); só o registro rápido (#rapValor) e o assistente de primeiros passos (#onbContaNome) focam o 1º campo, 50 ms depois; esperado: mover o foco para o diálogo em todos`);
   eq(escapam.length > 0, true, `[BUG-CONHECIDO] o foco do Tab ESCAPA do modal e anda pela página de fundo em ${escapam.length} de 11 modais (sem trap de foco); esperado: o Tab circula dentro do modal`);
 
   // foco volta ao gatilho

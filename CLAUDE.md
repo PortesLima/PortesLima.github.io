@@ -69,7 +69,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
 - `test-regressao-minima` (31) — consumidores de `hojeISO` às 23:30, ida-e-volta de estado com blob
   novo/antigo, 4 abas sem erro de console (vazio e com dados), marcar pago/desfazer vs. banner,
   erro no banner não derruba `render()`
-- `test-importacao` (156) — **reconstrução (Bloco 1)**: `parseOFX` (SGML/XML, NAME·MEMO, limite de 80 chars,
+- `test-importacao` (166) — **reconstrução (Bloco 1)**: `parseOFX` (SGML/XML, NAME·MEMO, limite de 80 chars,
   DTPOSTED com fuso, FITID ausente, blocos inválidos), `parseValorBR`, `parseCSVBolsoCerto`, `conciliarImportacao`
   (FITID, ±1 dia, valor/tipo/conta, `descSimilar` a 60%, duplicata no arquivo), fluxo `iniciarImportacao`
   (OFX/CSV/windows-1252, erros), `confirmarImportacao` (campos, toast, `desfazer`, substituir, mês de destino),
@@ -113,7 +113,9 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
 - `test-a11y` (108) — **reconstrução (Bloco 6)**: `lang`, landmarks, títulos, contraste de texto por cálculo WCAG sobre as cores
   computadas (2 temas × 390/1280 × 5 telas + 11 modais + tela inicial/PIN + placeholders + borda dos campos), foco visível pelo
   Tab, alcance por teclado, Esc/foco/trap/`role=dialog` nos modais, foco de volta ao gatilho, botões e campos sem nome, `svg`/
-  `canvas`/`img`, alvos de toque ≥ 44 px. 21 checks `[BUG-CONHECIDO]`.
+  `canvas`/`img`, alvos de toque ≥ 44 px. 21 checks `[BUG-CONHECIDO]`. Nota: o app foca o 1º campo do registro rápido (`#rapValor`) e do assistente
+  (`#onbContaNome`) **50 ms depois** de abrir (`setTimeout`); o teste espera o foco por condição (`waitForFunction`, limite 400 ms) — medir no instante 0
+  era uma corrida intermitente. Os outros 10 modais não movem o foco.
 
 ### Checks `[BUG-CONHECIDO]` convertidos em checks do comportamento correto (nome antigo → nome novo)
 
@@ -140,6 +142,7 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] OFX com TRNAMT "-12.500" importa como -12500 (esperado -12.5)` → `OFX com TRNAMT "-12.500" importa como -12,5 (parser próprio do TRNAMT: só ponto = decimal)`
 - `[BUG-CONHECIDO] parseValorBR("-12.500") = -12500 (ponto+3 dígitos lido como milhar…)` → **mesmo comportamento, agora sem tag**: `parseValorBR("-12.500") = -12500 — INTENCIONAL na digitação` (o `parseValorBR` não muda; "12.500" digitado é doze mil e quinhentos). Idem `parseValorBR("0.500") = 500`. Não eram bug do `parseValorBR`: o bug era o OFX usá-lo.
 - (novos) 18 valores válidos e 9 inválidos de `TRNAMT` (`1.234,56`, `1,234.56`, `-1234,56`, `0.5`, `.5`, `R$ 12,50`, `1.2.3`, `12abc`, `1e5`…); um `TRNAMT` inválido derruba só a própria transação. Nota: hoje `12abc` e `1.2.3` eram ACEITOS pelo `parseFloat` (12 e 123); agora são rejeitados.
+- **P1b (commit à parte):** `parseOFX` e `parseCSVBolsoCerto` contam o que descartaram por data/valor inválido (`ignoradas`, só presente quando > 0), `importacaoPendente.ignoradas` o guarda e a pré-visualização avisa "N lançamento(s) do arquivo foi/foram ignorado(s) (data ou valor inválido)" (também quando o arquivo só tem lançamentos inválidos: "nenhum lançamento válido neste arquivo", em vez de parecer extrato vazio). Antes o descarte era silencioso. Sem `[BUG-CONHECIDO]` correspondente (comportamento novo).
 
 **Pacote E ("Fim do mês" e "dura até")** — `tests/test-saldos.js`
 - `[BUG-CONHECIDO] o "ritmo atual" soma o aluguel PENDENTE de 28/09 como se já tivesse sido gasto…` → `com saldo inicial: o aluguel PENDENTE de 28/09 não entra no ritmo (100 pagos em 10 dias = 10/dia) → "ok"` (+ `novo usuário com aluguel pendente de 900 no dia 28: … R$ 20/dia → "ok"`)
