@@ -115,6 +115,30 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   Tab, alcance por teclado, Esc/foco/trap/`role=dialog` nos modais, foco de volta ao gatilho, botões e campos sem nome, `svg`/
   `canvas`/`img`, alvos de toque ≥ 44 px. 21 checks `[BUG-CONHECIDO]`.
 
+### Checks `[BUG-CONHECIDO]` convertidos em checks do comportamento correto (nome antigo → nome novo)
+
+Regra da leva 1: nenhum `[BUG-CONHECIDO]` é apagado; vira um check do comportamento correto (a tag sai). Os nomes ganharam
+texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estado.js` salvo indicação:
+
+**Pacote G (Drive)**
+- `[BUG-CONHECIDO] mesmo com o PATCH devolvendo 500 o botão mostra "Sincronizado com Drive"…` → `PATCH com 500: o botão mostra "🔴 Não sincronizou" (nunca "Sincronizado")`
+- `[BUG-CONHECIDO] erro 500 ao LER o arquivo do Drive num aparelho novo: …sobe o estado vazio…` → `leitura 500: o Drive NÃO recebe nenhuma escrita (sem PATCH, sem arquivo novo, conteúdo intacto)` (+ locais preservados, faixa, trava de escrita)
+- `[BUG-CONHECIDO] resposta 200 com corpo VAZIO … também faz o aparelho novo sobrescrever o Drive…` → `leitura 200 com corpo vazio: o Drive NÃO recebe nenhuma escrita (…)`
+- `[BUG-CONHECIDO] erro 500 ao LISTAR os arquivos: …CRIA outro "bolsodados"…` → `erro 500 ao LISTAR: NÃO cria outro "bolso-certo-dados.json"` (+ `listagem 500: …`)
+- (sem tag, comportamento mudou) `arquivo do Drive corrompido: o local é mantido e sobe para o Drive (reparando o arquivo)` → `arquivo do Drive corrompido (JSON inválido): o Drive NÃO recebe nenhuma escrita (…)` + `corrompido: o arquivo do Drive continua como estava`
+
+**Pacote H (backup)**
+- `[BUG-CONHECIDO] o TEMA vindo de um backup/Drive é aplicado na tela mas NÃO é gravado em bc_tema…` → `o TEMA vindo de um backup/Drive é gravado em bc_tema (e não só aplicado na tela)`
+- `[BUG-CONHECIDO] depois de recarregar o tema volta para "dark"…` → `depois de recarregar o tema do backup continua "light"`
+- `[BUG-CONHECIDO] o arquivo de backup NÃO tem campo de versão do formato…` → `o arquivo de backup traz "versao": 1 (primeiro campo)`
+- `[BUG-CONHECIDO] arquivo JSON válido que não é um backup (X) APAGA lançamentos, metas, fixas e orçamentos e ainda diz "sucesso"…` (×6: `{}`, `[]`, `{"foo":1}`, número, string, `true`) → `arquivo JSON válido que não é um backup (X): NADA muda, avisa "Esse arquivo não parece um backup do Bolso Certo" e não diz sucesso` (×7: entrou também o `null`, antes só "Não foi possível ler")
+- `[BUG-CONHECIDO] backup antigo também ZERA as categorias do usuário e as preferências de avisos…` → `backup antigo PRESERVA as categorias do usuário e as preferências de avisos do aparelho…`
+- `[BUG-CONHECIDO] backup com tipos errados ("transacoes": "abc") é aceito sem validação…` → `backup com tipos errados ("transacoes": "abc"): REJEITADO, nada muda e avisa` (e o sem-tag `… e o render() quebra com esse estado` → `… e o app continua renderizando com os tipos corretos`)
+- `[BUG-CONHECIDO] backup maior que a cota do localStorage … a gravação FALHA em silêncio…` → `backup maior que a cota do localStorage: a memória é REVERTIDA ao que estava (2 lançamentos) e o storage fica como estava` (+ aviso "Não coube…" e chaves pequenas desfeitas)
+- `[BUG-CONHECIDO] importar backup NÃO zera o snapshot do desfazer anterior…` → `importar backup ZERA o snapshot do desfazer anterior (o "Desfazer" perde a validade)`
+- `[BUG-CONHECIDO] clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup troca os dados importados pelos antigos…` → `clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup NÃO troca os dados importados pelos antigos`
+- Efeito em outros scripts (sem tag; o comportamento "campo ausente zera" mudou de propósito): `test-avisos-vencimento` `blob antigo -> 3 true` → `blob antigo (sem o campo) -> MANTÉM as preferências locais`; `test-regressao-minima` `blob antigo (sem o campo): 3 true` / `…persistido no storage` → `…MANTÉM as preferências locais` / `…o storage continua com a preferência local`; `test-categorias` `blob antigo … → shape vazio`, `… volta às 12 padrão`, `blob {} → defaults`, `…com lixo → defaults` → mantêm o local / `{}` não muda nada / lixo é REJEITADO; `test-trial` `remoto com assinatura não-objeto é ignorada` → o blob inteiro é REJEITADO (`backup-invalido`).
+
 A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
 em `tests/` desde o início**.
 
@@ -249,6 +273,17 @@ DOM. `render()` is large and populates elements by id — moving an element betw
    "🔴 Não sincronizou" (nunca "Sincronizado" sem `res.ok`). Nova tentativa automática ao voltar ao primeiro plano
    (`visibilitychange`), no máx. 1 a cada 60 s (`performance.now`, porque `Date` é congelado nos testes). Nunca cria um 2º
    arquivo se a listagem falhou. Limitação mantida: ao recuperar a leitura, o Drive **substitui** o local (sem merge).
+
+   **Backup / importação (pacote H, leva 1):** `aplicarDadosImportados()` (usado pelo Drive **e** pelo backup por arquivo)
+   chama `validarDadosBackup()` antes de tocar em qualquer coisa: precisa ser objeto; `transacoes` array (obrigatório só no
+   backup por arquivo — o Drive aceita `{}` = arquivo novo); `orcamentos`/`contasDetalhes`/`saldosIniciais` objeto;
+   `contas`/`metas`/`recorrentes` lista; `moeda` conhecida; `tema` dark|light; lançamento = objeto com `data` texto. Inválido →
+   **nada muda** ("Esse arquivo não parece um backup do Bolso Certo"). **Campo ausente mantém o dado local; campo presente e
+   vazio substitui** (`contas` vazio também mantém: sempre existe "Outros"). `setJSON` agora devolve `true/false` (o shim do
+   localStorage devolve `false` na cota estourada): a importação grava tudo, e se algo falhar **desfaz as gravações já feitas e não
+   mexe na memória** ("Não coube no armazenamento do aparelho. Nada foi alterado."). Importar zera `snapshotAnterior`
+   (o "Desfazer" perde a validade). O arquivo exportado traz `versao: 1` (ausência = 1; versão maior é recusada pedindo
+   para atualizar o app). O tema vindo do backup/Drive agora é gravado em `bc_tema`.
 3. **Manual JSON backup** (`exportarBackupJSON` / `importarBackupJSON`) — a full-state export/
    import users can trigger by hand.
 

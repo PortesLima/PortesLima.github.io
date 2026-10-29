@@ -101,7 +101,7 @@ const novoAparelho = async (browser, { fixed = FIX, drive, extra } = {}) => {
   if(drive) await ligarDrive(ctx, drive);
   return { ctx, page };
 };
-const semExtras = (e) => { const c = { ...e }; delete c.exportadoEm; return c; };
+const semExtras = (e) => { const c = { ...e }; delete c.exportadoEm; delete c.versao; return c; };
 const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria: 'Outros', conta: 'Outros', data: '2026-09-05', status: 'pago', ...o });
 
 (async () => {
@@ -129,17 +129,17 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
     if(campo === 'tema') continue;
     eq(await guardado(A.page, FONTE.match(new RegExp("const STORAGE_" + k + " = '([^']+)'"))[1]), FULL[campo], `A: storage bc_${campo} gravado pelo import`);
   }
-  eq(await guardado(A.page, 'tema'), undefined, '[BUG-CONHECIDO] o TEMA vindo de um backup/Drive é aplicado na tela mas NÃO é gravado em bc_tema; esperado: gravar "light" (hoje volta ao tema antigo no próximo boot)');
+  eq(await guardado(A.page, 'tema'), 'light', 'o TEMA vindo de um backup/Drive é gravado em bc_tema (e não só aplicado na tela)');
   await recarregar(A.page);
   const depoisA = semExtras(await estado(A.page));
   for(const campo of CHAVES_FUNIL.filter(c => c !== 'tema')) eq(depoisA[campo], FULL[campo], `A: "${campo}" sobrevive a recarregar a página (carregar() lê o storage)`);
-  eq(depoisA.tema, 'dark', '[BUG-CONHECIDO] depois de recarregar o tema volta para "dark" (o "light" do backup não foi persistido); esperado "light"');
+  eq(depoisA.tema, 'light', 'depois de recarregar o tema do backup continua "light"');
   // exportar → importar em um segundo aparelho de storage limpo
   await A.page.evaluate(async b => { await aplicarDadosImportados(b); }, FULL);
   const arquivo = JSON.parse(await exportar(A.page));
   eq(semExtras(arquivo), FULL, 'backup exportado carrega o estado inteiro');
   ok(typeof arquivo.exportadoEm === 'string' && !isNaN(Date.parse(arquivo.exportadoEm)), 'backup tem "exportadoEm" (ISO)');
-  eq(Object.keys(arquivo).filter(k => /vers/i.test(k)), [], '[BUG-CONHECIDO] o arquivo de backup NÃO tem campo de versão do formato (só exportadoEm); esperado: "versao" para migrar formatos futuros');
+  eq([arquivo.versao, Object.keys(arquivo)[0]], [1, 'versao'], 'o arquivo de backup traz "versao": 1 (primeiro campo)');
   const B = await novoAparelho(browser);
   eq(await B.page.evaluate(() => [transacoes.length, Object.keys(orcamentos).length, metas.length]), [0, 0, 0], 'B começa limpo');
   await importar(B.page, JSON.stringify(arquivo));
@@ -191,25 +191,25 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
   await importar(P.page, JSON.stringify(FULL));
   eq(await snap(P.page), antes, 'confirmação CANCELADA: nada muda');
   P.page.__c.confirm = true;
-  for(const [nome, conteudo] of [['JSON inválido', '{oops'], ['arquivo vazio', ''], ['null', 'null'], ['texto solto', 'isto nao e json']]){
+  for(const [nome, conteudo] of [['JSON inválido', '{oops'], ['arquivo vazio', ''], ['texto solto', 'isto nao e json']]){
     P.page.__c.msgs.length = 0;
     await importar(P.page, conteudo);
     eq([await snap(P.page) === antes, P.page.__c.msgs.some(m => /Não foi possível ler/.test(m))], [true, true], `${nome}: não altera nada e avisa "Não foi possível ler esse arquivo de backup."`);
   }
   // JSON válido, mas que NÃO é um backup do app
-  for(const [nome, conteudo] of [['{}', '{}'], ['[]', '[]'], ['{"foo":1}', '{"foo":1}'], ['número', '123'], ['string', '"x"'], ['true', 'true']]){
+  for(const [nome, conteudo] of [['{}', '{}'], ['[]', '[]'], ['null', 'null'], ['{"foo":1}', '{"foo":1}'], ['número', '123'], ['string', '"x"'], ['true', 'true']]){
     await semear(P.page); P.page.__c.msgs.length = 0;
+    const antesNB = await snap(P.page);
     await importar(P.page, conteudo);
-    const apagou = await P.page.evaluate(() => [transacoes.length, metas.length, recorrentes.length, Object.keys(orcamentos).length]);
-    eq([apagou, P.page.__c.msgs.some(m => /sucesso/.test(m))], [[0, 0, 0, 0], true], `[BUG-CONHECIDO] arquivo JSON válido que não é um backup (${nome}) APAGA lançamentos, metas, fixas e orçamentos e ainda diz "sucesso" (só há o confirm genérico); esperado: recusar sem tocar nos dados`);
+    eq([await snap(P.page) === antesNB, P.page.__c.msgs.some(m => /não parece um backup do Bolso Certo/.test(m)), P.page.__c.msgs.some(m => /sucesso/.test(m))], [true, true, false], `arquivo JSON válido que não é um backup (${nome}): NADA muda, avisa "Esse arquivo não parece um backup do Bolso Certo" e não diz sucesso`);
   }
   // backup antigo (só 3 campos)
   await semear(P.page);
   await importar(P.page, JSON.stringify({ transacoes: [T(7)], orcamentos: { Moradia: 9 }, contas: ['Velha', 'Outros'] }));
   let e = await estado(P.page);
   eq([e.transacoes.map(t => t.id), e.orcamentos, e.contas], [[7], { Moradia: 9 }, ['Velha', 'Outros']], 'backup antigo (3 campos): lançamentos, orçamentos e contas do arquivo valem');
-  eq([e.metas, e.recorrentes, e.saldosIniciais, e.contasDetalhes], [[], [], {}, {}], 'campos que o backup antigo não tem (metas, fixas, saldos, detalhes) são ZERADOS no aparelho (last-write-wins do blob inteiro)');
-  eq([e.categoriasUsuario, e.avisosVencimento], [{ adicionadas: [], renomes: {}, ocultas: [] }, { hoje: true, proximos: true, atrasadas: true }], '[BUG-CONHECIDO] backup antigo também ZERA as categorias do usuário e as preferências de avisos do aparelho (voltam aos padrões) sem que o arquivo tenha dito nada sobre elas; esperado: preservar o que o arquivo não traz');
+  eq([e.metas, e.recorrentes, e.saldosIniciais, e.contasDetalhes], [LOCAL.metas, LOCAL.recorrentes, LOCAL.saldosIniciais, {}], 'campos que o backup antigo NÃO traz (metas, fixas, saldos) ficam como estão no aparelho; só o que o arquivo traz substitui');
+  eq([e.categoriasUsuario, e.avisosVencimento], [LOCAL.categoriasUsuario, LOCAL.avisosVencimento], 'backup antigo PRESERVA as categorias do usuário e as preferências de avisos do aparelho (o arquivo não trouxe esses campos)');
   eq([e.tema, e.moeda, e.assinatura.status !== undefined], ['dark', 'BRL', true], 'tema, moeda e assinatura que o arquivo não traz são preservados');
   // contas ausentes/vazias: mantém as locais
   await semear(P.page);
@@ -224,12 +224,34 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
   eq(await P.page.evaluate(() => [Object.keys(localStorage).filter(k => /extra|accessToken/i.test(k)), localStorage.getItem('bc_pin'), 'extraDesconhecido' in montarEstado()]), [[], null, false], 'chaves extras (inclusive "pin" e "accessToken") são ignoradas: nada novo no storage e o PIN não é definido por backup');
   eq((await estado(P.page)).transacoes.map(t => t.id), [9], 'e o resto do arquivo vale normalmente');
   // blob com tipos errados
-  const erros0 = P.page.__erros.length;
+  await semear(P.page); P.page.__c.msgs.length = 0;
+  const antesTipos = await snap(P.page);
   await importar(P.page, JSON.stringify({ transacoes: 'abc', orcamentos: 5 }));
-  const tipos = await P.page.evaluate(() => [typeof transacoes, typeof orcamentos]);
-  eq(tipos, ['string', 'number'], '[BUG-CONHECIDO] backup com tipos errados ("transacoes": "abc") é aceito sem validação: transacoes vira string e orcamentos vira número em memória E no storage; esperado: validar o formato antes de aplicar');
-  const quebrou = await P.page.evaluate(() => { try{ render(); return false; }catch(e){ return true; } });
-  eq(quebrou, true, '… e o render() quebra com esse estado');
+  eq([await snap(P.page) === antesTipos, P.page.__c.msgs.some(m => /não parece um backup/.test(m))], [true, true], 'backup com tipos errados ("transacoes": "abc"): REJEITADO, nada muda e avisa');
+  eq(await P.page.evaluate(() => { try{ render(); return [Array.isArray(transacoes), typeof orcamentos]; }catch(e){ return 'quebrou'; } }), [true, 'object'], '… e o app continua renderizando com os tipos corretos');
+  // validação campo a campo (arquivos que o próprio app nunca geraria)
+  const ruinsH = [['contas com item não-texto', { transacoes: [], contas: ['A', 5] }], ['lançamento sem data', { transacoes: [{ id: 1, desc: 'x' }] }], ['lançamento que não é objeto', { transacoes: [5] }], ['orcamentos como array', { transacoes: [], orcamentos: [] }], ['metas como objeto', { transacoes: [], metas: {} }], ['moeda desconhecida', { transacoes: [], moeda: 'XYZ' }], ['tema desconhecido', { transacoes: [], tema: 'roxo' }], ['categoriasUsuario como texto', { transacoes: [], categoriasUsuario: 'lixo' }], ['versao como texto', { versao: 'x', transacoes: [] }], ['versao zero', { versao: 0, transacoes: [] }]];
+  for(const [nome, obj] of ruinsH){ await importar(P.page, JSON.stringify(obj)); eq(await snap(P.page) === antesTipos, true, `backup inválido (${nome}): nada muda`); }
+  // versão
+  P.page.__c.msgs.length = 0;
+  await importar(P.page, JSON.stringify({ versao: 2, transacoes: [T(1)] }));
+  eq([await snap(P.page) === antesTipos, P.page.__c.msgs.some(m => /versão mais nova/.test(m))], [true, true], 'backup de uma versão MAIS NOVA que o app (versao 2): recusado com pedido para atualizar o app, nada muda');
+  await importar(P.page, JSON.stringify({ versao: 1, transacoes: [T(31)] }));
+  eq((await estado(P.page)).transacoes.map(t => t.id), [31], 'versao 1 explícita: aceito');
+  await semear(P.page);
+  await importar(P.page, JSON.stringify({ transacoes: [T(32)] }));
+  eq((await estado(P.page)).transacoes.map(t => t.id), [32], 'sem campo versao: tratado como versão 1 (aceito)');
+  // campo presente e vazio SUBSTITUI; campo ausente mantém
+  await semear(P.page);
+  await importar(P.page, JSON.stringify({ transacoes: [], metas: [], orcamentos: {}, recorrentes: [] }));
+  e = await estado(P.page);
+  eq([e.transacoes, e.metas, e.orcamentos, e.recorrentes], [[], [], {}, []], 'campo PRESENTE e vazio substitui (a pessoa apagou tudo)');
+  eq([e.categoriasUsuario, e.avisosVencimento, e.saldosIniciais], [LOCAL.categoriasUsuario, LOCAL.avisosVencimento, LOCAL.saldosIniciais], '… enquanto os campos AUSENTES (categorias, avisos, saldos) ficam como estavam');
+  // aplicarDadosImportados direto também valida (vale para o Drive) e não toca em nada
+  await semear(P.page);
+  const antesDir = await snap(P.page);
+  eq(await P.page.evaluate(async () => { try{ await aplicarDadosImportados({ transacoes: 'abc' }); return 'aceitou'; }catch(e){ return e.codigo; } }), 'backup-invalido', 'aplicarDadosImportados({transacoes:"abc"}) lança erro "backup-invalido"');
+  eq(await snap(P.page) === antesDir, true, '… sem alterar nada (memória)');
   await P.ctx.close();
   // muito grande
   console.log('3b. backup muito grande');
@@ -243,8 +265,10 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
     const noStorage = localStorage.getItem('bc_transacoes');
     return { tamanho: texto.length, memoria: transacoes.length, noStorageTamanho: noStorage ? noStorage.length : 0, noStorageN: noStorage ? JSON.parse(noStorage).length : 0, ms: Math.round(performance.now() - t0) };
   });
-  ok(grande.memoria === 40000, `${grande.tamanho.toLocaleString('pt-BR')} caracteres (40 mil lançamentos): aplicado em memória em ${grande.ms} ms`);
-  eq([grande.memoria, grande.noStorageN], [40000, 2], '[BUG-CONHECIDO] backup maior que a cota do localStorage (~5 MB): o app mantém tudo em memória, mostra "sucesso", mas a gravação FALHA em silêncio (setJSON engole o erro) — ao recarregar, voltam os dados antigos; esperado: avisar que não coube');
+  ok(grande.tamanho > 6000000, `arquivo de ${grande.tamanho.toLocaleString('pt-BR')} caracteres (40 mil lançamentos) — acima da cota do localStorage`);
+  eq([grande.memoria, grande.noStorageN], [2, 2], 'backup maior que a cota do localStorage: a memória é REVERTIDA ao que estava (2 lançamentos) e o storage fica como estava');
+  ok(P.page.__c.msgs.some(m => /Não coube no armazenamento do aparelho\. Nada foi alterado\./.test(m)) && !P.page.__c.msgs.some(m => /sucesso/.test(m)), 'e avisa "Não coube no armazenamento do aparelho. Nada foi alterado." (sem dizer sucesso)');
+  eq(await P.page.evaluate(() => [JSON.stringify(categoriasUsuario) === localStorage.getItem('bc_categoriasUsuario'), JSON.stringify(avisosVencimento) === localStorage.getItem('bc_avisosVencimento')]), [true, true], 'e as chaves pequenas gravadas antes da falha foram desfeitas (storage consistente com a memória)');
   await P.ctx.close();
 
   // ================= 4. desfazer =================
@@ -284,9 +308,9 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
   ok(await pg.evaluate(() => !!document.querySelector('#toast.show button')), 'adicionar lançamento: toast com "Desfazer" (guarda o estado ANTES)');
   await importar(pg, JSON.stringify({ transacoes: [{ id: 77, tipo: 'gasto', desc: 'Do backup', valor: 1, categoria: 'Outros', conta: 'Nubank', data: '2026-09-01', status: 'pago' }], contas: ['Nubank', 'Outros'] }));
   eq(await pg.evaluate(() => transacoes.map(t => t.id)), [77], 'backup importado substitui os lançamentos');
-  eq(await pg.evaluate(() => snapshotAnterior !== null), true, '[BUG-CONHECIDO] importar backup NÃO zera o snapshot do desfazer anterior: ele continua apontando para os dados de ANTES da importação');
+  eq(await pg.evaluate(() => snapshotAnterior === null), true, 'importar backup ZERA o snapshot do desfazer anterior (o "Desfazer" perde a validade)');
   await pg.evaluate(() => { const b = document.querySelector('#toast.show button'); if(b) b.click(); else desfazer(); });
-  eq(await pg.evaluate(() => transacoes.map(t => t.id)), [1], '[BUG-CONHECIDO] clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup troca os dados importados pelos antigos (some o backup recém-restaurado, sem aviso); esperado: o desfazer perde a validade ao importar');
+  eq(await pg.evaluate(() => transacoes.map(t => t.id)), [77], 'clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup NÃO troca os dados importados pelos antigos');
   await P.ctx.close();
 
   // ================= 5. sync com o Drive (simulado) =================

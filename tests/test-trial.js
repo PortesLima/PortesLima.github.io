@@ -358,7 +358,7 @@ const A = (trialInicio) => ({ status: 'trial', trialInicio, assinouEm: null });
   c = await abrirT(browser, { assin: A('2026-09-05') });
   eq((await sync(c.page, { assinatura: { status: 'trial', trialInicio: '2026-09-09', assinouEm: null } })).trialInicio, '2026-09-05', 'remoto mais NOVO não estica o teste');
   eq((await sync(c.page, { transacoes: [], contas: ['Outros'] })).trialInicio, '2026-09-05', 'remoto SEM assinatura preserva a local');
-  eq((await sync(c.page, { assinatura: 'lixo' })).trialInicio, '2026-09-05', 'remoto com assinatura não-objeto é ignorada');
+  eq(await c.page.evaluate(async () => { try{ await aplicarDadosImportados({ assinatura: 'lixo' }); return 'aceitou'; }catch(e){ return [e.codigo, assinatura.trialInicio]; } }), ['backup-invalido', '2026-09-05'], 'remoto com assinatura não-objeto: o blob inteiro é REJEITADO (backup-invalido) e a assinatura local não muda');
   eq((await sync(c.page, { assinatura: { status: 'trial', trialInicio: '', assinouEm: null } })).trialInicio, '2026-09-05', 'remoto com trialInicio vazio preserva a local');
   const comAss = await sync(c.page, { assinatura: { status: 'ativo', trialInicio: '2026-09-09', assinouEm: '2026-09-08' } });
   eq([comAss.status, comAss.assinouEm, comAss.trialInicio], ['ativo', '2026-09-08', '2026-09-05'], 'remoto com assinouEm → ativo, mantém o trialInicio mais antigo');

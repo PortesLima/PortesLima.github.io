@@ -393,12 +393,12 @@ const alertasOrc = (page) => page.evaluate(() => [...document.querySelectorAll('
   eq([exportado.categoriasUsuario, exportado.orcamentos], [depois.cu, depois.orc], 'exportarBackupJSON leva categoriasUsuario e orcamentos');
   // blob antigo (sem o campo)
   await p3.evaluate(async () => { await aplicarDadosImportados({ transacoes: [], contas: ['Outros'], orcamentos: { Moradia: 5 } }); });
-  eq(await p3.evaluate(() => ({ cu: categoriasUsuario, orc: orcamentos })), { cu: VAZIO, orc: { Moradia: 5 } }, 'blob antigo (sem categoriasUsuario) → shape vazio, sem quebrar; o limite do blob vale');
-  eq(await p3.evaluate(() => categoriasAtivas().length), 12, '… e a lista volta às 12 padrão');
+  eq(await p3.evaluate(() => ({ cu: categoriasUsuario, orc: orcamentos })), { cu: depois.cu, orc: { Moradia: 5 } }, 'blob antigo (sem categoriasUsuario) → MANTÉM as categorias locais (campo ausente não zera); o limite do blob vale');
+  eq(await p3.evaluate(() => categoriasAtivas()), depois.ativas, '… e a lista de categorias ativas continua a mesma');
   await p3.evaluate(async () => { await aplicarDadosImportados({}); });
-  eq(await p3.evaluate(() => [categoriasUsuario, orcamentos]), [VAZIO, {}], 'blob {} → defaults (categorias padrão, sem limites)');
-  eq(await p3.evaluate(async () => { await aplicarDadosImportados({ categoriasUsuario: 'lixo', orcamentos: null }); return [categoriasUsuario, orcamentos]; }), [VAZIO, {}], 'categoriasUsuario/orcamentos com lixo → defaults');
-  eq(await p3.evaluate(async () => { await aplicarDadosImportados({ transacoes: [{ id: 1, tipo: 'gasto', desc: 'x', valor: 1, categoria: 'Pets', conta: 'Outros', data: '2026-09-01', status: 'pago' }] }); return [transacoes[0].categoria, categoriasAtivas().includes('Pets')]; }), ['Pets', false], 'importar lançamento de categoria que não existe na lista local: mantém o nome (fica "fora da lista", sem perda)');
+  eq(await p3.evaluate(() => [categoriasUsuario, orcamentos]), [depois.cu, { Moradia: 5 }], 'blob {} → não muda NADA (todos os campos ausentes mantêm o local)');
+  eq(await p3.evaluate(async () => { const antes = JSON.stringify(categoriasUsuario); try{ await aplicarDadosImportados({ categoriasUsuario: 'lixo', orcamentos: null }); return 'aceitou'; }catch(e){ return [e.codigo, JSON.stringify(categoriasUsuario) === antes, orcamentos]; } }), ['backup-invalido', true, { Moradia: 5 }], 'categoriasUsuario/orcamentos com lixo → blob REJEITADO (backup-invalido) e o local não muda');
+  eq(await p3.evaluate(async () => { await aplicarDadosImportados({ transacoes: [{ id: 1, tipo: 'gasto', desc: 'x', valor: 1, categoria: 'Fantasma', conta: 'Outros', data: '2026-09-01', status: 'pago' }] }); return [transacoes[0].categoria, categoriasAtivas().includes('Fantasma')]; }), ['Fantasma', false], 'importar lançamento de categoria que não existe na lista local: mantém o nome (fica "fora da lista", sem perda)');
   eq([page.__erros, p2.__erros, p3.__erros], [[], [], []], 'nenhum erro de console/página nas 3 abas');
 
   await browser.close();

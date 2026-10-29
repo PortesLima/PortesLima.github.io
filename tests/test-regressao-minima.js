@@ -48,8 +48,8 @@ const TARDE = '2026-09-10T23:30:00-03:00';
   ok(await page.evaluate(() => transacoes.length) === 1, 'blob novo: transações restauradas');
   const antigo = { ...novo }; delete antigo.avisosVencimento;
   await page.evaluate(async e => { await aplicarDadosImportados(e); }, antigo);
-  ok(await page.evaluate(() => JSON.stringify(avisosVencimento)) === '{"hoje":true,"proximos":true,"atrasadas":true}', 'blob antigo (sem o campo): 3 true');
-  ok(await page.evaluate(() => JSON.parse(localStorage.getItem('bc_avisosVencimento')).hoje) === true, 'blob antigo: persistido no storage');
+  ok(await page.evaluate(() => JSON.stringify(avisosVencimento)) === '{"hoje":false,"proximos":true,"atrasadas":false}', 'blob antigo (sem o campo): MANTÉM as preferências locais');
+  ok(await page.evaluate(() => JSON.parse(localStorage.getItem('bc_avisosVencimento')).hoje) === false, 'blob antigo: o storage continua com a preferência local');
   ok(page.__erros.length === 0, 'sem erro de console/página ' + JSON.stringify(page.__erros));
   await ctx.close();
 

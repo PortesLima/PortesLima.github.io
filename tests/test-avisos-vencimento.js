@@ -153,7 +153,8 @@ const FIX = '2026-09-10T12:00:00-03:00';
   ok(await page.evaluate(()=>JSON.stringify(avisosVencimento))===JSON.stringify({hoje:false,proximos:true,atrasadas:false}),'ida e volta mantém preferências');
   const velho = {...est}; delete velho.avisosVencimento;
   await page.evaluate(async e => { await aplicarDadosImportados(e); }, velho);
-  ok(await page.evaluate(()=>JSON.stringify(avisosVencimento))===JSON.stringify({hoje:true,proximos:true,atrasadas:true}),'blob antigo -> 3 true');
+  ok(await page.evaluate(()=>JSON.stringify(avisosVencimento))===JSON.stringify({hoje:false,proximos:true,atrasadas:false}),'blob antigo (sem o campo) -> MANTÉM as preferências locais (campo ausente não zera)');
+  await page.evaluate(()=>{ avisosVencimento={hoje:true,proximos:true,atrasadas:true}; }); // volta ao padrão para os blocos seguintes
   ok(await page.evaluate(()=>JSON.stringify(normalizarAvisosVencimento({hoje:'x',proximos:false})))==='{"hoje":true,"proximos":false,"atrasadas":true}','normaliza lixo');
 
   console.log('9. modal');
