@@ -280,10 +280,41 @@ const setRelogio = async (page, iso) => { await page.clock.setFixedTime(new Date
   const dtp = (d, n) => page.evaluate(([d, n]) => addMeses(d, n), [d, n]);
   eq(await dtp('2026-09-25', 1), '2026-10-25', 'parcela de uma compra no dia do fechamento (25/09) vence em 25/10 = dia do próximo fechamento (fica na MESMA fatura que fecha nesse dia)');
   eq(await dtp('2026-12-15', 1), '2027-01-15', 'addMeses atravessa o ano');
-  eq(await dtp('2026-01-31', 1), '2026-03-03', '[BUG-CONHECIDO] addMeses("2026-01-31", 1) = 03/03 (o JS estoura fevereiro); esperado 28/02 — uma compra parcelada no dia 31 pula uma fatura inteira');
-  eq(await dtp('2026-08-31', 1), '2026-10-01', '[BUG-CONHECIDO] addMeses("2026-08-31", 1) = 01/10 (setembro só tem 30 dias); esperado 30/09');
-  eq(await dtp('2026-01-30', 1), '2026-03-02', '[BUG-CONHECIDO] addMeses("2026-01-30", 1) = 02/03; esperado 28/02');
-  eq(await dtp('2028-01-31', 1), '2028-03-02', '[BUG-CONHECIDO] mesmo em ano bissexto: 31/01/2028 + 1 mês = 02/03; esperado 29/02');
+  eq(await dtp('2026-01-31', 1), '2026-02-28', 'addMeses("2026-01-31", 1) = 28/02 (limita ao último dia do mês de destino; antes estourava para 03/03 e a parcela pulava uma fatura inteira)');
+  eq(await dtp('2026-08-31', 1), '2026-09-30', 'addMeses("2026-08-31", 1) = 30/09 (setembro só tem 30 dias; antes: 01/10)');
+  eq(await dtp('2026-01-30', 1), '2026-02-28', 'addMeses("2026-01-30", 1) = 28/02 (antes: 02/03)');
+  eq(await dtp('2028-01-31', 1), '2028-02-29', 'mesmo em ano bissexto: 31/01/2028 + 1 mês = 29/02 (antes: 02/03)');
+  // ---- pacote D: dias 29/30/31 em TODOS os meses, contra um oráculo independente (tabela de dias por mês + regra de bissexto)
+  const bissexto = (a) => (a % 4 === 0 && a % 100 !== 0) || a % 400 === 0;
+  const diasNoMes = (a, m) => [31, bissexto(a) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+  const p2 = (n) => String(n).padStart(2, '0');
+  const oraculo = (a, m, d, n) => { let t = (a * 12 + (m - 1)) + n; const aa = Math.floor(t / 12), mm = (t % 12 + 12) % 12 + 1; return `${aa}-${p2(mm)}-${p2(Math.min(d, diasNoMes(aa, mm)))}`; };
+  const casos = [];
+  for(const a of [2026, 2027, 2028, 2100, 2000]) for(let m = 1; m <= 12; m++) for(const d of [29, 30, 31]) if(d <= diasNoMes(a, m)) for(const n of [0, 1, 2, 12]) casos.push([`${a}-${p2(m)}-${p2(d)}`, n]);
+  const got = await page.evaluate(cs => cs.map(([d, n]) => addMeses(d, n)), casos);
+  const erros = casos.map(([d, n], i) => [d, n, got[i], oraculo(+d.slice(0, 4), +d.slice(5, 7), +d.slice(8, 10), n)]).filter(x => x[2] !== x[3]);
+  eq(erros, [], `addMeses bate com o oráculo em ${casos.length} combinações (anos 2026/27/28/2100/2000 · todos os meses · dias 29/30/31 · +0/+1/+2/+12 meses)`);
+  eq(await dtp('2026-12-31', 2), '2027-02-28', 'virada de ano: 31/12/2026 + 2 meses = 28/02/2027');
+  eq(await dtp('2026-11-30', 3), '2027-02-28', 'virada de ano: 30/11/2026 + 3 meses = 28/02/2027');
+  eq(await dtp('2026-03-31', -1), '2026-02-28', 'mês negativo: 31/03 − 1 mês = 28/02');
+  eq(await dtp('2028-02-29', 12), '2029-02-28', '29/02/2028 + 12 meses = 28/02/2029 (ano seguinte não é bissexto)');
+  eq(await dtp('2026-05-15', 0), '2026-05-15', '+0 meses devolve a própria data');
+  // 12 parcelas a partir do dia 31: cada uma parte da data ORIGINAL (nunca da já limitada): 31/03, não 28/03
+  const doze = await page.evaluate(() => Array.from({ length: 12 }, (_, i) => addMeses('2026-01-31', i)));
+  eq(doze, ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30', '2026-07-31', '2026-08-31', '2026-09-30', '2026-10-31', '2026-11-30', '2026-12-31'], '12 parcelas do dia 31: 31/01, 28/02, 31/03 (volta ao 31, não fica em 28), 30/04 … 31/12');
+  // fluxo real pelo formulário: 3 parcelas a partir de 31/01 e 5 a partir de 30/12
+  await poe(page, { tx: [], contas: ['Cartão', 'Outros'] });
+  const viaForm = async (data, parcelas) => page.evaluate(async ([data, parcelas]) => {
+    transacoes = [];
+    document.getElementById('tipo').value = 'gasto'; document.getElementById('descricao').value = 'Compra'; document.getElementById('valor').value = '100';
+    document.getElementById('conta').value = 'Cartão'; document.getElementById('dataInput').value = data; document.getElementById('parcelas').value = String(parcelas);
+    await adicionar();
+    return transacoes.filter(t => t.grupoParcela).sort((a, b) => a.data.localeCompare(b.data)).map(t => [t.desc, t.data]);
+  }, [data, parcelas]);
+  eq(await viaForm('2026-01-31', 3), [['Compra (1/3)', '2026-01-31'], ['Compra (2/3)', '2026-02-28'], ['Compra (3/3)', '2026-03-31']], 'formulário "Novo lançamento": 3x a partir de 31/01 → 31/01, 28/02, 31/03');
+  eq((await viaForm('2026-12-30', 5)).map(x => x[1]), ['2026-12-30', '2027-01-30', '2027-02-28', '2027-03-30', '2027-04-30'], 'formulário: 5x a partir de 30/12 atravessa o ano e limita fevereiro (28/02/2027)');
+  // outros pontos do app que somam meses: conta fixa sempre cai no dia 05 (nunca estoura) e a fatura tem ajuste próprio de fim de mês
+  eq(await page.evaluate(() => { mesAtual = '2026-02'; recorrentes = [{ id: 1, tipo: 'gasto', desc: 'Fixa', valor: 1, categoria: 'Outros' }]; transacoes = []; lancarRecorrente(1); return transacoes[0].data; }), '2026-02-05', 'conta fixa: "Lançar este mês" usa sempre o dia 05 do mês selecionado (sem soma de meses, não estoura)');
 
   eq(page.__erros, [], 'nenhum erro de console/página');
   await browser.close();

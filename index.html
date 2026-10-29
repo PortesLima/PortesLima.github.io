@@ -2502,10 +2502,15 @@ function toggleCategoriaSel(){
 
 function contaAtivaFiltro(){ return document.getElementById('contaFiltro').value; }
 
+// Soma n meses a uma data ISO limitando o dia ao ÚLTIMO dia do mês de destino (31/01 + 1 mês = 28/02, não 03/03:
+// `new Date(y, m, 31)` estoura para o mês seguinte e a parcela pulava uma fatura inteira). Quem precisa de uma
+// sequência (parcelas) deve chamar sempre com a data ORIGINAL e i = 0..N-1 (31/01 → 28/02 → 31/03 → 30/04),
+// nunca encadear sobre a data já limitada (daria 28/03).
 function addMeses(dataISO, n){
   const [y,m,d] = dataISO.split('-').map(Number);
-  const dt = new Date(y, m-1+n, d);
-  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+  const alvo = new Date(y, m-1+n, 1);                                              // 1º dia do mês de destino
+  const ultimoDia = new Date(alvo.getFullYear(), alvo.getMonth()+1, 0).getDate();  // quantos dias ele tem
+  return `${alvo.getFullYear()}-${String(alvo.getMonth()+1).padStart(2,'0')}-${String(Math.min(d, ultimoDia)).padStart(2,'0')}`;
 }
 
 async function adicionar(){

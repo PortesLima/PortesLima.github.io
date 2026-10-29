@@ -88,7 +88,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   (HTML/aspas/emoji/barra) em ~10 telas; limites de orçamento (0, vazio, alto, vírgula/ponto, `Infinity`); "Orçamento em
   risco" e alertas em 79/80/100/101 %; persistência (recarregar, `montarEstado`, `aplicarDadosImportados`, backup por arquivo,
   blob antigo). 14 `[BUG-CONHECIDO]` (escape de HTML em 6 telas, `palpitarCategoria` × renome, 80 % em ponto flutuante…).
-- `test-saldos` (85) — **reconstrução (Bloco 4)**: `efeitoNoSaldo`, `saldoAtualConta`/`saldoContaEm` (saldo inicial negativo e com
+- `test-saldos` (95) — **reconstrução (Bloco 4)**: `efeitoNoSaldo`, `saldoAtualConta`/`saldoContaEm` (saldo inicial negativo e com
   data futura, transferências nas duas pontas, pendente/vencido/futuro fora), faixa "Você tem hoje" e card "Fim do mês" contra
   um cenário com as contas à mão, ponto flutuante (0,1+0,2), ciclo de fatura (fechamento/vencimento, dia do fechamento,
   dez→jan, fev/bissexto), card de faturas e parcelas × fatura. Usa `emulateMedia({reducedMotion:'reduce'})` para o texto dos
@@ -126,6 +126,13 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] resposta 200 com corpo VAZIO … também faz o aparelho novo sobrescrever o Drive…` → `leitura 200 com corpo vazio: o Drive NÃO recebe nenhuma escrita (…)`
 - `[BUG-CONHECIDO] erro 500 ao LISTAR os arquivos: …CRIA outro "bolsodados"…` → `erro 500 ao LISTAR: NÃO cria outro "bolso-certo-dados.json"` (+ `listagem 500: …`)
 - (sem tag, comportamento mudou) `arquivo do Drive corrompido: o local é mantido e sobe para o Drive (reparando o arquivo)` → `arquivo do Drive corrompido (JSON inválido): o Drive NÃO recebe nenhuma escrita (…)` + `corrompido: o arquivo do Drive continua como estava`
+
+**Pacote D (`addMeses`)** — `tests/test-saldos.js`
+- `[BUG-CONHECIDO] addMeses("2026-01-31", 1) = 03/03 (o JS estoura fevereiro); esperado 28/02 — uma compra parcelada no dia 31 pula uma fatura inteira` → `addMeses("2026-01-31", 1) = 28/02 (limita ao último dia do mês de destino…)`
+- `[BUG-CONHECIDO] addMeses("2026-08-31", 1) = 01/10 (setembro só tem 30 dias); esperado 30/09` → `addMeses("2026-08-31", 1) = 30/09 (…)`
+- `[BUG-CONHECIDO] addMeses("2026-01-30", 1) = 02/03; esperado 28/02` → `addMeses("2026-01-30", 1) = 28/02 (antes: 02/03)`
+- `[BUG-CONHECIDO] mesmo em ano bissexto: 31/01/2028 + 1 mês = 02/03; esperado 29/02` → `mesmo em ano bissexto: 31/01/2028 + 1 mês = 29/02 (antes: 02/03)`
+- (novos) 588 combinações contra um oráculo independente (anos 2026/27/28/2100/2000 × todos os meses × dias 29/30/31 × +0/+1/+2/+12), virada de ano, mês negativo, 12 parcelas do dia 31 partindo da data original, formulário real (3x de 31/01; 5x de 30/12) e conta fixa no dia 05.
 
 **Pacote A (categoria do palpite)** — `tests/test-categorias.js`
 - `[BUG-CONHECIDO] palpitarCategoria devolve o nome PADRÃO ("Alimentação") mesmo depois de renomeada para "Comida"/oculta…` → `palpitarCategoria passa pelo mapa de renomes: "IFOOD pedido" → "Comida"`
@@ -572,7 +579,11 @@ urgent); `'pago'` and normal mode are descending. Pendentes older than ~3 months
 ### Installments vs. recurring items — different data shapes
 
 - **Installments** (`parcelas > 1` on the transaction form): pushes N separate transactions
-  upfront, sharing a `grupoParcela` id, each dated one month apart (`addMeses`). The amount
+  upfront, sharing a `grupoParcela` id, each dated one month apart (`addMeses`, called as `addMeses(dataOriginal, i)` —
+  never chained). **`addMeses` limita o dia ao último dia do mês de destino** (pacote D, leva 1: 31/01 → 28/02 → 31/03 → 30/04;
+  antes `new Date(y, m, 31)` estourava para 03/03 e a parcela pulava uma fatura inteira). É o único chamador; a conta fixa
+  (`lancarRecorrente`) usa sempre o dia 05 e `calcularCicloFatura` tem ajuste próprio de fim de mês. Parcelas JÁ gravadas com data
+  errada **não são reescritas** — só as novas saem certas. The amount
   entered is the *per-installment* amount, not divided further. Deleting one asks whether to
   delete just that transaction or every transaction sharing `grupoParcela` (see
   `modalExcluirParcela`).
