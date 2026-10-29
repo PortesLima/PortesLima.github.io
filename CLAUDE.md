@@ -97,6 +97,14 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   cru, ida e volta) e os 3 PDFs (`exportarPDF`/`Anual`/`IR`) com o jsPDF real e o construtor espiado (texto desenhado por
   `doc.text`, páginas, tamanho; `save()` interceptado): totais e contagem de linhas batem com a tela, mês/ano vazio, 70
   linhas em várias páginas, texto hostil. 6 `[BUG-CONHECIDO]`.
+- `test-estado` (144) — **reconstrução (Bloco 5)**: guard das chaves de armazenamento (toda `STORAGE_*` está no funil ou é
+  local de propósito: `pin`, `onboardingVisto`, `cambioCache`; chaves `bc_*` diretas: `bc_aviso_venc_dispensado`,
+  `bc_tel_expirado2`) e dos 13 campos de `montarEstado()`; cada campo por `aplicarDadosImportados` → storage → recarregar →
+  backup → 2º aparelho limpo; funções `salvar*` na chave certa; `importarBackupJSON` com entrada cancelada/inválida/vazia/
+  antiga/com chaves extras/tipos errados/muito grande; desfazer de 1 nível (extrato, parcelada, backup); sync com o Drive
+  simulado em memória (`context.route` em `googleapis.com`: last-write-wins, 2 aparelhos, erros 401/500/vazio/corrompido);
+  PIN (ativar, inválidos, errado, trocar, fora do backup/Drive); `?readonly=1` (sem escrita, sem telemetria). 16
+  `[BUG-CONHECIDO]`.
 
 A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
 em `tests/` desde o início**.

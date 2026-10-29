@@ -1,0 +1,525 @@
+// Funil de estado, backup JSON, desfazer, sync com o Drive (simulado em memória), PIN e ?readonly=1.
+// Regra do projeto: todo estado novo passa por getJSON/setJSON, carregar(), montarEstado() e
+// aplicarDadosImportados(). Estes testes seguram essa regra por chave. Caracteriza o comportamento
+// ATUAL; o que parece errado leva [BUG-CONHECIDO] no nome do check. Relógio fixo 10/09/2026 12:00 BRT,
+// PostHog bloqueado (stub quando precisa contar eventos), Drive = rota em memória, sem waitForTimeout.
+const fs = require('fs'), path = require('path'), { EventEmitter } = require('events');
+const { chromium, ok, abrir, bloquearPosthog, res } = require('./lib');
+const FIX = '2026-09-10T12:00:00-03:00';
+const APP = path.resolve(__dirname, '..', 'index.html');
+const FONTE = fs.readFileSync(APP, 'utf8');
+const URLAPP = require('url').pathToFileURL(APP).href + '?v=1';
+const eq = (a, b, n) => { const A = JSON.stringify(a), B = JSON.stringify(b); ok(A === B, A === B ? n : `${n}  [obtido ${A} | esperado ${B}]`); };
+
+// ---------- estado completo, com TODOS os campos de montarEstado() preenchidos ----------
+const FULL = {
+  transacoes: [
+    { id: 1, tipo: 'gasto', desc: 'Mercado', valor: 45.9, categoria: 'Alimentação', conta: 'Nubank', data: '2026-09-05', status: 'pago', fitid: 'F1', importadoEm: '2026-09-06' },
+    { id: 2, tipo: 'gasto', desc: 'TV (1/3)', valor: 100, categoria: 'Outros', conta: 'Nubank', data: '2026-09-20', status: 'pendente', grupoParcela: 'gp' },
+    { id: 3, tipo: 'gasto', desc: 'Meta: Viagem', valor: 200, categoria: 'Outros', conta: 'Itaú', data: '2026-09-02', status: 'pago', metaId: 1, anexo: 'data:image/png;base64,AAAA', tag: 'ferias' },
+  ],
+  orcamentos: { Lazer: 150.5 },
+  contas: ['Nubank', 'Itaú', 'Outros'],
+  contasDetalhes: { Nubank: { tipo: 'cartao', diaFechamento: 25, diaVencimento: 5 } },
+  metas: [{ id: 1, nome: 'Viagem', valorAlvo: 5000, valorAtual: 1200, prazo: '2027-06-01' }],
+  recorrentes: [{ id: 9, tipo: 'gasto', desc: 'Aluguel', valor: 1000, categoria: 'Moradia' }],
+  saldoContas: { valor: 777, em: '2026-01-01' },
+  saldosIniciais: { Nubank: { valor: 1000, em: '2026-09-01' } },
+  moeda: 'USD',
+  tema: 'light',
+  assinatura: { status: 'ativo', trialInicio: '2026-08-01', assinouEm: '2026-08-20' },
+  categoriasUsuario: { adicionadas: [{ nome: 'Pets', cor: '#123456' }], renomes: { Lazer: 'Diversão' }, ocultas: ['Doação'] },
+  avisosVencimento: { hoje: false, proximos: true, atrasadas: false },
+};
+const CHAVES_FUNIL = ['transacoes', 'orcamentos', 'contas', 'contasDetalhes', 'metas', 'recorrentes', 'saldoContas', 'saldosIniciais', 'moeda', 'tema', 'assinatura', 'categoriasUsuario', 'avisosVencimento'];
+// STORAGE_* → campo de montarEstado()
+const MAPA = { TX: 'transacoes', ORC: 'orcamentos', TEMA: 'tema', CONTAS: 'contas', CONTAS_DETALHES: 'contasDetalhes', METAS: 'metas', REC: 'recorrentes', SALDO_CONTAS: 'saldoContas', SALDOS_INICIAIS: 'saldosIniciais', MOEDA: 'moeda', ASSINATURA: 'assinatura', CATEGORIAS: 'categoriasUsuario', AVISOS: 'avisosVencimento' };
+const LOCAL_DE_PROPOSITO = { PIN: 'pin', ONBOARDING: 'onboardingVisto', CAMBIO_CACHE: 'cambioCache' }; // nunca sincronizam
+
+// ---------- Drive simulado em memória ----------
+function criarDrive(conteudoInicial = null){
+  const s = Object.assign(new EventEmitter(), { arquivo: conteudoInicial, id: 'F1', patches: [], tentativasPatch: 0, posts: 0, listas: 0, gets: 0, modo: { lista: null, media: null, patch: null, vazio: false } });
+  s.aguardar = (cond, ms = 15000) => new Promise((resolve, reject) => {
+    if(cond()) return resolve();
+    const t = setTimeout(() => reject(new Error('timeout aguardando o Drive')), ms);
+    const f = () => { if(cond()){ clearTimeout(t); s.off('req', f); resolve(); } };
+    s.on('req', f);
+  });
+  return s;
+}
+async function ligarDrive(ctx, sim){
+  await ctx.route(/googleapis\.com/, async route => {
+    const r = route.request(), u = new URL(r.url()), cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+    const json = (status, obj) => route.fulfill({ status, headers: cors, contentType: 'application/json', body: JSON.stringify(status >= 400 ? { error: { code: status, message: 'erro simulado' } } : obj) });
+    if(r.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    let ev = null;
+    if(r.method() === 'GET' && u.pathname === '/drive/v3/files'){
+      sim.listas++; ev = 'lista';
+      if(sim.modo.lista) await json(sim.modo.lista, 'erro do servidor');
+      else await json(200, { files: sim.arquivo !== null ? [{ id: sim.id, name: 'bolso-certo-dados.json' }] : [] });
+    }else if(r.method() === 'GET' && u.pathname === '/drive/v3/files/' + sim.id){
+      sim.gets++; ev = 'media';
+      if(sim.modo.media) await json(sim.modo.media, 'erro do servidor');
+      else if(sim.modo.vazio) await route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: '' });
+      else await route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: sim.arquivo === null ? '' : sim.arquivo });
+    }else if(r.method() === 'PATCH'){
+      ev = 'patch'; sim.tentativasPatch++;
+      if(sim.modo.patch) await json(sim.modo.patch, 'erro do servidor');
+      else { sim.arquivo = r.postData(); sim.patches.push(r.postData()); await json(200, { id: sim.id }); }
+    }else if(r.method() === 'POST'){
+      ev = 'post'; sim.posts++;
+      const corpo = r.postData() || ''; const partes = corpo.split('Content-Type: application/json\r\n\r\n');
+      sim.arquivo = (partes[partes.length - 1] || '').replace(/\r\n--bolsocerto--\s*$/, '');
+      await json(200, { id: sim.id });
+    }else await json(404, {});
+    sim.emit('req', ev);
+  });
+}
+
+// ---------- utilitários ----------
+function ctl(page){
+  const c = { confirm: true, prompt: null, msgs: [] };
+  page.on('dialog', d => {
+    c.msgs.push(d.type() + ': ' + d.message());
+    if(d.type() === 'confirm') c.confirm ? d.accept() : d.dismiss();
+    else if(d.type() === 'prompt') c.prompt === null ? d.dismiss() : d.accept(c.prompt);
+    else d.accept();
+  });
+  return c;
+}
+const roteCambio = (page) => page.route(/frankfurter/, r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ rates: { USD: 0.2, EUR: 0.18, GBP: 0.16 } }) }));
+const recarregar = async (page) => { await page.reload({ waitUntil: 'load' }); await page.locator('#btnEntrarApp').click({ timeout: 5000 }).catch(() => {}); await page.waitForFunction(() => getComputedStyle(document.getElementById('telaInicial')).display === 'none'); };
+const estado = (page) => page.evaluate(() => JSON.parse(JSON.stringify(montarEstado())));
+const guardado = (page, chave) => page.evaluate(k => { const v = localStorage.getItem('bc_' + k); return v === null ? undefined : JSON.parse(v); }, chave);
+const arquivoDe = (obj) => typeof obj === 'string' ? obj : JSON.stringify(obj);
+const importar = (page, conteudo) => page.evaluate(async c => { await importarBackupJSON(new File([c], 'backup.json')); }, conteudo);
+const exportar = (page) => page.evaluate(async () => { let cap; const o = URL.createObjectURL; URL.createObjectURL = b => { cap = b; return o.call(URL, b); }; exportarBackupJSON(); URL.createObjectURL = o; return await cap.text(); });
+const novoAparelho = async (browser, { fixed = FIX, drive, extra } = {}) => {
+  const { ctx, page } = await abrir(browser, { fixed });
+  page.__c = ctl(page);
+  await roteCambio(page);
+  if(drive) await ligarDrive(ctx, drive);
+  return { ctx, page };
+};
+const semExtras = (e) => { const c = { ...e }; delete c.exportadoEm; return c; };
+const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria: 'Outros', conta: 'Outros', data: '2026-09-05', status: 'pago', ...o });
+
+(async () => {
+  const browser = await chromium.launch({ channel: 'msedge', headless: true });
+
+  // ================= 1. mapa de chaves (guard) =================
+  console.log('1. mapa de chaves de armazenamento');
+  const consts = [...FONTE.matchAll(/const STORAGE_(\w+) = '([^']+)';/g)].map(m => [m[1], m[2]]);
+  const esperadas = Object.entries({ ...MAPA, ...LOCAL_DE_PROPOSITO }).map(([k, v]) => k + '=' + (MAPA[k] || v)).sort();
+  eq(consts.map(([k, v]) => k + '=' + v).sort(), esperadas, 'GUARD: toda constante STORAGE_* está no funil (13) ou documentada como local de propósito (pin, onboardingVisto, cambioCache). Chave nova → atualize este teste e o funil');
+  const literais = [...new Set([...FONTE.matchAll(/['"`](bc_[A-Za-z0-9_]+)['"`]/g)].map(m => m[1]))].sort();
+  eq(literais, ['bc_aviso_venc_dispensado', 'bc_tel_expirado2'], 'GUARD: chaves bc_* escritas direto no localStorage, fora do funil, de propósito');
+  ok(!/sessionStorage\.setItem\('(?!bolsoCertoVersao)/.test(FONTE), 'sessionStorage só guarda "bolsoCertoVersao" (cache-busting), nada de dado do usuário');
+  const { page: p0 } = await novoAparelho(browser);
+  eq(await p0.evaluate(() => Object.keys(montarEstado()).sort()), [...CHAVES_FUNIL, ].sort(), 'GUARD: montarEstado() devolve exatamente os 13 campos esperados');
+  eq(await p0.evaluate(() => Object.keys(montarEstado()).filter(k => /pin|cambio|onboarding/i.test(k))), [], 'montarEstado() NÃO tem pin, cambioCache nem onboardingVisto');
+  await p0.context().close();
+
+  // ================= 2. cada chave pelo funil completo =================
+  console.log('2. funil: aplicarDadosImportados → storage → recarregar → backup → segundo aparelho');
+  const A = await novoAparelho(browser);
+  await A.page.evaluate(async b => { await aplicarDadosImportados(b); render(); }, FULL);
+  eq(semExtras(await estado(A.page)), FULL, 'A: depois de aplicarDadosImportados, montarEstado() devolve o estado inteiro (13 campos, deep-equal)');
+  for(const [k, campo] of Object.entries(MAPA)){
+    if(campo === 'tema') continue;
+    eq(await guardado(A.page, FONTE.match(new RegExp("const STORAGE_" + k + " = '([^']+)'"))[1]), FULL[campo], `A: storage bc_${campo} gravado pelo import`);
+  }
+  eq(await guardado(A.page, 'tema'), undefined, '[BUG-CONHECIDO] o TEMA vindo de um backup/Drive é aplicado na tela mas NÃO é gravado em bc_tema; esperado: gravar "light" (hoje volta ao tema antigo no próximo boot)');
+  await recarregar(A.page);
+  const depoisA = semExtras(await estado(A.page));
+  for(const campo of CHAVES_FUNIL.filter(c => c !== 'tema')) eq(depoisA[campo], FULL[campo], `A: "${campo}" sobrevive a recarregar a página (carregar() lê o storage)`);
+  eq(depoisA.tema, 'dark', '[BUG-CONHECIDO] depois de recarregar o tema volta para "dark" (o "light" do backup não foi persistido); esperado "light"');
+  // exportar → importar em um segundo aparelho de storage limpo
+  await A.page.evaluate(async b => { await aplicarDadosImportados(b); }, FULL);
+  const arquivo = JSON.parse(await exportar(A.page));
+  eq(semExtras(arquivo), FULL, 'backup exportado carrega o estado inteiro');
+  ok(typeof arquivo.exportadoEm === 'string' && !isNaN(Date.parse(arquivo.exportadoEm)), 'backup tem "exportadoEm" (ISO)');
+  eq(Object.keys(arquivo).filter(k => /vers/i.test(k)), [], '[BUG-CONHECIDO] o arquivo de backup NÃO tem campo de versão do formato (só exportadoEm); esperado: "versao" para migrar formatos futuros');
+  const B = await novoAparelho(browser);
+  eq(await B.page.evaluate(() => [transacoes.length, Object.keys(orcamentos).length, metas.length]), [0, 0, 0], 'B começa limpo');
+  await importar(B.page, JSON.stringify(arquivo));
+  eq(semExtras(await estado(B.page)), FULL, 'B: importarBackupJSON(arquivo do A) reproduz os 13 campos');
+  ok(B.page.__c.msgs.some(m => /SUBSTITUIR/.test(m)) && B.page.__c.msgs.some(m => /sucesso/.test(m)), 'B: pede confirmação explícita ("SUBSTITUIR todos os dados") e avisa o sucesso');
+  await recarregar(B.page);
+  const depoisB = semExtras(await estado(B.page));
+  for(const campo of CHAVES_FUNIL.filter(c => c !== 'tema')) eq(depoisB[campo], FULL[campo], `B: "${campo}" sobrevive a recarregar depois do import`);
+  // as funções salvar* escrevem na chave certa
+  console.log('2b. funções de salvar → chave certa');
+  const C = await novoAparelho(browser);
+  const via = await C.page.evaluate(async () => {
+    const o = {};
+    transacoes = [{ id: 1, tipo: 'gasto', desc: 'x', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-01', status: 'pago' }]; await salvarTx(); o.transacoes = localStorage.getItem('bc_transacoes');
+    orcamentos = { Lazer: 9 }; await salvarOrc(); o.orcamentos = localStorage.getItem('bc_orcamentos');
+    metas = [{ id: 1, nome: 'm', valorAlvo: 1, valorAtual: 0 }]; await salvarMetas(); o.metas = localStorage.getItem('bc_metas');
+    recorrentes = [{ id: 1, tipo: 'gasto', desc: 'r', valor: 1, categoria: 'Outros' }]; await salvarRec(); o.recorrentes = localStorage.getItem('bc_recorrentes');
+    contas = ['A', 'Outros']; contasDetalhes = { A: { tipo: 'cartao', diaFechamento: 3 } }; saldosIniciais = { A: { valor: 5, em: '2026-01-01' } }; await salvarContas();
+    o.contas = localStorage.getItem('bc_contas'); o.contasDetalhes = localStorage.getItem('bc_contasDetalhes'); o.saldosIniciais = localStorage.getItem('bc_saldosIniciais');
+    categoriasUsuario = { adicionadas: [{ nome: 'Z', cor: '#111111' }], renomes: {}, ocultas: [] }; await salvarCategorias(); o.categoriasUsuario = localStorage.getItem('bc_categoriasUsuario');
+    avisosVencimento = { hoje: false, proximos: false, atrasadas: true }; await salvarAvisos(); o.avisosVencimento = localStorage.getItem('bc_avisosVencimento');
+    await alternarTema(); o.tema = localStorage.getItem('bc_tema');
+    return o;
+  });
+  eq(Object.fromEntries(Object.entries(via).map(([k, v]) => [k, v === null ? null : JSON.parse(v)])), {
+    transacoes: [{ id: 1, tipo: 'gasto', desc: 'x', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-01', status: 'pago' }], orcamentos: { Lazer: 9 },
+    metas: [{ id: 1, nome: 'm', valorAlvo: 1, valorAtual: 0 }], recorrentes: [{ id: 1, tipo: 'gasto', desc: 'r', valor: 1, categoria: 'Outros' }],
+    contas: ['A', 'Outros'], contasDetalhes: { A: { tipo: 'cartao', diaFechamento: 3 } }, saldosIniciais: { A: { valor: 5, em: '2026-01-01' } },
+    categoriasUsuario: { adicionadas: [{ nome: 'Z', cor: '#111111' }], renomes: {}, ocultas: [] }, avisosVencimento: { hoje: false, proximos: false, atrasadas: true }, tema: 'light',
+  }, 'salvarTx/Orc/Metas/Rec/Contas/Categorias/Avisos e alternarTema gravam cada um na SUA chave');
+  await recarregar(C.page);
+  const aposC = await estado(C.page);
+  eq([aposC.transacoes.length, aposC.orcamentos, aposC.contas, aposC.saldosIniciais, aposC.categoriasUsuario.adicionadas.length, aposC.avisosVencimento.atrasadas, aposC.tema], [1, { Lazer: 9 }, ['A', 'Outros'], { A: { valor: 5, em: '2026-01-01' } }, 1, true, 'light'], 'tudo isso volta depois de recarregar (inclusive o tema escolhido pelo botão)');
+  // migração do saldo global legado
+  const D = await novoAparelho(browser, {});
+  await D.page.evaluate(async () => { await setJSON('saldoContas', { valor: 321, em: '2026-02-02' }); await setJSON('saldosIniciais', {}); });
+  await recarregar(D.page);
+  eq(await D.page.evaluate(() => [saldoContas, saldosIniciais[contas[0]]]), [null, { valor: 321, em: '2026-02-02' }], 'carregar() migra o saldoContas legado para o saldo inicial da 1ª conta (1 vez) e zera o campo antigo');
+  for(const x of [A, B, C, D]) await x.ctx.close();
+
+  // ================= 3. backup JSON — entradas ruins =================
+  console.log('3. importarBackupJSON — entradas ruins e antigas');
+  const LOCAL = { transacoes: [T(1), T(2)], orcamentos: { Lazer: 50 }, contas: ['Nubank', 'Outros'], metas: [{ id: 1, nome: 'm', valorAlvo: 10, valorAtual: 1 }], recorrentes: [{ id: 1, tipo: 'gasto', desc: 'r', valor: 1, categoria: 'Outros' }], categoriasUsuario: { adicionadas: [{ nome: 'Pets', cor: '#123456' }], renomes: {}, ocultas: [] }, avisosVencimento: { hoje: false, proximos: false, atrasadas: false }, saldosIniciais: { Nubank: { valor: 5, em: '2026-01-01' } } };
+  const semear = (page) => page.evaluate(async l => { await aplicarDadosImportados(l); render(); }, LOCAL);
+  const snap = (page) => page.evaluate(() => JSON.stringify(montarEstado()));
+  let P = await novoAparelho(browser); await semear(P.page);
+  const antes = await snap(P.page);
+  P.page.__c.confirm = false;
+  await importar(P.page, JSON.stringify(FULL));
+  eq(await snap(P.page), antes, 'confirmação CANCELADA: nada muda');
+  P.page.__c.confirm = true;
+  for(const [nome, conteudo] of [['JSON inválido', '{oops'], ['arquivo vazio', ''], ['null', 'null'], ['texto solto', 'isto nao e json']]){
+    P.page.__c.msgs.length = 0;
+    await importar(P.page, conteudo);
+    eq([await snap(P.page) === antes, P.page.__c.msgs.some(m => /Não foi possível ler/.test(m))], [true, true], `${nome}: não altera nada e avisa "Não foi possível ler esse arquivo de backup."`);
+  }
+  // JSON válido, mas que NÃO é um backup do app
+  for(const [nome, conteudo] of [['{}', '{}'], ['[]', '[]'], ['{"foo":1}', '{"foo":1}'], ['número', '123'], ['string', '"x"'], ['true', 'true']]){
+    await semear(P.page); P.page.__c.msgs.length = 0;
+    await importar(P.page, conteudo);
+    const apagou = await P.page.evaluate(() => [transacoes.length, metas.length, recorrentes.length, Object.keys(orcamentos).length]);
+    eq([apagou, P.page.__c.msgs.some(m => /sucesso/.test(m))], [[0, 0, 0, 0], true], `[BUG-CONHECIDO] arquivo JSON válido que não é um backup (${nome}) APAGA lançamentos, metas, fixas e orçamentos e ainda diz "sucesso" (só há o confirm genérico); esperado: recusar sem tocar nos dados`);
+  }
+  // backup antigo (só 3 campos)
+  await semear(P.page);
+  await importar(P.page, JSON.stringify({ transacoes: [T(7)], orcamentos: { Moradia: 9 }, contas: ['Velha', 'Outros'] }));
+  let e = await estado(P.page);
+  eq([e.transacoes.map(t => t.id), e.orcamentos, e.contas], [[7], { Moradia: 9 }, ['Velha', 'Outros']], 'backup antigo (3 campos): lançamentos, orçamentos e contas do arquivo valem');
+  eq([e.metas, e.recorrentes, e.saldosIniciais, e.contasDetalhes], [[], [], {}, {}], 'campos que o backup antigo não tem (metas, fixas, saldos, detalhes) são ZERADOS no aparelho (last-write-wins do blob inteiro)');
+  eq([e.categoriasUsuario, e.avisosVencimento], [{ adicionadas: [], renomes: {}, ocultas: [] }, { hoje: true, proximos: true, atrasadas: true }], '[BUG-CONHECIDO] backup antigo também ZERA as categorias do usuário e as preferências de avisos do aparelho (voltam aos padrões) sem que o arquivo tenha dito nada sobre elas; esperado: preservar o que o arquivo não traz');
+  eq([e.tema, e.moeda, e.assinatura.status !== undefined], ['dark', 'BRL', true], 'tema, moeda e assinatura que o arquivo não traz são preservados');
+  // contas ausentes/vazias: mantém as locais
+  await semear(P.page);
+  await importar(P.page, JSON.stringify({ transacoes: [T(8)] }));
+  eq((await estado(P.page)).contas, ['Nubank', 'Outros'], 'backup sem "contas": mantém as contas locais (manterContasSeVazio)');
+  await importar(P.page, JSON.stringify({ transacoes: [T(8)], contas: [] }));
+  eq((await estado(P.page)).contas, ['Nubank', 'Outros'], 'backup com contas: []: também mantém as locais');
+  await importar(P.page, JSON.stringify({ transacoes: [], contas: ['Só uma'] }));
+  eq((await estado(P.page)).contas, ['Só uma', 'Outros'], 'backup sem a conta "Outros": ela é acrescentada');
+  // chaves extras
+  await importar(P.page, JSON.stringify({ transacoes: [T(9)], extraDesconhecido: { x: 1 }, pin: '9999', accessToken: 'segredo' }));
+  eq(await P.page.evaluate(() => [Object.keys(localStorage).filter(k => /extra|accessToken/i.test(k)), localStorage.getItem('bc_pin'), 'extraDesconhecido' in montarEstado()]), [[], null, false], 'chaves extras (inclusive "pin" e "accessToken") são ignoradas: nada novo no storage e o PIN não é definido por backup');
+  eq((await estado(P.page)).transacoes.map(t => t.id), [9], 'e o resto do arquivo vale normalmente');
+  // blob com tipos errados
+  const erros0 = P.page.__erros.length;
+  await importar(P.page, JSON.stringify({ transacoes: 'abc', orcamentos: 5 }));
+  const tipos = await P.page.evaluate(() => [typeof transacoes, typeof orcamentos]);
+  eq(tipos, ['string', 'number'], '[BUG-CONHECIDO] backup com tipos errados ("transacoes": "abc") é aceito sem validação: transacoes vira string e orcamentos vira número em memória E no storage; esperado: validar o formato antes de aplicar');
+  const quebrou = await P.page.evaluate(() => { try{ render(); return false; }catch(e){ return true; } });
+  eq(quebrou, true, '… e o render() quebra com esse estado');
+  await P.ctx.close();
+  // muito grande
+  console.log('3b. backup muito grande');
+  P = await novoAparelho(browser); await semear(P.page);
+  const grande = await P.page.evaluate(async () => {
+    const n = 40000, tx = [];
+    for(let i = 0; i < n; i++) tx.push({ id: i + 1000, tipo: 'gasto', desc: 'Lançamento grande número ' + i + ' ' + 'x'.repeat(150), valor: 10 + (i % 100), categoria: 'Outros', conta: 'Outros', data: '2026-09-' + String(1 + (i % 28)).padStart(2, '0'), status: 'pago' });
+    const texto = JSON.stringify({ transacoes: tx, contas: ['Outros'] });
+    const t0 = performance.now();
+    await importarBackupJSON(new File([texto], 'grande.json'));
+    const noStorage = localStorage.getItem('bc_transacoes');
+    return { tamanho: texto.length, memoria: transacoes.length, noStorageTamanho: noStorage ? noStorage.length : 0, noStorageN: noStorage ? JSON.parse(noStorage).length : 0, ms: Math.round(performance.now() - t0) };
+  });
+  ok(grande.memoria === 40000, `${grande.tamanho.toLocaleString('pt-BR')} caracteres (40 mil lançamentos): aplicado em memória em ${grande.ms} ms`);
+  eq([grande.memoria, grande.noStorageN], [40000, 2], '[BUG-CONHECIDO] backup maior que a cota do localStorage (~5 MB): o app mantém tudo em memória, mostra "sucesso", mas a gravação FALHA em silêncio (setJSON engole o erro) — ao recarregar, voltam os dados antigos; esperado: avisar que não coube');
+  await P.ctx.close();
+
+  // ================= 4. desfazer =================
+  console.log('4. desfazer (1 nível)');
+  P = await novoAparelho(browser);
+  const pg = P.page;
+  await pg.evaluate(async () => { contas = ['Nubank', 'Outros']; transacoes = [{ id: 1, tipo: 'gasto', desc: 'Base', valor: 10, categoria: 'Outros', conta: 'Nubank', data: '2026-09-05', status: 'pago' }]; snapshotAnterior = null; await salvarTx(); render(); });
+  const OFX = '<OFX><BANKTRANLIST><STMTTRN><DTPOSTED>20260906<TRNAMT>-20.00<FITID>A1<NAME>Extrato A<STMTTRN><DTPOSTED>20260907<TRNAMT>-30.00<FITID>A2<NAME>Extrato B</BANKTRANLIST></OFX>';
+  await pg.evaluate(async o => { await iniciarImportacao('Nubank', new File([o], 'a.ofx')); confirmarImportacao(); }, OFX);
+  eq(await pg.evaluate(() => transacoes.length), 3, 'importar extrato: 2 lançamentos novos (3 no total)');
+  ok(await pg.evaluate(() => !!document.querySelector('#toast.show button')), 'toast do extrato tem "Desfazer"');
+  await pg.evaluate(() => desfazer());
+  eq(await pg.evaluate(() => transacoes.map(t => t.id)), [1], 'desfazer() após importar extrato volta aos dados de antes (os 2 saem de uma vez)');
+  await pg.evaluate(() => desfazer());
+  eq(await pg.evaluate(() => transacoes.map(t => t.id)), [1], 'um 2º desfazer() não faz nada (1 nível)');
+  // dois passos: extrato e depois um lançamento → desfazer só desfaz o último
+  await pg.evaluate(async o => { await iniciarImportacao('Nubank', new File([o], 'a.ofx')); confirmarImportacao(); salvarSnapshot(); transacoes.unshift({ id: 50, tipo: 'gasto', desc: 'Depois', valor: 1, categoria: 'Outros', conta: 'Nubank', data: '2026-09-08', status: 'pago' }); commitTransacoes('x'); }, OFX);
+  await pg.evaluate(() => desfazer());
+  eq(await pg.evaluate(() => transacoes.length), 3, 'extrato + lançamento + desfazer: só o último passo é desfeito (o extrato fica)');
+  // excluir parcelada
+  await pg.evaluate(async () => {
+    transacoes = [1, 2, 3].map(i => ({ id: 100 + i, tipo: 'gasto', desc: `TV (${i}/3)`, valor: 100, categoria: 'Outros', conta: 'Nubank', data: `2026-0${8 + i}-20`, status: 'pendente', grupoParcela: 'g' })).concat([{ id: 1, tipo: 'gasto', desc: 'Base', valor: 10, categoria: 'Outros', conta: 'Nubank', data: '2026-09-05', status: 'pago' }]);
+    snapshotAnterior = null; await salvarTx(); render();
+    remover(101);
+  });
+  ok(await pg.evaluate(() => getComputedStyle(document.getElementById('modalExcluirParcela')).display === 'flex'), 'excluir parcela abre o modal "só esta / todas"');
+  await pg.evaluate(() => confirmarExclusaoParcela('todas'));
+  eq(await pg.evaluate(() => transacoes.map(t => t.id)), [1], 'excluir "todas": as 3 parcelas saem');
+  eq(await pg.evaluate(() => ({ botao: !!document.querySelector('#toast button'), texto: document.getElementById('toast').textContent })), { botao: false, texto: '✓3 parcelas excluídas' }, 'o toast NÃO oferece "Desfazer" (multi-item, por design)');
+  eq(await pg.evaluate(() => snapshotAnterior !== null), true, 'mas o snapshot existe (desfazer() programático ainda restaura)');
+  await pg.evaluate(() => desfazer());
+  eq(await pg.evaluate(() => transacoes.length), 4, 'desfazer() restaura as 3 parcelas');
+  // backup importado × snapshot velho
+  await pg.evaluate(async () => { transacoes = [{ id: 1, tipo: 'gasto', desc: 'Base', valor: 10, categoria: 'Outros', conta: 'Nubank', data: '2026-09-05', status: 'pago' }]; snapshotAnterior = null; await salvarTx(); });
+  await pg.evaluate(() => { document.getElementById('descricao').value = 'Novo'; document.getElementById('valor').value = '5'; document.getElementById('conta').value = 'Nubank'; });
+  await pg.evaluate(async () => { await adicionar(); });
+  ok(await pg.evaluate(() => !!document.querySelector('#toast.show button')), 'adicionar lançamento: toast com "Desfazer" (guarda o estado ANTES)');
+  await importar(pg, JSON.stringify({ transacoes: [{ id: 77, tipo: 'gasto', desc: 'Do backup', valor: 1, categoria: 'Outros', conta: 'Nubank', data: '2026-09-01', status: 'pago' }], contas: ['Nubank', 'Outros'] }));
+  eq(await pg.evaluate(() => transacoes.map(t => t.id)), [77], 'backup importado substitui os lançamentos');
+  eq(await pg.evaluate(() => snapshotAnterior !== null), true, '[BUG-CONHECIDO] importar backup NÃO zera o snapshot do desfazer anterior: ele continua apontando para os dados de ANTES da importação');
+  await pg.evaluate(() => { const b = document.querySelector('#toast.show button'); if(b) b.click(); else desfazer(); });
+  eq(await pg.evaluate(() => transacoes.map(t => t.id)), [1], '[BUG-CONHECIDO] clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup troca os dados importados pelos antigos (some o backup recém-restaurado, sem aviso); esperado: o desfazer perde a validade ao importar');
+  await P.ctx.close();
+
+  // ================= 5. sync com o Drive (simulado) =================
+  console.log('5. Drive — last-write-wins, dois aparelhos, erros');
+  const conectar = (page) => page.evaluate(async () => { accessToken = 'token-teste'; await driveSincronizarInicial(); });
+  const botaoGoogle = (page) => page.evaluate(() => document.getElementById('btnGoogle').textContent.trim());
+  // 5.1 primeiro uso: Drive sem arquivo → cria com o estado local
+  let drive = criarDrive(null);
+  let X = await novoAparelho(browser, { drive });
+  await X.page.evaluate(async () => { transacoes = [{ id: 1, tipo: 'gasto', desc: 'Local X', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-01', status: 'pago' }]; await salvarTx(); });
+  await conectar(X.page);
+  eq([drive.listas, drive.posts, JSON.parse(drive.arquivo).transacoes.map(t => t.id)], [1, 1, [1]], 'Drive sem arquivo: cria "bolsodados" (POST) com o estado local');
+  eq(await botaoGoogle(X.page), '🟢 Sincronizado com Drive', 'status "Sincronizado com Drive"');
+  // 5.2 debounce: várias mudanças seguidas → 1 PATCH
+  const p0n = drive.patches.length;
+  await X.page.evaluate(() => { for(let i = 0; i < 5; i++){ transacoes.push({ id: 10 + i, tipo: 'gasto', desc: 'm' + i, valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-02', status: 'pago' }); driveAgendarSync(); } });
+  eq(await X.page.evaluate(() => document.getElementById('btnGoogle').textContent.trim()), '🟡 Alterações pendentes...', 'mudança local: status "Alterações pendentes"');
+  await drive.aguardar(() => drive.patches.length > p0n);
+  eq([drive.patches.length - p0n, JSON.parse(drive.arquivo).transacoes.length], [1, 6], '5 mudanças em sequência viram 1 PATCH (debounce) com o estado inteiro');
+  // 5.3 Drive tem dados de outro aparelho → o local é SUBSTITUÍDO
+  drive = criarDrive(JSON.stringify({ ...FULL, transacoes: [T(500)] }));
+  X = await novoAparelho(browser, { drive });
+  await X.page.evaluate(async () => { transacoes = [{ id: 1, tipo: 'gasto', desc: 'Só no local', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-01', status: 'pago' }]; await salvarTx(); });
+  await conectar(X.page);
+  eq(await X.page.evaluate(() => transacoes.map(t => t.id)), [500], 'ao conectar, o que está no Drive SUBSTITUI o local (last-write-wins): o lançamento só-local (id 1) some');
+  eq(await drive.patches.length, 0, 'e conectar NÃO sobe nada (só baixa)');
+  eq(semExtras((await estado(X.page))).metas, FULL.metas, 'os outros campos também vêm do Drive');
+  // 5.4 dois aparelhos
+  drive = criarDrive(JSON.stringify({ ...FULL, transacoes: [T(1)] }));
+  const D1 = await novoAparelho(browser, { drive }), D2 = await novoAparelho(browser, { drive });
+  await conectar(D1.page); await conectar(D2.page);
+  eq([await D1.page.evaluate(() => transacoes.map(t => t.id)), await D2.page.evaluate(() => transacoes.map(t => t.id))], [[1], [1]], 'dois aparelhos conectam e veem o mesmo estado');
+  await D2.page.evaluate(() => { transacoes.push({ id: 2, tipo: 'gasto', desc: 'do aparelho 2', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-02', status: 'pago' }); driveAgendarSync(); });
+  await drive.aguardar(() => drive.patches.length >= 1);
+  eq(JSON.parse(drive.arquivo).transacoes.map(t => t.id), [1, 2], 'aparelho 2 grava o lançamento 2 no Drive');
+  await D1.page.evaluate(() => { transacoes.push({ id: 3, tipo: 'gasto', desc: 'do aparelho 1', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-03', status: 'pago' }); driveAgendarSync(); });
+  await drive.aguardar(() => drive.patches.length >= 2);
+  eq(JSON.parse(drive.arquivo).transacoes.map(t => t.id), [1, 3], '[BUG-CONHECIDO] conflito: o aparelho 1 (que ainda não tinha visto o lançamento 2) grava por cima e o lançamento do aparelho 2 SOME do Drive em silêncio — não há merge (documentado como limitação; esperado: mesclar por id)');
+  // reconectar o aparelho 2 baixa o estado final
+  await conectar(D2.page);
+  eq(await D2.page.evaluate(() => transacoes.map(t => t.id)), [1, 3], 'e ao reconectar, o aparelho 2 perde o próprio lançamento 2 também');
+  for(const x of [D1, D2, X]) await x.ctx.close();
+  // 5.5 erros do Drive
+  console.log('5b. Drive devolvendo erro');
+  const dadosNoDrive = JSON.stringify({ ...FULL });
+  // PATCH com erro
+  drive = criarDrive(dadosNoDrive);
+  X = await novoAparelho(browser, { drive });
+  await conectar(X.page);
+  drive.modo.patch = 500;
+  await X.page.evaluate(() => { transacoes.push({ id: 900, tipo: 'gasto', desc: 'x', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-02', status: 'pago' }); salvarTx(); });
+  await drive.aguardar(() => drive.tentativasPatch >= 1);
+  eq([drive.patches.length, JSON.parse(drive.arquivo).transacoes.some(t => t.id === 900)], [0, false], 'PATCH respondido com erro 500: o Drive NÃO recebeu o lançamento');
+  eq(await X.page.evaluate(() => transacoes.some(t => t.id === 900)), true, 'o dado local permanece (memória)');
+  eq(await botaoGoogle(X.page), '🟢 Sincronizado com Drive', '[BUG-CONHECIDO] mesmo com o PATCH devolvendo 500 o botão mostra "Sincronizado com Drive" (driveApi só trata o 401; driveSalvarAgora nunca checa res.ok): a pessoa acha que salvou e não salvou; esperado: "Erro ao sincronizar"');
+  drive.modo.patch = null;
+  await X.page.evaluate(() => { transacoes.push({ id: 901, tipo: 'gasto', desc: 'y', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-02', status: 'pago' }); salvarTx(); });
+  await drive.aguardar(() => drive.patches.length >= 1);
+  eq(JSON.parse(drive.arquivo).transacoes.filter(t => t.id >= 900).map(t => t.id), [900, 901], 'a próxima alteração reenvia o estado inteiro (inclusive o que falhou antes)');
+  await X.ctx.close();
+  // leitura com erro 500 num aparelho NOVO (vazio)
+  drive = criarDrive(dadosNoDrive);
+  X = await novoAparelho(browser, { drive });
+  drive.modo.media = 500;
+  await conectar(X.page);
+  eq(JSON.parse(drive.arquivo).transacoes.length, 0, '[BUG-CONHECIDO] erro 500 ao LER o arquivo do Drive num aparelho novo: o app trata a resposta de erro como "arquivo vazio" e SOBE o estado vazio do aparelho por cima — o Drive perde todos os dados; esperado: checar res.ok e não escrever');
+  await X.ctx.close();
+  // resposta vazia (200, corpo vazio)
+  drive = criarDrive(dadosNoDrive); drive.modo.vazio = true;
+  X = await novoAparelho(browser, { drive });
+  await conectar(X.page);
+  eq(drive.patches.length >= 1 && JSON.parse(drive.arquivo).transacoes.length === 0, true, '[BUG-CONHECIDO] resposta 200 com corpo VAZIO (falha de rede/proxy) também faz o aparelho novo sobrescrever o Drive com o estado vazio');
+  await X.ctx.close();
+  // corpo corrompido
+  drive = criarDrive('{"transacoes": [corrompido');
+  X = await novoAparelho(browser, { drive });
+  await X.page.evaluate(async () => { transacoes = [{ id: 1, tipo: 'gasto', desc: 'Local', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-01', status: 'pago' }]; await salvarTx(); });
+  await conectar(X.page);
+  await drive.aguardar(() => drive.patches.length >= 1);
+  eq([await X.page.evaluate(() => transacoes.map(t => t.id)), JSON.parse(drive.arquivo).transacoes.map(t => t.id)], [[1], [1]], 'arquivo do Drive corrompido: o local é mantido e sobe para o Drive (reparando o arquivo)');
+  await X.ctx.close();
+  // listagem com erro
+  drive = criarDrive(dadosNoDrive); drive.modo.lista = 500;
+  X = await novoAparelho(browser, { drive });
+  await conectar(X.page);
+  eq(drive.posts, 1, '[BUG-CONHECIDO] erro 500 ao LISTAR os arquivos: o app acha que o arquivo não existe e CRIA outro "bolsodados" (arquivo duplicado no Drive da pessoa); esperado: checar res.ok');
+  await X.ctx.close();
+  // 401 sem renovação
+  drive = criarDrive(dadosNoDrive); drive.modo.lista = 401;
+  X = await novoAparelho(browser, { drive });
+  await X.page.evaluate(() => { tokenClient = null; });
+  await conectar(X.page);
+  eq([await X.page.evaluate(() => accessToken), await botaoGoogle(X.page)], [null, '⚠️ Erro ao sincronizar'], '401 sem como renovar: token descartado; o botão termina em "Erro ao sincronizar" (a mensagem "Sessão expirada, clique para reconectar" é sobrescrita pelo catch)');
+  await X.ctx.close();
+  // sem token: nada acontece
+  drive = criarDrive(dadosNoDrive);
+  X = await novoAparelho(browser, { drive });
+  await X.page.evaluate(async () => { await salvarTx(); driveAgendarSync(); await driveSalvarAgora(); });
+  eq([drive.listas, drive.gets, drive.patches.length, drive.posts], [0, 0, 0, 0], 'sem token do Google: nenhuma chamada ao Drive');
+  await X.ctx.close();
+
+  // ================= 6. PIN =================
+  console.log('6. PIN');
+  P = await novoAparelho(browser);
+  P.page.__c.prompt = '1234';
+  const pinLoja = () => P.page.evaluate(() => { const v = localStorage.getItem('bc_pin'); return v === null ? null : JSON.parse(v); }); // removido = JSON null
+  await P.page.evaluate(() => configurarPin());
+  eq([await pinLoja(), P.page.__c.msgs.slice(-1)[0].startsWith('alert: PIN configurado')], ['1234', true], 'ativar: prompt "1234" grava o PIN e avisa');
+  eq(await P.page.evaluate(() => localStorage.getItem('bc_pin')), '"1234"', 'o PIN fica em TEXTO PURO no localStorage (caracterização: é só trava de tela, como o CLAUDE.md diz)');
+  for(const ruim of ['abc', '123', '1234567', '12 34', '']){
+    await P.page.evaluate(async () => { await setJSON('pin', null); });
+    P.page.__c.prompt = ruim; P.page.__c.msgs.length = 0;
+    await P.page.evaluate(() => configurarPin());
+    eq([await pinLoja(), /PIN inválido/.test(P.page.__c.msgs.join())], [null, true], `PIN inválido ${JSON.stringify(ruim)}: recusado com aviso`);
+  }
+  P.page.__c.prompt = null; P.page.__c.msgs.length = 0;
+  await P.page.evaluate(() => configurarPin());
+  eq(await pinLoja(), null, 'cancelar o prompt: não cria PIN');
+  P.page.__c.prompt = '654321';
+  await P.page.evaluate(() => configurarPin());
+  eq(await pinLoja(), '654321', 'PIN de 6 dígitos aceito');
+  // bloqueio ao abrir
+  await recarregar(P.page).catch(() => {});
+  eq(await P.page.evaluate(() => [getComputedStyle(document.getElementById('telaPin')).display, getComputedStyle(document.getElementById('conteudoApp')).display]), ['flex', 'none'], 'com PIN, abrir o app mostra a tela de PIN e esconde o conteúdo');
+  await P.page.fill('#pinInput', '000000'); await P.page.click('#telaPin button');
+  eq(await P.page.evaluate(() => [getComputedStyle(document.getElementById('pinErro')).display, document.getElementById('pinInput').value, getComputedStyle(document.getElementById('conteudoApp')).display]), ['block', '', 'none'], 'PIN errado: mostra o erro, limpa o campo e continua bloqueado');
+  for(let i = 0; i < 12; i++){ await P.page.fill('#pinInput', '11111' + (i % 10)); await P.page.click('#telaPin button'); }
+  eq(await P.page.evaluate(() => getComputedStyle(document.getElementById('conteudoApp')).display), 'none', '12 tentativas erradas seguidas: sem bloqueio temporário nem limite (caracterização)');
+  await P.page.fill('#pinInput', '654321'); await P.page.click('#telaPin button');
+  eq(await P.page.evaluate(() => [getComputedStyle(document.getElementById('telaPin')).display, getComputedStyle(document.getElementById('conteudoApp')).display]), ['none', 'block'], 'PIN certo: libera o app');
+  // Enter no campo
+  await recarregar(P.page).catch(() => {});
+  await P.page.fill('#pinInput', '654321'); await P.page.press('#pinInput', 'Enter');
+  eq(await P.page.evaluate(() => getComputedStyle(document.getElementById('conteudoApp')).display), 'block', 'Enter no campo também confere o PIN');
+  // trocar = remover + criar
+  P.page.__c.confirm = true; P.page.__c.prompt = '9999'; P.page.__c.msgs.length = 0;
+  await P.page.evaluate(() => configurarPin());
+  eq([await pinLoja(), P.page.__c.msgs.some(m => /PIN removido/.test(m))], [null, true], 'não há "trocar": com PIN existente, configurarPin() REMOVE (sem pedir o PIN atual) — só confirm genérico');
+  await P.page.evaluate(() => configurarPin());
+  eq(await pinLoja(), '9999', '… e uma 2ª chamada cria o novo (troca = remover + criar)');
+  P.page.__c.confirm = false;
+  await P.page.evaluate(() => configurarPin());
+  eq(await pinLoja(), '9999', 'recusar o confirm de remoção mantém o PIN');
+  // PIN fora do backup / Drive
+  P.page.__c.confirm = true;
+  const arq = await exportar(P.page);
+  ok(!arq.includes('9999') && !('pin' in JSON.parse(arq)), 'backup exportado NÃO contém o PIN');
+  eq(await P.page.evaluate(() => 'pin' in montarEstado()), false, 'montarEstado() (o que vai para o Drive) NÃO tem "pin"');
+  await importar(P.page, JSON.stringify({ transacoes: [], pin: '0000' }));
+  eq(await pinLoja(), '9999', 'importar backup não altera nem remove o PIN do aparelho');
+  drive = criarDrive(JSON.stringify(FULL));
+  await ligarDrive(P.ctx, drive);
+  await conectar(P.page);
+  await P.page.evaluate(() => { transacoes.push({ id: 5, tipo: 'gasto', desc: 'x', valor: 1, categoria: 'Outros', conta: 'Outros', data: '2026-09-02', status: 'pago' }); salvarTx(); });
+  await drive.aguardar(() => drive.patches.length >= 1);
+  ok(!drive.patches[0].includes('9999') && !drive.patches[0].includes('"pin"'), 'o que sobe para o Drive não contém o PIN');
+  // "Esqueci o PIN"
+  await recarregar(P.page).catch(() => {});
+  eq(await P.page.evaluate(() => getComputedStyle(document.getElementById('telaPin')).display), 'flex', 'pré-condição: tela de PIN');
+  await P.page.evaluate(() => resetarPin());
+  eq([await pinLoja(), await P.page.evaluate(() => getComputedStyle(document.getElementById('conteudoApp')).display)], [null, 'block'], '[BUG-CONHECIDO] o link "Esqueci o PIN / remover proteção" na própria tela de bloqueio remove o PIN e abre o app com um único confirm, sem nenhuma verificação — qualquer pessoa com o aparelho contorna o PIN; esperado: exigir login Google (ou ao menos avisar que apaga os dados)');
+  await P.ctx.close();
+  // PIN + ?readonly=1
+  P = await novoAparelho(browser);
+  await P.page.evaluate(async () => { await setJSON('pin', '4321'); });
+  await P.page.goto(URLAPP + '&readonly=1', { waitUntil: 'load' });
+  await P.page.locator('#btnEntrarApp').click({ timeout: 5000 }).catch(() => {});
+  await P.page.waitForFunction(() => getComputedStyle(document.getElementById('telaInicial')).display === 'none');
+  eq(await P.page.evaluate(() => [getComputedStyle(document.getElementById('telaPin')).display, getComputedStyle(document.getElementById('conteudoApp')).display]), ['flex', 'none'], '?readonly=1 também pede o PIN');
+  await P.ctx.close();
+
+  // ================= 7. ?readonly=1 =================
+  console.log('7. link só de leitura (?readonly=1)');
+  // aparelho com tudo semeado direto no storage + espião de escritas
+  const abrirRO = async ({ query, drive: dr }) => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, timezoneId: 'America/Sao_Paulo' });
+    await bloquearPosthog(ctx);
+    if(dr) await ligarDrive(ctx, dr);
+    const page = await ctx.newPage(); page.__erros = []; page.on('pageerror', e => page.__erros.push(e.message)); page.__c = ctl(page);
+    await roteCambio(page);
+    await page.clock.setFixedTime(new Date(FIX));
+    const semente = Object.fromEntries(Object.entries(FULL).filter(([k]) => k !== 'moeda' && k !== 'tema').map(([k, v]) => [k, JSON.stringify(v)]));
+    await page.addInitScript(`(function(){
+      window.__ev = []; window.posthog = { __SV: 1, __loaded: true, init: function(){}, capture: function(n){ window.__ev.push(n); } };
+      if(!localStorage.getItem('bc_semeado')){
+        localStorage.setItem('bc_semeado', '1'); localStorage.setItem('bc_onboardingVisto', 'true');
+        const s = ${JSON.stringify(semente)}; for(const k in s) localStorage.setItem('bc_' + k, s[k]);
+        localStorage.setItem('bc_moeda', '"BRL"'); localStorage.setItem('bc_tema', '"dark"');
+      }
+      window.__w = []; const o = Storage.prototype.setItem; Storage.prototype.setItem = function(k, v){ if(this === localStorage) window.__w.push(k); return o.call(this, k, v); };
+    })();`);
+    await page.goto(URLAPP + query, { waitUntil: 'load' });
+    await page.locator('#btnEntrarApp').click({ timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('telaInicial')).display === 'none');
+    return { ctx, page };
+  };
+  let R = await abrirRO({ query: '&readonly=1' });
+  eq(await R.page.evaluate(() => [document.body.classList.contains('readonly'), window.__ev]), [true, []], 'abre em modo só leitura e NENHUM evento de telemetria sai (nem sessao_iniciada)');
+  const bootW = await R.page.evaluate(() => window.__w.filter(k => !/bc_semeado/.test(k)));
+  eq(bootW, [], 'o boot do link só de leitura NÃO grava nada no storage (com tudo já semeado)');
+  await R.page.evaluate(() => { for(const a of ['geral', 'lancamentos', 'orcamento', 'metas', 'geral']) mudarAbaPrincipal(a); mudarSubAbaGeral('analise'); mudarSubAbaGeral('resumo'); mesAtual = '2026-08'; render(); });
+  eq(await R.page.evaluate(() => window.__w.filter(k => !/bc_semeado/.test(k))), [], 'navegar (abas, sub-abas, mês) NÃO grava nada');
+  eq(await R.page.evaluate(() => { rastrear('qualquer'); return window.__ev; }), [], 'rastrear() é no-op');
+  // sem semente: o primeiro acesso grava a assinatura (trial)
+  const RV = await (async () => {
+    const ctx = await browser.newContext({ timezoneId: 'America/Sao_Paulo' }); await bloquearPosthog(ctx);
+    const page = await ctx.newPage(); await page.clock.setFixedTime(new Date(FIX));
+    await page.addInitScript(`localStorage.setItem('bc_onboardingVisto','true'); window.__w = []; const o = Storage.prototype.setItem; Storage.prototype.setItem = function(k,v){ if(this === localStorage) window.__w.push(k); return o.call(this,k,v); };`);
+    await page.goto(URLAPP + '&readonly=1', { waitUntil: 'load' });
+    await page.locator('#btnEntrarApp').click({ timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('telaInicial')).display === 'none');
+    return { ctx, page };
+  })();
+  eq(await RV.page.evaluate(() => window.__w.filter(k => k !== 'bc_onboardingVisto').sort()), ['bc_assinatura'], '[BUG-CONHECIDO] abrir o link só de leitura num aparelho SEM dados inicia o teste de 15 dias (grava bc_assinatura): quem só consulta consome o trial; esperado: nenhuma escrita em modo leitura');
+  await RV.ctx.close();
+  // Drive em modo leitura
+  const dr1 = criarDrive(JSON.stringify({ ...FULL, transacoes: [T(500)] }));
+  const R2 = await abrirRO({ query: '&readonly=1', drive: dr1 });
+  await conectar(R2.page);
+  eq([dr1.posts, dr1.patches.length, await R2.page.evaluate(() => transacoes.map(t => t.id))], [0, 0, [500]], 'com Drive que já tem dados: só baixa — nenhum POST/PATCH');
+  await R2.ctx.close();
+  const dr2 = criarDrive(null);
+  const R3 = await abrirRO({ query: '&readonly=1', drive: dr2 });
+  await conectar(R3.page);
+  eq([dr2.posts, dr2.arquivo !== null], [1, true], '[BUG-CONHECIDO] com o Drive SEM arquivo, o link só de leitura CRIA o arquivo e sobe o estado local — é uma escrita no Drive; esperado: não escrever em modo leitura');
+  await R3.ctx.close();
+  // as ações de escrita continuam existindo como funções (a barreira é visual) — como no trial
+  const R4 = await abrirRO({ query: '&readonly=1' });
+  await R4.page.evaluate(async () => { document.getElementById('descricao').value = 'via console'; document.getElementById('valor').value = '5'; document.getElementById('conta').value = 'Nubank'; await adicionar(); });
+  eq(await R4.page.evaluate(() => transacoes.some(t => t.desc === 'via console')), true, 'caracterização: adicionar() chamado pelo console grava mesmo com ?readonly=1 (a barreira é só CSS, como no soft-block do trial)');
+  await R4.ctx.close();
+  await R.ctx.close();
+
+  await browser.close();
+  const t = res(); console.log(`\n${t.pass} ok, ${t.fail} fail`); process.exit(t.fail ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });
