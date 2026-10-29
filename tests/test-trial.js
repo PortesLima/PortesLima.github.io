@@ -256,8 +256,20 @@ const A = (trialInicio) => ({ status: 'trial', trialInicio, assinouEm: null });
   await p.evaluate(() => { toggleMenuConfig(); });
   // backup depois de dispensar o modal
   await p.evaluate(() => { document.getElementById('modalTrialFim').style.display = 'none'; toggleMenuConfig(); });
-  const botoesBackup = await p.evaluate(() => [...document.querySelectorAll('[onclick*="exportarBackupJSON"]')].filter(b => b.getClientRects().length > 0 && getComputedStyle(b).visibility !== 'hidden').length);
-  eq(botoesBackup, 0, '[BUG-CONHECIDO] com o trial vencido e o modal dispensado, NENHUM botão de backup fica visível (header/menu/painel são .editable-only; o único é o do modal, que só reabre ao recarregar). Esperado ≥ 1: o CLAUDE.md promete que "exportar" continua funcionando');
+  // P2: com o trial vencido e o modal dispensado, EXPORTAR backup continua acessível pelo menu ⚙️ (sem .editable-only)
+  const vis = (sel) => p.evaluate(s => [...document.querySelectorAll(s)].filter(b => b.getClientRects().length > 0 && getComputedStyle(b).visibility !== 'hidden').map(b => b.id || b.textContent.trim()), sel);
+  eq(await vis('#menuConfig [onclick*="exportarBackupJSON"]'), ['btnBackupMenu'], 'com o trial vencido e o modal dispensado, o menu ⚙️ mostra "Baixar backup (.json)" (um único botão de exportar)');
+  eq(await p.evaluate(() => document.getElementById('btnBackupMenu').classList.contains('editable-only')), false, 'o item de exportar backup NÃO tem .editable-only');
+  const bkMenu = await p.evaluate(async () => {
+    let cap; const o = URL.createObjectURL; URL.createObjectURL = b => { cap = b; return o.call(URL, b); };
+    document.getElementById('btnBackupMenu').click(); URL.createObjectURL = o;
+    const j = JSON.parse(await cap.text());
+    return { versao: j.versao, temTransacoes: Array.isArray(j.transacoes), menuFechou: getComputedStyle(document.getElementById('menuConfig')).display === 'none', status: j.assinatura && j.assinatura.status };
+  });
+  eq(bkMenu, { versao: 1, temTransacoes: true, menuFechou: true, status: 'bloqueado' }, 'clicar gera o arquivo (versao 1, com os lançamentos), fecha o menu e funciona com o app bloqueado');
+  // IMPORTAR continua escondido em modo bloqueado/somente leitura
+  eq([(await vis('#painelBackup')).length, (await vis('#arquivoBackup')).length, (await vis('[onclick*="toggleMenuBackup"]')).length, (await vis('#menuConfig [onclick*="importarBackup"], #menuConfig input[type=file]')).length], [0, 0, 0, 0], 'IMPORTAR segue escondido: painel de backup, campo de arquivo e os botões que o abrem não aparecem com o trial vencido');
+  eq(await vis('[onclick*="exportarComprovantes"]'), [], 'e o painel de backup completo (comprovantes) também segue escondido');
   await p.evaluate(() => toggleMenuConfig());
   // backup importado: função sem guard
   const imp2 = await p.evaluate(async () => {

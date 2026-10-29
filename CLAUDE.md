@@ -75,7 +75,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   (OFX/CSV/windows-1252, erros), `confirmarImportacao` (campos, toast, `desfazer`, substituir, mês de destino),
   reimportação, trial bloqueado, ida-e-volta `exportarCSV` → `parseCSVBolsoCerto`. Check de comportamento
   atual que parece bug leva o prefixo `[BUG-CONHECIDO]` (nenhum hoje: o `TRNAMT` do OFX ganhou parser próprio, `parseTrnAmt`).
-- `test-trial` (109) — **reconstrução (Bloco 2)**: primeira abertura (`trial_iniciado` 1x), fronteiras D+0/1/9/10/14/15/16/400
+- `test-trial` (113) — **reconstrução (Bloco 2)**: primeira abertura (`trial_iniciado` 1x), fronteiras D+0/1/9/10/14/15/16/400
   (D+15 ainda é trial; D+16 bloqueia), virada à meia-noite local, `body.readonly` (o que bloqueia: `adicionar`,
   registro rápido, categorias, importar; o que continua: abas, filtros, CSV, 3 PDFs, ajuda, backup pelo modal),
   `?readonly=1`, "Assinar" provisório, telemetria 1x (`trial_expirado` com `bc_tel_expirado2`, `assinar_clicado`
@@ -126,6 +126,10 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] resposta 200 com corpo VAZIO … também faz o aparelho novo sobrescrever o Drive…` → `leitura 200 com corpo vazio: o Drive NÃO recebe nenhuma escrita (…)`
 - `[BUG-CONHECIDO] erro 500 ao LISTAR os arquivos: …CRIA outro "bolsodados"…` → `erro 500 ao LISTAR: NÃO cria outro "bolso-certo-dados.json"` (+ `listagem 500: …`)
 - (sem tag, comportamento mudou) `arquivo do Drive corrompido: o local é mantido e sobe para o Drive (reparando o arquivo)` → `arquivo do Drive corrompido (JSON inválido): o Drive NÃO recebe nenhuma escrita (…)` + `corrompido: o arquivo do Drive continua como estava`
+
+**Leva 2 · P2 (backup visível com o trial vencido)** — `tests/test-trial.js`
+- `[BUG-CONHECIDO] com o trial vencido e o modal dispensado, NENHUM botão de backup fica visível…` → `com o trial vencido e o modal dispensado, o menu ⚙️ mostra "Baixar backup (.json)" (um único botão de exportar)` + `o item de exportar backup NÃO tem .editable-only` + `clicar gera o arquivo (versao 1, com os lançamentos), fecha o menu e funciona com o app bloqueado`
+- (novos) `IMPORTAR segue escondido` (painel de backup, campo de arquivo e botões que o abrem) e o painel de comprovantes também. A função `importarBackupJSON` continua SEM guard próprio (caracterização, decisão de não criar guards de lógica enquanto o trial for burlável por DevTools).
 
 **Leva 2 · P1 (`parseOFX` / `TRNAMT`)** — `tests/test-importacao.js`
 - `[BUG-CONHECIDO] OFX com TRNAMT "-12.500" importa como -12500 (esperado -12.5)` → `OFX com TRNAMT "-12.500" importa como -12,5 (parser próprio do TRNAMT: só ponto = decimal)`
@@ -688,7 +692,8 @@ reads it.
 ### Top-bar ⚙️ menu
 
 On desktop the header keeps Google Drive, Contas, Backup, theme, and ⚙️ visible; ⚙️
-(`#menuConfig`, `toggleMenuConfig`) holds "Minha assinatura", PIN, currency, notifications,
+(`#menuConfig`, `toggleMenuConfig`) holds "Minha assinatura", **"Baixar backup (.json)"** (`#btnBackupMenu`, sem `.editable-only`: exportar
+funciona com o teste vencido; importar continua escondido), PIN, currency, notifications,
 read-only link — plus, on mobile only (`.so-mobile`), the Drive/Contas/Backup/theme entries
 that leave the header. A document-level click handler closes it on outside click. `#btnTema`
 and `#btnGoogle` have menu twins (`#btnTemaMenu`, `#btnGoogleMenu`) kept in sync by

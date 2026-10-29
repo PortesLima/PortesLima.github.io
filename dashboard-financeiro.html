@@ -964,6 +964,7 @@
         <button class="theme-toggle" id="btnConfig" onclick="toggleMenuConfig()" aria-haspopup="true" title="Mais opções" aria-label="Mais opções">⚙️</button>
         <div id="menuConfig" class="menu-drop" style="display:none;">
           <button onclick="abrirMinhaAssinatura()">⭐ Minha assinatura</button>
+          <button id="btnBackupMenu" onclick="exportarBackupJSON(); fecharMenuConfig()">⬇️ Baixar backup (.json)</button>
           <button class="so-mobile" id="btnGoogleMenu" onclick="entrarGoogle(); fecharMenuConfig()">🔗 Conectar Google Drive</button>
           <button class="so-mobile editable-only" onclick="abrirModalContas(); fecharMenuConfig()">💳 Contas e cartões</button>
           <button class="so-mobile editable-only" onclick="toggleMenuBackup(); fecharMenuConfig()">💾 Backup dos dados</button>
