@@ -748,8 +748,8 @@
 <div class="wrap" id="conteudoApp">
 
   <div id="modalExcluirParcela" class="modal-bg" style="display:none;">
-    <div class="modal-box">
-      <h2>Excluir lançamento parcelado</h2>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalExcluirParcelaTitulo">
+      <h2 id="modalExcluirParcelaTitulo">Excluir lançamento parcelado</h2>
       <p style="font-size:13px; color:var(--muted); margin-top:-8px;" id="modalExcluirParcelaTexto"></p>
       <button onclick="confirmarExclusaoParcela('atual')" style="width:100%; margin-top:6px;">Excluir só esta parcela</button>
       <button onclick="confirmarExclusaoParcela('todas')" class="secondary" style="width:100%; margin-top:8px;">Excluir todas as parcelas deste grupo</button>
@@ -758,7 +758,7 @@
   </div>
 
   <div id="modalEvolucaoMeta" class="modal-bg" style="display:none;">
-    <div class="modal-box" style="max-width:520px;">
+    <div class="modal-box" style="max-width:520px;" role="dialog" aria-modal="true" aria-labelledby="tituloEvolucaoMeta">
       <h2 id="tituloEvolucaoMeta">Evolução da meta<span class="help-icon" tabindex="0" data-tip="Cada ponto é um valor adicionado à meta, na ordem em que foi lançado. Mostra quanto você já acumulou ao longo do tempo, não uma previsão.">?</span></h2>
       <div class="chart-wrap" style="height:240px;"><canvas id="chartEvolucaoMeta"></canvas></div>
       <div id="evolucaoMetaVazio" class="empty" style="display:none;">Ainda não há valores adicionados a esta meta.</div>
@@ -767,8 +767,8 @@
   </div>
 
   <div id="modalContas" class="modal-bg" style="display:none;">
-    <div class="modal-box" style="max-width:520px;">
-      <h2>Gerenciar contas e cartões</h2>
+    <div class="modal-box" style="max-width:520px;" role="dialog" aria-modal="true" aria-labelledby="modalContasTitulo">
+      <h2 id="modalContasTitulo">Gerenciar contas e cartões</h2>
       <div style="font-size:11.5px; color:var(--muted); margin-bottom:10px;">Informe o <b>saldo inicial</b> de cada conta e a data — o app calcula o saldo atual somando os lançamentos e alimenta o card <b>"Fim do mês"</b> e a projeção de saldo.</div>
       <div id="listaContas" style="margin-bottom:14px;"></div>
       <div style="border-top:1px solid var(--border); padding-top:12px;">
@@ -791,8 +791,8 @@
   </div>
 
   <div id="modalCategorias" class="modal-bg" style="display:none;">
-    <div class="modal-box" style="max-width:460px;">
-      <h2 style="display:flex; justify-content:space-between; align-items:center;">Gerenciar categorias
+    <div class="modal-box" style="max-width:460px;" role="dialog" aria-modal="true" aria-labelledby="modalCategoriasTitulo">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;"><span id="modalCategoriasTitulo">Gerenciar categorias</span>
         <button class="iconbtn" style="font-size:20px;" onclick="fecharModalCategorias()" title="Fechar">&times;</button>
       </h2>
       <div style="font-size:11.5px; color:var(--muted); margin-bottom:10px;">Renomear mantém os lançamentos, orçamentos e contas fixas ligados à categoria. Categorias que você criar ficam disponíveis em todos os lançamentos.</div>
@@ -817,8 +817,8 @@
   </div>
 
   <div id="modalAvisos" class="modal-bg" style="display:none;">
-    <div class="modal-box" style="max-width:420px;">
-      <h2 style="display:flex; justify-content:space-between; align-items:center;">Avisos de vencimento
+    <div class="modal-box" style="max-width:420px;" role="dialog" aria-modal="true" aria-labelledby="modalAvisosTitulo">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;"><span id="modalAvisosTitulo">Avisos de vencimento</span>
         <button class="iconbtn" style="font-size:20px;" onclick="fecharModalAvisos()" title="Fechar" aria-label="Fechar">&times;</button>
       </h2>
       <div style="font-size:12.5px; color:var(--muted); margin-bottom:10px;">Escolha de quais contas você quer ser avisado.</div>
@@ -835,8 +835,8 @@
   </div>
 
   <div id="modalImportar" class="modal-bg" style="display:none;">
-    <div class="modal-box">
-      <h2 style="display:flex; justify-content:space-between; align-items:center;">Importar extrato
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalImportarTitulo">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;"><span id="modalImportarTitulo">Importar extrato</span>
         <button class="iconbtn" style="font-size:20px;" onclick="fecharModalImportar()" title="Fechar">&times;</button>
       </h2>
       <div id="importTopo"></div>
@@ -846,8 +846,8 @@
   </div>
 
   <div id="modalRapido" class="modal-bg" style="display:none;">
-    <div class="modal-box" style="max-width:400px;">
-      <h2 style="display:flex; justify-content:space-between; align-items:center;">Registro rápido
+    <div class="modal-box" style="max-width:400px;" role="dialog" aria-modal="true" aria-labelledby="modalRapidoTitulo">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;"><span id="modalRapidoTitulo">Registro rápido</span>
         <button class="iconbtn" style="font-size:20px;" onclick="fecharModalRapido()" title="Fechar">&times;</button>
       </h2>
       <div class="seg" style="margin-bottom:12px;">
@@ -875,7 +875,7 @@
   <div id="toast" role="status" aria-live="polite"></div>
 
   <div id="modalOnboarding" class="modal-bg" style="display:none;">
-    <div class="modal-box">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-label="Primeiros passos">
       <div id="onbConteudo"></div>
       <div class="onb-rodape">
         <span id="onbPassoLabel"></span>
@@ -892,8 +892,8 @@
   </div>
 
   <div id="modalTrialFim" class="modal-bg" style="display:none;">
-    <div class="modal-box">
-      <h2>Seu teste de 15 dias terminou</h2>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTrialFimTitulo">
+      <h2 id="modalTrialFimTitulo">Seu teste de 15 dias terminou</h2>
       <p style="font-size:13.5px; color:var(--muted); margin-top:-6px;">
         Seus dados estão salvos e continuam aqui. Para voltar a lançar gastos e usar os alertas,
         assine o Bolso Certo — cancela quando quiser, sem multa.
@@ -905,8 +905,8 @@
   </div>
 
   <div id="modalPlanos" class="modal-bg" style="display:none;">
-    <div class="modal-box">
-      <h2 style="display:flex; justify-content:space-between; align-items:center;">Assinar o Bolso Certo
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalPlanosTitulo">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;"><span id="modalPlanosTitulo">Assinar o Bolso Certo</span>
         <button class="iconbtn" style="font-size:20px;" onclick="fecharPlanos()" title="Fechar">&times;</button>
       </h2>
       <div style="background:var(--blue-bg); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
@@ -929,8 +929,8 @@
   </div>
 
   <div id="modalDriveConflito" class="modal-bg" style="display:none;">
-    <div class="modal-box">
-      <h2>Este aparelho tem alterações que não foram para o Drive</h2>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalDriveConflitoTitulo">
+      <h2 id="modalDriveConflitoTitulo">Este aparelho tem alterações que não foram para o Drive</h2>
       <p style="font-size:13.5px; color:var(--muted); margin-top:-6px;">
         Você lançou ou editou dados aqui enquanto o Drive não estava disponível, e o Drive tem uma versão diferente.
         O que fazer?
@@ -943,8 +943,8 @@
   </div>
 
   <div id="modalAssinatura" class="modal-bg" style="display:none;">
-    <div class="modal-box">
-      <h2 style="display:flex; justify-content:space-between; align-items:center;">Minha assinatura
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalAssinaturaTitulo">
+      <h2 style="display:flex; justify-content:space-between; align-items:center;"><span id="modalAssinaturaTitulo">Minha assinatura</span>
         <button class="iconbtn" style="font-size:20px;" onclick="fecharMinhaAssinatura()" title="Fechar">&times;</button>
       </h2>
       <div id="minhaAssinaturaCorpo"></div>
@@ -997,12 +997,12 @@
     <select id="contaFiltro" onchange="render()"></select>
   </div>
 
-  <nav class="tabs" id="navPrincipal" aria-label="Seções do app">
-    <button class="tab active" id="navGeral" onclick="mudarAbaPrincipal('geral')" aria-current="page"><span class="tab-ico" aria-hidden="true">📊</span><span class="tab-txt">Visão geral</span></button>
-    <button class="tab" id="navLancamentos" onclick="mudarAbaPrincipal('lancamentos')"><span class="tab-ico" aria-hidden="true">📝</span><span class="tab-txt">Lançamentos</span></button>
-    <button class="tab" id="navOrcamento" onclick="mudarAbaPrincipal('orcamento')"><span class="tab-ico" aria-hidden="true">🎯</span><span class="tab-txt">Orçamento</span></button>
-    <button class="tab" id="navMetas" onclick="mudarAbaPrincipal('metas')"><span class="tab-ico" aria-hidden="true">💰</span><span class="tab-txt">Metas e fixos</span></button>
-  </nav>
+  <nav aria-label="Seções do app"><div class="tabs" id="navPrincipal" role="tablist" aria-label="Seções">
+    <button class="tab active" id="navGeral" role="tab" aria-selected="true" onclick="mudarAbaPrincipal('geral')"><span class="tab-ico" aria-hidden="true">📊</span><span class="tab-txt">Visão geral</span></button>
+    <button class="tab" id="navLancamentos" role="tab" aria-selected="false" tabindex="-1" onclick="mudarAbaPrincipal('lancamentos')"><span class="tab-ico" aria-hidden="true">📝</span><span class="tab-txt">Lançamentos</span></button>
+    <button class="tab" id="navOrcamento" role="tab" aria-selected="false" tabindex="-1" onclick="mudarAbaPrincipal('orcamento')"><span class="tab-ico" aria-hidden="true">🎯</span><span class="tab-txt">Orçamento</span></button>
+    <button class="tab" id="navMetas" role="tab" aria-selected="false" tabindex="-1" onclick="mudarAbaPrincipal('metas')"><span class="tab-ico" aria-hidden="true">💰</span><span class="tab-txt">Metas e fixos</span></button>
+  </div></nav>
 
   <div id="barraTrial" class="barra-trial" style="display:none;"></div>
   <div id="avisoBloqueio" class="barra-trial urgente" style="display:none;">
@@ -1027,7 +1027,7 @@
 
   <div class="subtabs" role="tablist" aria-label="Modo da visão geral">
     <button class="subtab active" id="subtabResumo" role="tab" aria-selected="true" onclick="mudarSubAbaGeral('resumo')">Resumo</button>
-    <button class="subtab" id="subtabAnalise" role="tab" aria-selected="false" onclick="mudarSubAbaGeral('analise')">Análise</button>
+    <button class="subtab" id="subtabAnalise" role="tab" aria-selected="false" tabindex="-1" onclick="mudarSubAbaGeral('analise')">Análise</button>
   </div>
 
   <div id="geralResumo">
@@ -1261,9 +1261,9 @@
   </div>
 
   <div class="card">
-    <div class="tabs">
-      <div class="tab active" id="tabLista" onclick="mudarAba('lista')">Lançamentos</div>
-      <div class="tab" id="tabDicas" onclick="mudarAba('dicas')">Dicas</div>
+    <div class="tabs" role="tablist" aria-label="Lançamentos ou dicas">
+      <button class="tab active" id="tabLista" role="tab" aria-selected="true" onclick="mudarAba('lista')">Lançamentos</button>
+      <button class="tab" id="tabDicas" role="tab" aria-selected="false" tabindex="-1" onclick="mudarAba('dicas')">Dicas</button>
     </div>
 
     <div id="viewLista">
@@ -2821,8 +2821,8 @@ function mudarAbaPrincipal(aba){
     el.style.display = (k===aba) ? 'block' : 'none';
     const nav = document.getElementById(navs[k]);
     nav.classList.toggle('active', k===aba);
-    if(k===aba) nav.setAttribute('aria-current', 'page');
-    else nav.removeAttribute('aria-current');
+    nav.setAttribute('aria-selected', String(k===aba));
+    nav.tabIndex = (k===aba) ? 0 : -1;
     if(k===aba){
       el.classList.remove('sec-fade');
       void el.offsetWidth;
@@ -2836,6 +2836,10 @@ function mudarAbaPrincipal(aba){
 function mudarAba(aba){
   document.getElementById('tabLista').classList.toggle('active', aba==='lista');
   document.getElementById('tabDicas').classList.toggle('active', aba==='dicas');
+  document.getElementById('tabLista').setAttribute('aria-selected', String(aba==='lista'));
+  document.getElementById('tabDicas').setAttribute('aria-selected', String(aba==='dicas'));
+  document.getElementById('tabLista').tabIndex = (aba==='lista') ? 0 : -1;
+  document.getElementById('tabDicas').tabIndex = (aba==='dicas') ? 0 : -1;
   document.getElementById('viewLista').style.display = aba==='lista' ? 'block' : 'none';
   document.getElementById('viewDicas').style.display = aba==='dicas' ? 'block' : 'none';
 }
@@ -2928,6 +2932,8 @@ function aplicarSubAbaGeral(){
   btnA.classList.toggle('active', emAnalise);
   btnR.setAttribute('aria-selected', String(!emAnalise));
   btnA.setAttribute('aria-selected', String(emAnalise));
+  btnR.tabIndex = emAnalise ? -1 : 0;
+  btnA.tabIndex = emAnalise ? 0 : -1;
   if(emAnalise){
     // Chart.js não mede canvas em container display:none. Ao mostrar a aba,
     // re-renderiza os gráficos com o layout agora real. render() cobre tudo;
@@ -5632,6 +5638,91 @@ function _sincronizarTravaScroll(){
   const obs = new MutationObserver(_sincronizarTravaScroll);
   alvos.forEach(el => obs.observe(el, { attributes:true, attributeFilter:['style'] }));
 }
+
+// ---- Diálogos acessíveis: foco para dentro, Tab preso, Esc e foco de volta ----
+// Mesmo princípio da trava de scroll: um observer no `style` de cada .modal-bg dispara o par abrir/fechar abaixo,
+// então nenhuma das chamadas de abrir/fechar espalhadas pelo código muda. Regras de negócio de QUANDO abrir/fechar
+// continuam nas funções de sempre. Esc chama a MESMA função do botão × (ex.: fecharModalRapido continua onboarding-aware).
+// null = decisão obrigatória/sem dispensa: Esc não fecha (conflito do Drive, fim do teste — o "Continuar só consultando"
+// dispara telemetria própria — e o assistente de primeiros passos, que tem "pular tudo").
+const MODAL_FECHAR_ESC = {
+  modalContas:'fecharModalContas', modalCategorias:'fecharModalCategorias', modalAvisos:'fecharModalAvisos',
+  modalImportar:'fecharModalImportar', modalRapido:'fecharModalRapido', modalPlanos:'fecharPlanos',
+  modalAssinatura:'fecharMinhaAssinatura', modalEvolucaoMeta:'fecharModalEvolucaoMeta', modalExcluirParcela:'fecharModalExcluirParcela',
+  modalDriveConflito:null, modalTrialFim:null, modalOnboarding:null
+};
+const _FOCAVEIS = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const _modaisAbertos = [];          // ordem de abertura: o último é o que está por cima
+const _modalGatilho = new Map();    // modal -> elemento que tinha o foco quando abriu
+function _focaveisDoModal(m){
+  return [...m.querySelectorAll(_FOCAVEIS)].filter(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
+}
+// último botão/controle tocado fora de um modal: Safari/iOS não foca <button> ao tocar, e o item do menu ⚙️ some ao abrir o modal
+let _ultimoGatilho = null, _ultimoGatilhoT = 0;
+function _lembrarGatilho(e){ const b = e.target.closest && e.target.closest('button, a[href], [role=button], input, select, summary'); if(b && !b.closest('.modal-bg')){ _ultimoGatilho = b; _ultimoGatilhoT = performance.now(); } }
+document.addEventListener('focusin', _lembrarGatilho);
+document.addEventListener('click', _lembrarGatilho, true);
+function dialogoAbriu(m){
+  if(_modaisAbertos.includes(m)) return;
+  _modaisAbertos.push(m);
+  const a = document.activeElement;
+  let g = (a && a !== document.body && !m.contains(a)) ? a : null;
+  if(!g && performance.now() - _ultimoGatilhoT < 1500) g = _ultimoGatilho;   // só um toque recente: modal aberto sozinho (ex.: aviso do Drive) não rouba o foco de volta para um botão antigo
+  if(g && g.closest && g.closest('#menuConfig')) g = document.getElementById('btnConfig');   // o item do menu fecha junto: o foco volta ao ⚙️
+  _modalGatilho.set(m, g || null);
+  const alvo = _focaveisDoModal(m)[0] || m.querySelector('.modal-box');
+  if(alvo){
+    if(!alvo.hasAttribute('tabindex') && !alvo.matches(_FOCAVEIS)) alvo.setAttribute('tabindex', '-1');
+    alvo.focus({ preventScroll:true });
+  }
+}
+function dialogoFechou(m){
+  const i = _modaisAbertos.indexOf(m);
+  if(i < 0) return;
+  _modaisAbertos.splice(i, 1);
+  const g = _modalGatilho.get(m);
+  _modalGatilho.delete(m);
+  const topo = _modaisAbertos[_modaisAbertos.length - 1];
+  if(topo && topo.contains(document.activeElement)) return;      // ainda há um diálogo por cima com o foco dentro
+  if(g && g.isConnected && g.getClientRects().length) g.focus({ preventScroll:true });
+}
+{
+  const obsDlg = new MutationObserver(regs => regs.forEach(r => {
+    const m = r.target, aberto = !!m.style.display && m.style.display !== 'none';
+    if(aberto) dialogoAbriu(m); else dialogoFechou(m);
+  }));
+  document.querySelectorAll('.modal-bg').forEach(m => obsDlg.observe(m, { attributes:true, attributeFilter:['style'] }));
+}
+document.addEventListener('keydown', e => {
+  const m = _modaisAbertos[_modaisAbertos.length - 1];
+  if(!m) return;
+  if(e.key === 'Escape'){
+    const fn = MODAL_FECHAR_ESC[m.id];
+    if(fn && typeof window[fn] === 'function'){ e.preventDefault(); window[fn](); }
+    return;
+  }
+  if(e.key === 'Tab'){
+    const f = _focaveisDoModal(m);
+    if(!f.length){ e.preventDefault(); return; }
+    const i = f.indexOf(document.activeElement);
+    if(e.shiftKey){ if(i <= 0){ e.preventDefault(); f[f.length - 1].focus(); } }
+    else if(i === -1 || i === f.length - 1){ e.preventDefault(); f[0].focus(); }
+  }
+});
+// ---- Abas (role=tablist): setas ←/→ e Home/End movem e ATIVAM a aba; só a aba ativa fica no Tab (tabindex móvel) ----
+document.addEventListener('keydown', e => {
+  const tab = e.target.closest && e.target.closest('[role=tab]');
+  if(!tab || !['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+  const abas = [...tab.closest('[role=tablist]').querySelectorAll('[role=tab]')].filter(t => t.getClientRects().length);
+  let i = abas.indexOf(tab);
+  if(e.key === 'ArrowRight') i = (i + 1) % abas.length;
+  else if(e.key === 'ArrowLeft') i = (i - 1 + abas.length) % abas.length;
+  else if(e.key === 'Home') i = 0;
+  else i = abas.length - 1;
+  e.preventDefault();
+  abas[i].click();
+  abas[i].focus();
+});
 
 // ---- Link somente leitura ----
 function gerarLinkSomenteLeitura(){

@@ -134,7 +134,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
   for(const tl of TELAS){
     await irPara(page, tl[0], tl[1]);
     const mortos = await page.evaluate(() => [...document.querySelectorAll('[onclick]')].filter(e => window.__a11y.visivel(e) && !/^(BUTTON|A|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY)$/.test(e.tagName) && !(e.getAttribute('role') === 'button' && e.tabIndex >= 0) && !e.closest('button, a[href]')).map(e => window.__a11y.desc(e)));
-    if(tl[0] === 'lancamentos') eq(mortos, ['div#tabLista "Lançamentos"', 'div#tabDicas "Dicas"'], `${nomeTela(tl)}: [BUG-CONHECIDO] as sub-abas "Lançamentos" e "Dicas" são <div onclick> sem role, sem tabindex e sem tecla: não dá para usá-las pelo teclado nem pelo leitor de tela; esperado: <button role="tab"> (como Resumo/Análise)`);
+    if(tl[0] === 'lancamentos') eq(mortos, [], `${nomeTela(tl)}: as sub-abas "Lançamentos" e "Dicas" são <button role="tab"> alcançáveis pelo teclado (antes: <div onclick> sem role, sem tabindex e sem tecla)`);
     else eq(mortos, [], `${nomeTela(tl)}: todo elemento clicável é botão/link ou tem role="button" + tabindex`);
   }
   await irPara(page, 'geral');
@@ -165,12 +165,37 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
     if(aberto) naoFecham.push(id);
   }
   await fecharTodos(page);
-  eq(semSemantica, ids, '[BUG-CONHECIDO] NENHUM dos 11 modais tem role="dialog" + aria-modal="true" + nome (aria-label/aria-labelledby): o leitor de tela não sabe que abriu um diálogo; esperado: todos');
-  eq(naoFecham, ids.filter(i => true), '[BUG-CONHECIDO] a tecla Esc NÃO fecha nenhum dos 11 modais (não há handler de Escape); esperado: fechar o modal aberto');
-  eq(semFocoDentro, ids.filter(i => !['modalRapido', 'modalOnboarding'].includes(i)), `[BUG-CONHECIDO] ao abrir ${ids.length - 2} dos ${ids.length} modais o foco NÃO vai para dentro dele (fica no botão que abriu / body); só o registro rápido (#rapValor) e o assistente de primeiros passos (#onbContaNome) focam o 1º campo, 50 ms depois; esperado: mover o foco para o diálogo em todos`);
-  eq(escapam.length > 0, true, `[BUG-CONHECIDO] o foco do Tab ESCAPA do modal e anda pela página de fundo em ${escapam.length} de 11 modais (sem trap de foco); esperado: o Tab circula dentro do modal`);
+  eq(semSemantica, [], `TODOS os ${ids.length} modais têm role="dialog" + aria-modal="true" + nome (aria-labelledby/aria-label); antes: nenhum tinha`);
+  eq(naoFecham, ['modalDriveConflito', 'modalTrialFim', 'modalOnboarding'], `a tecla Esc fecha ${ids.length - 3} dos ${ids.length} modais; os 3 de decisão obrigatória (conflito do Drive, fim do teste, primeiros passos) continuam abertos de propósito (antes: Esc não fechava nenhum)`);
+  eq(semFocoDentro, [], `ao abrir, o foco vai para DENTRO de todos os ${ids.length} modais (antes: ${ids.length - 2} deixavam o foco no botão que abriu)`);
+  eq(escapam, [], `o foco do Tab NÃO escapa de nenhum dos ${ids.length} modais (Tab/Shift+Tab circulam dentro; antes escapava em ${ids.length})`);
 
   // foco volta ao gatilho
+  console.log('4a. abas operáveis só pelo teclado');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await irPara(page, 'lancamentos');
+  await page.focus('#tabLista');
+  await page.keyboard.press('ArrowRight');
+  eq(await page.evaluate(() => [document.activeElement.id, document.getElementById('tabDicas').getAttribute('aria-selected'), document.getElementById('tabLista').getAttribute('aria-selected'), document.getElementById('viewDicas').style.display, document.getElementById('viewLista').style.display, document.getElementById('tabDicas').tabIndex, document.getElementById('tabLista').tabIndex]), ['tabDicas', 'true', 'false', 'block', 'none', 0, -1], 'Lançamentos/Dicas: ArrowRight move e ativa "Dicas" (aria-selected, painel e tabindex móvel)');
+  await page.keyboard.press('ArrowLeft');
+  eq(await page.evaluate(() => [document.activeElement.id, document.getElementById('viewLista').style.display]), ['tabLista', 'block'], 'Lançamentos/Dicas: ArrowLeft volta para "Lançamentos"');
+  await irPara(page, 'geral');
+  await page.focus('#subtabResumo');
+  await page.keyboard.press('ArrowRight');
+  eq(await page.evaluate(() => [document.activeElement.id, document.getElementById('subtabAnalise').getAttribute('aria-selected'), document.getElementById('geralAnalise').style.display]), ['subtabAnalise', 'true', 'block'], 'Resumo/Análise: ArrowRight move e ativa "Análise"');
+  await page.keyboard.press('Home');
+  eq(await page.evaluate(() => [document.activeElement.id, document.getElementById('geralResumo').style.display]), ['subtabResumo', 'block'], 'Resumo/Análise: Home volta para "Resumo"');
+  await page.focus('#navGeral');
+  await page.keyboard.press('ArrowRight');
+  eq(await page.evaluate(() => [document.activeElement.id, document.body.dataset.aba, document.getElementById('navLancamentos').getAttribute('aria-selected'), document.getElementById('navGeral').getAttribute('aria-selected')]), ['navLancamentos', 'lancamentos', 'true', 'false'], 'abas principais: ArrowRight vai para "Lançamentos" (aria-selected troca)');
+  await page.keyboard.press('End');
+  eq(await page.evaluate(() => [document.activeElement.id, document.body.dataset.aba]), ['navMetas', 'metas'], 'abas principais: End vai para a última ("Metas e fixos")');
+  eq(await page.evaluate(() => [...document.querySelectorAll('#navPrincipal [role=tab]')].map(t => t.tabIndex)), [-1, -1, -1, 0], 'abas principais: só a aba ativa fica na sequência do Tab (tabindex móvel)');
+  eq(await page.evaluate(() => [document.querySelectorAll('nav[aria-label]').length, document.querySelector('nav[aria-label] [role=tablist]') !== null]), [1, true], 'o <nav> de seções continua sendo landmark e contém o tablist');
+  await irPara(page, 'geral');
+  await page.focus('#navMetas'); await page.keyboard.press('Home');
+  await page.setViewportSize({ width: 390, height: 844 });
+
   console.log('4b. foco de volta ao botão que abriu o modal');
   const voltou = [];
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -187,7 +212,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
   await teste('Contas → modal de contas', async () => { await page.click('button[onclick="abrirModalContas()"].so-desktop'); }, async () => { await page.click('#modalContas button[onclick="fecharModalContas()"]:last-of-type'); }, 'button[onclick="abrirModalContas()"].so-desktop');
   await teste('⚙️ → Minha assinatura', async () => { await page.click('#btnConfig'); await page.click('button[onclick="abrirMinhaAssinatura()"]'); }, async () => { await page.click('#modalAssinatura button.secondary'); }, '#btnConfig');
   await teste('Avisos de vencimento', async () => { await page.click('#btnConfig'); await page.click('button[onclick*="abrirModalAvisos"]'); }, async () => { await page.click('#modalAvisos button[onclick="fecharModalAvisos()"]:last-of-type'); }, '#btnConfig');
-  eq(voltou.filter(([, v]) => v).map(([n]) => n), [], '[BUG-CONHECIDO] ao fechar um modal o foco NÃO volta ao botão que o abriu em NENHUM dos 4 fluxos testados (' + voltou.map(([n]) => n).join(', ') + '): o usuário de teclado/leitor de tela cai no início da página; esperado: devolver o foco ao gatilho');
+  eq(voltou.filter(([, v]) => !v).map(([n]) => n), [], 'ao fechar um modal o foco VOLTA ao botão que o abriu nos 4 fluxos testados (' + voltou.map(([n]) => n).join(', ') + '); antes: em nenhum');
   await fecharTodos(page);
   await page.setViewportSize({ width: 390, height: 844 });
 
