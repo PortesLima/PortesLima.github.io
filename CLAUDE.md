@@ -301,7 +301,7 @@ URL/referrer. `BC_PH_KEY` guarda a *Project API Key* pública (`phc_…`). O gua
 `BC_PH_KEY.indexOf('phc_COLE') !== 0` só pula o `posthog.init` se a key ainda for o placeholder
 `phc_COLE_…` — com a key real, a telemetria está ativa.
 
-**Chave corrigida na `.22`** (um `J` tinha sido transcrito como `3`: `phc_DjJk…`, não `phc_Dj3k…`): o PostHog descartou todos os eventos desde setembro; **a coleta real começa em 29/10/2026**. A chave esperada fica como constante em `tests/test-telemetria-chave.js`, que falha se `BC_PH_KEY` divergir dela e confere o token do POST real para `us.i.posthog.com/e/`.
+**Chave corrigida na `.22`** (um `J` tinha sido transcrito como `3`: `phc_DjJk…`, não `phc_Dj3k…`): o PostHog descartou todos os eventos desde setembro; **a coleta real começa em 29/10/2026**. Flag renomeado de `bc_tel_expirado` para `bc_tel_expirado2` na `.22` para reenviar `trial_expirado` de aparelhos que perderam o evento pela chave errada; a data desses eventos é a da reabertura, não a do bloqueio real. Testado em `test-telemetria-expirado` (5 checks). A chave esperada fica como constante em `tests/test-telemetria-chave.js`, que falha se `BC_PH_KEY` divergir dela e confere o token do POST real para `us.i.posthog.com/e/`.
 
 **`rastrear(evento, props)`** ([index.html](index.html), junto de `hojeISO()`) é o ponto
 ÚNICO. Contrato: falha em silêncio (sem PostHog / não inicializado / ad-blocker → nada, sem
@@ -313,7 +313,7 @@ pessoal; habilita a métrica de retenção.
 Eventos e onde disparam: `sessao_iniciada` (fim de `carregar()`), `trial_iniciado`
 (`carregarAssinatura()`, no `if` que grava `trialInicio` pela 1ª vez), `trial_expirado`
 (`rastrearTrialExpiradoUmaVez()` em `avaliarAssinatura()` quando bloqueia — flag
-`localStorage` `bc_tel_expirado`, **fora** do funil de sync, 1x por aparelho),
+`localStorage` `bc_tel_expirado2`, **fora** do funil de sync, 1x por aparelho),
 `assinar_clicado` (`assinarProvisorio()`), `continuar_consultando_clicado`
 (`continuarSoConsultando()`), `lancamento_criado` (`adicionar()` não-edição, transferência, e
 `salvarRapido()` — só o fato, com `via`), `extrato_importado` (`confirmarImportacao()`,

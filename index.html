@@ -1866,8 +1866,8 @@ function rastrear(evento, props){
 // sync do Drive (é telemetria local, não estado do app). Dispara no máx. 1x por aparelho.
 function rastrearTrialExpiradoUmaVez(){
   try{
-    if(localStorage.getItem('bc_tel_expirado') === '1') return;
-    localStorage.setItem('bc_tel_expirado', '1');
+    if(localStorage.getItem('bc_tel_expirado2') === '1') return;
+    localStorage.setItem('bc_tel_expirado2', '1');
   }catch(e){ /* sem localStorage: aceita re-enviar, é conservador */ }
   rastrear('trial_expirado');
 }
