@@ -1404,6 +1404,13 @@ function categoriasAtivas(){
   const extra = (categoriasUsuario.adicionadas || []).map(x => x.nome);
   return [...base, ...extra];
 }
+// Categoria como ela deve APARECER (nunca grava nada): lançamentos antigos gravados com categoria "" (bug do palpite
+// já corrigido, mas o dado antigo continua lá) aparecem como "Outros". Usar em toda exibição/soma por categoria,
+// para o "" juntar com o "Outros" real. Receita/transferência vazias mantêm o rótulo do próprio tipo.
+function categoriaExibida(t){
+  if(t.categoria) return t.categoria;
+  return t.tipo === 'receita' ? 'Receita' : t.tipo === 'transferencia' ? 'Transferência' : 'Outros';
+}
 // cor de qualquer categoria (por nome EFETIVO): adicionada → padrão (via renome reverso) → cinza.
 function corCategoria(nome){
   const add = (categoriasUsuario.adicionadas || []).find(x => x.nome === nome);
@@ -1448,7 +1455,7 @@ function selecionarCategoriaNoSelect(sel, cat){
 // ---- Gerenciar categorias (modal) ----
 // quantos lançamentos + orçamento + recorrentes usam uma categoria (por nome efetivo)
 function contarUsoCategoria(nome){
-  const tx = transacoes.filter(t => t.categoria === nome).length;
+  const tx = transacoes.filter(t => categoriaExibida(t) === nome).length;
   const orc = orcamentos[nome] ? 1 : 0;
   const rec = recorrentes.filter(r => r.categoria === nome).length;
   return { tx, orc, rec, total: tx + orc + rec };
@@ -2685,7 +2692,7 @@ function editar(id){
   toggleCategoriaSel();
   document.getElementById('descricao').value = t.desc;
   document.getElementById('valor').value = t.valor.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
-  selecionarCategoriaNoSelect(document.getElementById('categoria'), t.categoria);
+  selecionarCategoriaNoSelect(document.getElementById('categoria'), categoriaExibida(t));
   document.getElementById('conta').value = t.conta || contas[0];
   document.getElementById('dataInput').value = t.data;
   document.getElementById('status').value = t.status || 'pago';
@@ -3014,7 +3021,7 @@ function removerRecorrente(id){
 function exportarCSV(){
   const linhas = [['Data','Tipo','Descrição','Categoria','Conta','Status','Valor','Fixo','Tag']];
   transacoes.slice().sort((a,b)=>a.data.localeCompare(b.data)).forEach(t=>{
-    linhas.push([t.data, t.tipo, t.desc, t.categoria, t.conta||'', statusEfetivo(t), t.valor.toFixed(2).replace('.',','), t.fixo?'sim':'não', t.tag||'']);
+    linhas.push([t.data, t.tipo, t.desc, categoriaExibida(t), t.conta||'', statusEfetivo(t), t.valor.toFixed(2).replace('.',','), t.fixo?'sim':'não', t.tag||'']);
   });
   const csv = linhas.map(l => l.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
@@ -3045,7 +3052,7 @@ function filtrarTransacoes(lista){
   return lista.filter(t=>{
     if(conta && t.conta !== conta) return false;
     if(busca && !t.desc.toLowerCase().includes(busca) && !(t.tag||'').toLowerCase().includes(busca)) return false;
-    if(cat && t.categoria !== cat) return false;
+    if(cat && categoriaExibida(t) !== cat) return false;
     if(status && statusEfetivo(t) !== status) return false;
     return true;
   });
@@ -3311,7 +3318,7 @@ function render(){
   }else{
     const maiorValor = top5[0].valor;
     rankEl.innerHTML = top5.map((t,i)=>{
-      const corCat = corCategoria(t.categoria);
+      const corCat = corCategoria(categoriaExibida(t));
       const pct = Math.round((t.valor/maiorValor)*100);
       return `<div class="orc-row">
         <div class="orc-label" style="width:22px; color:var(--muted); font-weight:600;">${i+1}º</div>
@@ -3353,7 +3360,7 @@ function render(){
       const cor = ehTransf ? 'blue' : (t.tipo==='receita' ? 'green' : 'red');
       const sinal = ehTransf ? (t.subtipo==='entrada' ? '⇄ +' : '⇄ −') : (t.tipo==='receita' ? '+' : '-');
       const [y,m,d] = t.data.split('-');
-      const corCat = ehTransf ? '#4d9eff' : corCategoria(t.categoria);
+      const corCat = ehTransf ? '#4d9eff' : corCategoria(categoriaExibida(t));
       const statusEf = statusEfetivo(t);
       const statusTag = ehTransf
         ? '<span class="tag" style="background:var(--blue-bg);color:var(--blue)">transferência</span>'
@@ -3371,7 +3378,7 @@ function render(){
       tr.innerHTML = `
         <td class="col-check editable-only"><label><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" aria-label="Selecionar lançamento" ${(statusEf==='pago'||ehTransf)?'disabled':''}></label></td>
         <td class="col-desc">${t.desc}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${t.tag}</span>`:''}${tagAntiga}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
-        <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corCat}">${t.categoria}</span></td>
+        <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corCat}">${categoriaExibida(t)}</span></td>
         <td class="col-conta" data-label="Conta" style="color:var(--muted); font-size:11.5px;">${t.conta||'-'}</td>
         <td class="col-status" data-label="Status">${statusTag}</td>
         <td class="col-valor ${cor}" data-label="Valor" style="font-weight:600;">${sinal} ${fmt(t.valor)}</td>
@@ -3399,7 +3406,7 @@ function render(){
 
   // gastos por categoria
   const porCat = {};
-  gastos.forEach(t => porCat[t.categoria] = (porCat[t.categoria]||0) + t.valor);
+  gastos.forEach(t => { const c = categoriaExibida(t); porCat[c] = (porCat[c]||0) + t.valor; });
 
   // aviso é acessório: um erro aqui não pode impedir o resto do render
   try{ renderBarraVencimentos(); }catch(e){ console.error('renderBarraVencimentos', e); }
@@ -3546,7 +3553,7 @@ function mediaCategoriaUltimosMeses(cat, nMeses){
   }
   if(chaves.length === 0) return null;
   const valores = chaves.map(chave =>
-    transacoes.filter(t=>t.tipo==='gasto' && t.categoria===cat && chaveMes(t.data)===chave)
+    transacoes.filter(t=>t.tipo==='gasto' && categoriaExibida(t)===cat && chaveMes(t.data)===chave)
       .reduce((s,t)=>s+t.valor,0)
   );
   const comDados = valores.filter(v=>v>0);
@@ -4715,8 +4722,8 @@ function pdfLinhaLancamento(doc, t, y, i, colX){
   doc.text(pdfTruncar(doc, t.desc, colX.cat - colX.desc - 4), colX.desc, y);
 
   // categoria como chip colorido (fundo claro da cor + texto na cor)
-  const cor = ehTransf ? PDF_COR.azul : pdfHexRgb(corCategoria(t.categoria));
-  const cat = (t.categoria || '').substring(0, 16);
+  const cor = ehTransf ? PDF_COR.azul : pdfHexRgb(corCategoria(categoriaExibida(t)));
+  const cat = categoriaExibida(t).substring(0, 16);
   doc.setFontSize(7.5);
   const chipW = doc.getTextWidth(cat) + 4;
   const temG = typeof doc.GState === 'function';
@@ -4852,7 +4859,7 @@ function exportarPDFAnual(){
   y += 7;
 
   const porCategoria = {};
-  doAno.filter(t => t.tipo === 'gasto').forEach(t => porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor);
+  doAno.filter(t => t.tipo === 'gasto').forEach(t => { const c = categoriaExibida(t); porCategoria[c] = (porCategoria[c] || 0) + t.valor; });
   Object.entries(porCategoria).sort((a,b) => b[1] - a[1]).forEach(([cat, total], i) => {
     if(y > Hp - 20){ doc.addPage(); y = pdfCabecalho(doc, 'Relatório anual', ano) + 2; }
     if(i % 2 === 1){ doc.setFillColor(...PDF_COR.zebra); doc.rect(M, y - 4, W - M - M, 6.5, 'F'); }
@@ -4953,7 +4960,7 @@ function exportarPDFIR(){
   doc.text('CATEGORIA', M, y); doc.text('TOTAL', W - M, y, { align: 'right' });
   y += 7;
   const porCat = {};
-  doAno.filter(t => t.tipo === 'gasto').forEach(t => porCat[t.categoria] = (porCat[t.categoria] || 0) + t.valor);
+  doAno.filter(t => t.tipo === 'gasto').forEach(t => { const c = categoriaExibida(t); porCat[c] = (porCat[c] || 0) + t.valor; });
   const catsOrd = Object.entries(porCat).sort((a,b) => b[1] - a[1]);
   if(catsOrd.length === 0){
     doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(...PDF_COR.muted);

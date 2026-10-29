@@ -82,7 +82,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   com `via`), relógio para trás, `assinatura` ausente/corrompida, merge no sync. PostHog é um stub em memória
   (`window.posthog` com `__SV`), nada vai à rede. Prefixos: `[BUG-CONHECIDO]` (parece errado hoje) e
   `[PROVISORIO-FASE2]` (vale só sem backend/cobrança — vai falhar de propósito quando a Fase 2 entrar).
-- `test-categorias` (219) — **reconstrução (Bloco 3)**: `normalizarCategoriasUsuario`; adicionar (vazio, espaços, 30/31,
+- `test-categorias` (228) — **reconstrução (Bloco 3)**: `normalizarCategoriasUsuario`; adicionar (vazio, espaços, 30/31,
   duplicata em outra caixa, reservadas, cores da paleta); renomear (vínculos em lançamentos, orçamento e contas fixas,
   restaurar, colisões); excluir (sem uso, com uso + destino, destino padrão, cadeia, renomeada, `Outros`); nomes hostis
   (HTML/aspas/emoji/barra) em ~10 telas; limites de orçamento (0, vazio, alto, vírgula/ponto, `Infinity`); "Orçamento em
@@ -93,7 +93,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   um cenário com as contas à mão, ponto flutuante (0,1+0,2), ciclo de fatura (fechamento/vencimento, dia do fechamento,
   dez→jan, fev/bissexto), card de faturas e parcelas × fatura. Usa `emulateMedia({reducedMotion:'reduce'})` para o texto dos
   KPIs não passar pelo tween. 9 `[BUG-CONHECIDO]`.
-- `test-pdf` (81) — **reconstrução (Bloco 4)**: `exportarCSV` (BOM, `;`, aspas, quebra de linha, acentos, status efetivo, BRL
+- `test-pdf` (85) — **reconstrução (Bloco 4)**: `exportarCSV` (BOM, `;`, aspas, quebra de linha, acentos, status efetivo, BRL
   cru, ida e volta) e os 3 PDFs (`exportarPDF`/`Anual`/`IR`) com o jsPDF real e o construtor espiado (texto desenhado por
   `doc.text`, páginas, tamanho; `save()` interceptado): totais e contagem de linhas batem com a tela, mês/ano vazio, 70
   linhas em várias páginas, texto hostil. 6 `[BUG-CONHECIDO]`.
@@ -139,6 +139,12 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] addMeses("2026-01-30", 1) = 02/03; esperado 28/02` → `addMeses("2026-01-30", 1) = 28/02 (antes: 02/03)`
 - `[BUG-CONHECIDO] mesmo em ano bissexto: 31/01/2028 + 1 mês = 02/03; esperado 29/02` → `mesmo em ano bissexto: 31/01/2028 + 1 mês = 29/02 (antes: 02/03)`
 - (novos) 588 combinações contra um oráculo independente (anos 2026/27/28/2100/2000 × todos os meses × dias 29/30/31 × +0/+1/+2/+12), virada de ano, mês negativo, 12 parcelas do dia 31 partindo da data original, formulário real (3x de 31/01; 5x de 30/12) e conta fixa no dia 05.
+
+**Pacote A2 (categoria "" legada, só exibição)** — `tests/test-categorias.js`
+- `[BUG-CONHECIDO] resíduo (não migrado de propósito): lançamento antigo com categoria "" aparece com chip vazio na tabela e com NOME VAZIO em "Para onde foi o dinheiro" e na lista de orçamento` → `tabela: o lançamento com categoria "" mostra o chip "Outros"` + `"Para onde foi o dinheiro": o "" soma com o "Outros" real numa linha só (90 + 5 = 95)` + `lista de orçamento: "Outros" junta o "" com o real`
+- `[BUG-CONHECIDO] resíduo: a dica sai quebrada — "Sua maior categoria de gasto é , representando 90%…"` → `dica: "Sua maior categoria de gasto é Outros, representando 90% do total gasto no mês."`
+- `[BUG-CONHECIDO] resíduo: editar() um lançamento com categoria "" abre o formulário com a 1ª categoria da lista ("Moradia")…` → `editar() num lançamento com categoria "" abre com "Outros" selecionado…`
+- (novos) filtro "Outros" inclui o ""; "Orçamento em risco" e alerta contam o "" dentro de "Outros"; `contarUsoCategoria`; o dado gravado não é reescrito; em `test-pdf`: chip "Outros" no PDF mensal e soma única no anual e no IR; CSV exporta "Outros" para o "" (sem reescrever o dado).
 
 **Pacote A (categoria do palpite)** — `tests/test-categorias.js`
 - `[BUG-CONHECIDO] palpitarCategoria devolve o nome PADRÃO ("Alimentação") mesmo depois de renomeada para "Comida"/oculta…` → `palpitarCategoria passa pelo mapa de renomes: "IFOOD pedido" → "Comida"`
@@ -696,10 +702,11 @@ confirmation toast is ~1.2s.
 `nomeCategoriaPadrao()` (renome Alimentação→Comida → "Comida") e, se a padrão foi ocultada/excluída, cai em `'Outros'` (sem palavra-chave
 casada continua `null`). Antes devolvia o nome padrão cru; o `<select>` não tinha essa opção, ficava vazio e o gasto era salvo com
 `categoria: ""`. Além disso `adicionar()`, `salvarRapido()`, `criarRecorrente()` e `confirmarImportacao()` aplicam `|| 'Outros'`: **nunca
-se grava categoria vazia**. Lançamentos antigos JÁ gravados com `""` **não são migrados** (decisão): aparecem com chip vazio na
-tabela, nome vazio em "Para onde foi o dinheiro"/orçamento, dica "Sua maior categoria de gasto é , …", e `editar()` abre o
-formulário na 1ª categoria da lista (salvar sem reparar troca a categoria em silêncio) — 3 checks `[BUG-CONHECIDO]` de resíduo em
-`test-categorias`.
+se grava categoria vazia**. Lançamentos antigos JÁ gravados com `""` **não são reescritos** (nada no storage muda), mas **na exibição aparecem como "Outros"** (pacote A2):
+helper único `categoriaExibida(t)` (`""` → `Outros`; receita vazia → `Receita`; transferência vazia → `Transferência`), usado na tabela
+(chip + cor), no filtro de categoria, em `porCat` (soma que alimenta "Para onde foi o dinheiro", Orçamento, risco, alertas, dicas e o
+gráfico — o `""` **soma com o `Outros` real**), na média por categoria, em `contarUsoCategoria`, no `editar()` (abre com `Outros`, não com a
+1ª da lista) e nos 3 PDFs. O **CSV exporta `""` como `Outros`** (o dado gravado não muda). Testado em `test-categorias` e `test-pdf`.
 
 ### Onboarding guiado
 

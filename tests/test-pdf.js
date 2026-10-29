@@ -200,6 +200,19 @@ const exportarCSV = (page) => page.evaluate(async () => {
   const v6 = r.texts.filter(t => t.x > 150).map(t => t.s.replace(/[  ]/g, ' ')).filter(s => /^- R\$ /.test(s)).map(s => cents(s)) .reduce((a, b) => a + b, 0); // só a coluna VALOR das linhas (o número-herói fica em x=14)
   ok(tem(r, R(4.6)) && v6 === 460, `6 gastos decimais: o total do PDF (${R(4.6)}) é a soma exata das linhas em centavos (${v6})`);
 
+  // categoria "" legada (pacote A2): o PDF mostra "Outros" no chip; o anual junta com o "Outros" real
+  await poe(page, { tx: [T(1, { categoria: '', valor: 90 }), T(2, { categoria: 'Outros', valor: 5 })] });
+  r = await pdf(page, 'exportarPDF');
+  eq(S(r).filter(s => s === 'Outros').length, 2, 'PDF mensal: lançamento com categoria "" sai com o chip "Outros" (2 chips "Outros", nenhum vazio)');
+  await page.evaluate(() => { document.getElementById('anoRelatorio').value = '2026'; });
+  r = await pdf(page, 'exportarPDFAnual');
+  ok(tem(r, '- ' + R(95)) && !tem(r, '- ' + R(90)), 'PDF anual: "Gastos por categoria" junta o "" com o "Outros" real numa linha só (− R$ 95,00)');
+  r = await pdf(page, 'exportarPDFIR');
+  ok(tem(r, '- ' + R(95)) && !tem(r, '- ' + R(90)), 'PDF de IR: gastos por categoria também junta o "" com "Outros" (− R$ 95,00)');
+  const csvA2 = csvParse((await exportarCSV(page)).texto).slice(1).map(l => l[3]).sort();
+  eq(csvA2, ['Outros', 'Outros'], 'o CSV exporta a categoria "" legada como "Outros" (o dado gravado não muda; só o arquivo sai completo)');
+  eq(await page.evaluate(() => transacoes.map(t => t.categoria).sort()), ['', 'Outros'], '… e o dado gravado continua com "" (a exportação não reescreve nada)');
+
   // ================= 3. PDF anual =================
   console.log('3. exportarPDFAnual');
   const ANO = [

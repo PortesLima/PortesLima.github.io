@@ -274,26 +274,39 @@ const alertasOrc = (page) => page.evaluate(() => [...document.querySelectorAll('
   eq(await page.evaluate(() => recorrentes[recorrentes.length - 1].categoria), 'Outros', 'conta que se repete com select vazio: salva em "Outros"');
   await page.evaluate(() => { document.getElementById('tipo').value = 'receita'; });
   eq(await page.evaluate(async () => { document.getElementById('descricao').value = 'salario'; document.getElementById('valor').value = '100'; await adicionar(); return transacoes[0].categoria; }), 'Receita', 'receita continua sempre com a categoria "Receita"');
-  // lançamentos JÁ gravados com categoria "" NÃO são migrados (decisão do pacote A) — como o app os mostra hoje
-  await reset(page, { tx: [T(1, '', 90), T(2, 'Alimentação', 10)] });
-  eq(await page.evaluate(() => transacoes.map(t => t.categoria)), ['', 'Alimentação'], 'o lançamento antigo com categoria "" continua com "" (nenhuma migração automática)');
+  // lançamentos JÁ gravados com categoria "" NÃO são reescritos (pacote A), mas na EXIBIÇÃO aparecem como "Outros" (pacote A2)
+  await reset(page, { tx: [T(1, '', 90), T(2, 'Alimentação', 10), T(3, 'Outros', 5)], orc: { Outros: 100 } });
+  eq(await page.evaluate(() => transacoes.map(t => t.categoria)), ['', 'Alimentação', 'Outros'], 'o dado gravado NÃO é reescrito: o lançamento antigo continua com categoria "" na memória');
+  eq(await page.evaluate(() => JSON.parse(localStorage.getItem('bc_transacoes')).map(t => t.categoria)), ['', 'Alimentação', 'Outros'], '… e no localStorage');
+  eq(await page.evaluate(() => [categoriaExibida({ tipo: 'gasto', categoria: '' }), categoriaExibida({ tipo: 'gasto' }), categoriaExibida({ tipo: 'gasto', categoria: 'Lazer' }), categoriaExibida({ tipo: 'receita', categoria: '' }), categoriaExibida({ tipo: 'transferencia', categoria: '' })]), ['Outros', 'Outros', 'Lazer', 'Receita', 'Transferência'], 'helper categoriaExibida: "" → Outros (gasto), Receita (receita), Transferência (transferência); categoria real fica como está');
   await page.evaluate(() => { mudarAbaPrincipal('lancamentos'); render(); });
   const vazia = await page.evaluate(() => {
-    const tab = [...document.querySelectorAll('#corpoTabela tr')].map(tr => (tr.querySelector('.col-cat') || {}).textContent.trim());
+    const chips = [...document.querySelectorAll('#corpoTabela tr')].map(tr => (tr.querySelector('.col-cat') || {}).textContent.trim());
+    document.getElementById('filtroCategoria').value = 'Outros'; render();
+    const filtradas = document.querySelectorAll('#corpoTabela tr').length;
+    document.getElementById('filtroCategoria').value = ''; render();
     mudarAbaPrincipal('geral'); render();
     return {
-      tabela: tab,
-      paraOnde: [...document.querySelectorAll('#paraOndeLista .po-nome')].map(e => e.textContent),
-      orc: [...document.querySelectorAll('#orcamentos .orc-label')].map(e => e.textContent),
-      dica: [...document.querySelectorAll('#listaDicas .alert')].map(a => a.textContent).find(t => /maior categoria/.test(t)) || '',
-      filtro: [...document.getElementById('filtroCategoria').options].some(o => o.value === ''  && o.textContent !== 'Todas categorias'),
+      chips,
+      filtradas,
+      paraOnde: [...document.querySelectorAll('#paraOndeLista .po-row')].map(r => r.querySelector('.po-nome').textContent + ' | ' + r.querySelector('.po-valor').textContent.replace(/\s+/g, ' ')),
+      orc: [...document.querySelectorAll('#orcamentos .orc-row')].map(r => r.querySelector('.orc-label').textContent + ' | ' + r.querySelector('.orc-val').textContent.replace(/\s+/g, ' ')),
+      dica: [...document.querySelectorAll('#listaDicas .alert')].map(a => a.textContent.replace(/\s+/g, ' ')).find(t => /maior categoria/.test(t)) || '',
+      uso: contarUsoCategoria('Outros'),
     };
   });
-  eq([vazia.tabela.includes(''), vazia.paraOnde.includes(''), vazia.orc.includes('')], [true, true, true], '[BUG-CONHECIDO] resíduo (não migrado de propósito): lançamento antigo com categoria "" aparece com chip vazio na tabela e com NOME VAZIO em "Para onde foi o dinheiro" e na lista de orçamento');
-  ok(/maior categoria de gasto é\s*,/.test(vazia.dica), '[BUG-CONHECIDO] resíduo: a dica sai quebrada — "Sua maior categoria de gasto é , representando 90% do total gasto no mês."');
+  eq(vazia.chips.slice().sort(), ['Alimentação', 'Outros', 'Outros'], 'tabela: o lançamento com categoria "" mostra o chip "Outros" (nenhum chip vazio)');
+  eq(vazia.filtradas, 2, 'filtro por categoria "Outros" inclui o lançamento antigo com "" (2 linhas: o "" e o "Outros" real)');
+  eq(vazia.paraOnde, ['Outros | R$ 95,00', 'Alimentação | R$ 10,00'], '"Para onde foi o dinheiro": o "" soma com o "Outros" real numa linha só (90 + 5 = 95), sem linha de nome vazio');
+  eq(vazia.orc, ['Alimentação | R$ 10,00', 'Outros | R$ 95,00 / R$ 100,00'], 'lista de orçamento: "Outros" junta o "" com o real (95 de 100), sem rótulo vazio');
+  ok(/Sua maior categoria de gasto é Outros, representando 90% do total gasto no mês\./.test(vazia.dica), 'dica: "Sua maior categoria de gasto é Outros, representando 90% do total gasto no mês." (sem duplicar nem quebrar)');
+  eq(await risco(page), [{ cat: 'Outros', val: '95% · R$ 95,00 / R$ 100,00' }], '"Orçamento em risco" conta o "" dentro de "Outros" (95% do limite de 100)');
+  eq((await alertasOrc(page)).length, 1, 'alerta de orçamento de "Outros" também considera o "" (1 alerta, 95%)');
+  eq(vazia.uso, { tx: 2, orc: 1, rec: 0, total: 3 }, 'contarUsoCategoria("Outros") conta o "" junto (2 lançamentos + orçamento)');
   await page.evaluate(() => editar(1));
-  eq(await page.evaluate(() => document.getElementById('categoria').value), 'Moradia', '[BUG-CONHECIDO] resíduo: editar() um lançamento com categoria "" abre o formulário com a 1ª categoria da lista ("Moradia") — salvar sem reparar TROCARIA a categoria em silêncio');
+  eq(await page.evaluate(() => document.getElementById('categoria').value), 'Outros', 'editar() num lançamento com categoria "" abre com "Outros" selecionado (e não "Moradia", que trocaria a categoria em silêncio ao salvar)');
   await page.evaluate(() => cancelarEdicao());
+  eq(await page.evaluate(() => transacoes.map(t => t.categoria)), ['', 'Alimentação', 'Outros'], 'abrir e cancelar a edição não grava nada');
 
   // ================= 5. nomes hostis =================
   console.log('5. nomes com HTML, aspas e emoji');
