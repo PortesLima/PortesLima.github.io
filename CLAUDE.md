@@ -161,6 +161,20 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - (`test-a11y`, efeito colateral) `[BUG-CONHECIDO] a janela do comprovante (verAnexo) escreve a <img> SEM alt…` → `a janela do comprovante (verAnexo) escreve a <img> com alt="Comprovante: …" (escapado)`
 - (novos) `test-escape`: guarda do código-fonte + dinâmico (acima). **Correção:** `escHtml` em ~45 pontos (5 toasts, 4 `<option>` de contas, `renderListaContas` reescrita com `data-conta` no lugar do nome em `onclick/id`, "Orçamento em risco" com `data-cat`, alertas, Dicas, tabela, orçamento, metas, fixas, saldos por conta, comprovante com `alt`/`<title>` escapados, botão excluir categoria com `data-chave`); `corHexValida` em `corCategoria`, `normalizarCategoriasUsuario` e `renderListaCategorias`.
 
+**Leva 2 · P5 (centavos e consistência)** — `tests/test-saldos.js`, `test-categorias.js`, `test-pdf.js`
+- Helper único `cent(x)` (`Math.round(x*100)`), usado **só** nestes pontos de decisão: `saldo` e `saldoAnt` do `render()` ("Sobrou"), `livre` do "Fim do mês", alerta/risco/barra de orçamento (**estourou**: `cent(gasto) >= cent(limite)`; **80 %**: `cent(gasto)*5 >= cent(limite)*4`, sem multiplicar por 0,8) e a frase/herói do PDF mensal. Não espalhar pelo resto do app.
+- `[BUG-CONHECIDO] 0,30 − (0,10 + 0,20) = −5,5e-17 é mostrado como "-R$ 0,00"…` → `0,30 − (0,10 + 0,20) fecha ao centavo: "R$ 0,00" (antes: "-R$ 0,00" por resíduo de −5,5e-17)`
+- `[BUG-CONHECIDO] saldo 0,30 e contas a pagar 0,10 + 0,20 … aparece como "faltam R$ 0,00" no vermelho…` → `saldo 0,30 e contas a pagar 0,10 + 0,20 (sobra exatamente R$ 0,00): "você fica com R$ 0,00" (antes: "faltam R$ 0,00" no vermelho)`
+- `[BUG-CONHECIDO] 10 × R$ 0,10 contra limite de R$ 1,00 mostra "100%" mas NÃO "estourou"…` → `10 × R$ 0,10 contra limite de R$ 1,00 (soma 0,9999999999999999): mostra "estourou" (antes: "100%" sem estourar)`
+- `[BUG-CONHECIDO] gasto 2,40 de limite 3,00 (exatamente 80%) NÃO entra em risco…` → `gasto 2,40 de limite 3,00 (exatamente 80%) ENTRA em risco (antes: 3 × 0,8 = 2,4000000000000004 deixava de fora)`
+- (`test-pdf`) `[BUG-CONHECIDO] 0,30 de receita − (0,10 + 0,20) de gasto: o PDF diz "- R$ 0,00" e "você gastou R$ 0,00 a mais do que ganhou"…` → `… o PDF diz "R$ 0,00" no positivo (antes: "- R$ 0,00" e "você gastou R$ 0,00 a mais do que ganhou")`
+- `[BUG-CONHECIDO] limite Infinity/1e400 é gravado como null (JSON) e se perde ao recarregar…` → `limite "Infinity" é REJEITADO na digitação: o orçamento não muda (antes era gravado como null e se perdia)` (+ `"1e400"` idem; o check `"Infinity" é aceito como limite` foi removido: era a caracterização do bug). `setOrcamento` rejeita ±Infinity com toast "Valor do limite inválido."
+- `[BUG-CONHECIDO] renomear para o nome reservado "Receita" é ACEITO…` → `renomear para o nome reservado "Receita" é BLOQUEADO (mesma regra do adicionar; antes era aceito)` (+ `"transferência"` em outra caixa)
+- `[BUG-CONHECIDO] renomear aceita nome de 80 caracteres…` → `renomear com nome de 80 caracteres é BLOQUEADO (limite de 30, igual ao adicionar; antes era aceito)` (+ exatamente 30 é aceito)
+- `[BUG-CONHECIDO] orçamento com valor 0 não conta como uso… chave órfã { Lazer: 0 }` → `orçamento com valor 0 = "sem limite": a categoria some SEM painel e a chave { Lazer: 0 } é limpa do orçamento` (0 segue **não** contando como uso; excluir a categoria apaga a chave)
+- `[BUG-CONHECIDO] a opção transitória "Fantasma (fora da lista)" continua no select depois de cancelar a edição…` → `a opção transitória "Fantasma (fora da lista)" some do select ao cancelar a edição` (`data-transitoria`, removida em `cancelarEdicao`)
+- Fora do P5 (não refeito): persistência do tema (já no pacote H).
+
 
 **Pacote E ("Fim do mês" e "dura até")** — `tests/test-saldos.js`
 - `[BUG-CONHECIDO] o "ritmo atual" soma o aluguel PENDENTE de 28/09 como se já tivesse sido gasto…` → `com saldo inicial: o aluguel PENDENTE de 28/09 não entra no ritmo (100 pagos em 10 dias = 10/dia) → "ok"` (+ `novo usuário com aluguel pendente de 900 no dia 28: … R$ 20/dia → "ok"`)

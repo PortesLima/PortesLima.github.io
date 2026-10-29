@@ -194,7 +194,7 @@ const exportarCSV = (page) => page.evaluate(async () => {
   // ponto flutuante
   await poe(page, { tx: [REC(1, { valor: 0.3 }), T(2, { valor: 0.1 }), T(3, { valor: 0.2 })] });
   r = await pdf(page, 'exportarPDF');
-  ok(tem(r, '- ' + R(0)) && S(r).some(s => /você gastou R\$ 0,00 a mais do que ganhou/.test(s)), '[BUG-CONHECIDO] 0,30 de receita − (0,10 + 0,20) de gasto: o PDF diz "- R$ 0,00" e "você gastou R$ 0,00 a mais do que ganhou" (saldo −5,5e-17); esperado: "R$ 0,00" no positivo');
+  ok(tem(r, R(0)) && !tem(r, '- ' + R(0)) && !S(r).some(x => /a mais do que ganhou/.test(x)), '0,30 de receita − (0,10 + 0,20) de gasto: o PDF diz "R$ 0,00" no positivo (antes: "- R$ 0,00" e "você gastou R$ 0,00 a mais do que ganhou")');
   await poe(page, { tx: [T(1, { valor: 0.1 }), T(2, { valor: 0.2 }), T(3, { valor: 0.3 }), T(4, { valor: 0.7 }), T(5, { valor: 1.1 }), T(6, { valor: 2.2 })] });
   r = await pdf(page, 'exportarPDF');
   const v6 = r.texts.filter(t => t.x > 150).map(t => t.s.replace(/[  ]/g, ' ')).filter(s => /^- R\$ /.test(s)).map(s => cents(s)) .reduce((a, b) => a + b, 0); // só a coluna VALOR das linhas (o número-herói fica em x=14)

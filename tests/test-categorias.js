@@ -149,10 +149,14 @@ const alertasOrc = (page) => page.evaluate(() => [...document.querySelectorAll('
   eq([(await cu(page)).renomes, await lerTx(page)], [{ Lazer: 'lazer' }, [[1, 'lazer']]], 'mudar só a caixa ("lazer") é aceito e propaga');
   await reset(page, { tx: [T(1, 'Lazer')] });
   await renomear(page, 'Lazer', 'Receita');
-  eq((await cu(page)).renomes, { Lazer: 'Receita' }, '[BUG-CONHECIDO] renomear para o nome reservado "Receita" é ACEITO (adicionar bloqueia "Receita"/"Transferência"); esperado: bloquear');
+  eq((await cu(page)).renomes, {}, 'renomear para o nome reservado "Receita" é BLOQUEADO (mesma regra do adicionar; antes era aceito)');
+  await renomear(page, 'Lazer', 'transferência');
+  eq((await cu(page)).renomes, {}, 'renomear para "transferência" (outra caixa) também é bloqueado');
   await reset(page, { tx: [T(1, 'Lazer')] });
   await renomear(page, 'Lazer', 'x'.repeat(80));
-  eq((await cu(page)).renomes.Lazer.length, 80, '[BUG-CONHECIDO] renomear aceita nome de 80 caracteres (adicionar limita a 30); esperado: mesmo limite');
+  eq((await cu(page)).renomes, {}, 'renomear com nome de 80 caracteres é BLOQUEADO (limite de 30, igual ao adicionar; antes era aceito)');
+  await renomear(page, 'Lazer', 'x'.repeat(30));
+  eq((await cu(page)).renomes.Lazer.length, 30, 'renomear com exatamente 30 caracteres é aceito');
   // renomear para o nome de uma padrão oculta
   await reset(page, { tx: [T(1, 'Lazer')] });
   await excluir(page, 'Doação');
@@ -217,13 +221,13 @@ const alertasOrc = (page) => page.evaluate(() => [...document.querySelectorAll('
   // orçamento de limite 0/ausente não conta como uso
   await reset(page, { tx: [], orc: { Lazer: 0 } });
   await excluir(page, 'Lazer');
-  eq([(await moverBox(page)).aberto, (await cu(page)).ocultas, await page.evaluate(() => orcamentos)], [false, ['Lazer'], { Lazer: 0 }], '[BUG-CONHECIDO] orçamento com valor 0 não conta como uso: a categoria some SEM painel e a chave órfã { Lazer: 0 } fica no orçamento (esperado: limpar)');
+  eq([(await moverBox(page)).aberto, (await cu(page)).ocultas, await page.evaluate(() => orcamentos)], [false, ['Lazer'], {}], 'orçamento com valor 0 = "sem limite": a categoria some SEM painel e a chave { Lazer: 0 } é limpa do orçamento (antes ficava órfã)');
   // lançamento com categoria fora da lista (editar não troca em silêncio)
   await reset(page, { tx: [T(1, 'Fantasma', 12)] });
   await page.evaluate(() => editar(1));
   eq(await page.evaluate(() => [document.getElementById('categoria').value, [...document.getElementById('categoria').options].find(o => o.value === 'Fantasma').textContent]), ['Fantasma', 'Fantasma (fora da lista)'], 'editar() com categoria fora da lista injeta a opção "(fora da lista)" e a mantém selecionada');
   await page.evaluate(() => cancelarEdicao());
-  eq(await page.evaluate(() => [...document.getElementById('categoria').options].some(o => o.value === 'Fantasma')), true, '[BUG-CONHECIDO] a opção transitória "Fantasma (fora da lista)" continua no select depois de cancelar a edição (só some no próximo popularSelectsEstaticos); esperado: removê-la');
+  eq(await page.evaluate(() => [...document.getElementById('categoria').options].some(o => o.value === 'Fantasma')), false, 'a opção transitória "Fantasma (fora da lista)" some do select ao cancelar a edição (antes ficava até o próximo popularSelectsEstaticos)');
 
   // palpite de categoria × renome/ocultação (pacote A): o palpite passa pelo mapa de renomes e nunca devolve
   // uma categoria que não existe na lista; e salvar nunca grava categoria vazia
@@ -360,8 +364,10 @@ const alertasOrc = (page) => page.evaluate(() => [...document.querySelectorAll('
   await setOrc(page, 'Lazer', '500');
   await setOrc(page, 'Lazer', '0');
   eq(await page.evaluate(() => Object.keys(orcamentos)), [], 'zerar apaga a chave (não deixa { Lazer: 0 })');
-  eq(await setOrc(page, 'Lazer', 'Infinity'), Infinity, '"Infinity" é aceito como limite');
-  eq(await page.evaluate(() => localStorage.getItem('bc_orcamentos')), '{"Lazer":null}', '[BUG-CONHECIDO] limite Infinity/1e400 é gravado como null (JSON) e se perde ao recarregar; esperado: rejeitar na digitação');
+  await setOrc(page, 'Lazer', 'Infinity');
+  eq(await page.evaluate(() => [Object.keys(orcamentos), localStorage.getItem('bc_orcamentos')]), [[], '{}'], 'limite "Infinity" é REJEITADO na digitação: o orçamento não muda (antes era gravado como null e se perdia)');
+  await setOrc(page, 'Lazer', '1e400');
+  eq(await page.evaluate(() => Object.keys(orcamentos)), [], 'limite "1e400" (vira Infinity) também é rejeitado');
   await setOrc(page, 'Lazer', '0');
   // exibição
   await reset(page, { tx: [T(1, 'Lazer', 30)], orc: { Lazer: 1500.5 } });
@@ -396,7 +402,7 @@ const alertasOrc = (page) => page.evaluate(() => [...document.querySelectorAll('
   eq((await risco(page)) === null ? null : 'em risco', 'em risco', 'só o mês selecionado conta (0,50 de agosto não muda setembro)');
   // limites decimais e ponto flutuante
   await reset(page, { tx: [T(1, 'Lazer', 2.4)], orc: { Lazer: 3 } });
-  eq(await risco(page), null, '[BUG-CONHECIDO] gasto 2,40 de limite 3,00 (exatamente 80%) NÃO entra em risco: 3 × 0,8 = 2,4000000000000004 no ponto flutuante; esperado: entrar');
+  eq((await risco(page)) === null ? null : 'em risco', 'em risco', 'gasto 2,40 de limite 3,00 (exatamente 80%) ENTRA em risco (antes: 3 × 0,8 = 2,4000000000000004 deixava de fora)');
   await reset(page, { tx: [T(1, 'Lazer', 0.8)], orc: { Lazer: 1 } });
   ok((await risco(page)) !== null, 'gasto 0,80 de limite 1 (80%): entra');
   await reset(page, { tx: [T(1, 'Lazer', 0.01)], orc: { Lazer: 0.01 } });

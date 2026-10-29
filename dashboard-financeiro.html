@@ -1450,7 +1450,7 @@ function selecionarCategoriaNoSelect(sel, cat){
   if(!cat) return;
   if(![...sel.options].some(o => o.value === cat)){
     const o = document.createElement('option');
-    o.value = cat; o.textContent = cat + ' (fora da lista)';
+    o.value = cat; o.textContent = cat + ' (fora da lista)'; o.dataset.transitoria = '1';
     sel.appendChild(o);
   }
   sel.value = cat;
@@ -1529,6 +1529,8 @@ async function renomearCategoria(chave, novoBruto){
   if(!l) return;
   const novo = (novoBruto || '').trim();
   if(!novo || novo === l.nome){ renderListaCategorias(); return; }
+  if(novo.length > 30){ alert('Nome muito longo (máx. 30 caracteres).'); renderListaCategorias(); return; }
+  if(['receita', 'transferência'].includes(novo.toLowerCase())){ alert(`"${novo}" é um nome reservado.`); renderListaCategorias(); return; }
   // colisão com outra categoria ativa
   if(categoriasAtivas().some(c => c.toLowerCase() === novo.toLowerCase() && c !== l.nome)){
     alert(`Já existe uma categoria "${novo}".`);
@@ -1572,6 +1574,7 @@ function excluirCategoria(chave){
   if(!l || l.nome === 'Outros') return;
   const uso = contarUsoCategoria(l.nome);
   if(uso.total === 0){
+    if(l.nome in orcamentos){ delete orcamentos[l.nome]; salvarOrc(); }   // limite 0/vazio = "sem limite": não deixa chave órfã
     _removerCategoria(l);
     return;
   }
@@ -2187,6 +2190,9 @@ function fmt(v){
 }
 // sempre em BRL, sem conversão de moeda — usado nos exports (CSV/PDF), pelo mesmo motivo
 // do CSV: um arquivo baixado não deve depender da moeda de exibição escolhida na hora.
+// arredonda ao centavo: somas de decimais (0,1+0,2) deixam resíduo de ponto flutuante (−5,5e-17) que vira "-R$ 0,00".
+// Usado SÓ nos pontos de decisão mapeados (saldo, sobra/falta, 80%/estourou, frase do PDF) — não espalhar.
+function cent(x){ return Math.round(x * 100); }
 function fmtBRL(v){
   return v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 }
@@ -2726,6 +2732,7 @@ function editar(id){
 }
 function cancelarEdicao(){
   editandoId = null;
+  document.querySelectorAll('#categoria option[data-transitoria]').forEach(o => o.remove());
   document.getElementById('formTituloLancamento').textContent = 'Novo lançamento';
   document.getElementById('btnAdicionar').textContent = 'Adicionar';
   document.getElementById('btnCancelarEdicao').style.display = 'none';
@@ -2934,6 +2941,7 @@ function toggleOrcEdit(){
 }
 function setOrcamento(cat, val){
   const n = parseValorBR(val);
+  if(n === Infinity || n === -Infinity){ mostrarToast('Valor do limite inválido.', {}); render(); return; }
   if(!isNaN(n) && n > 0) orcamentos[cat] = n; else delete orcamentos[cat];
   salvarOrc();
   render();
@@ -3182,7 +3190,7 @@ function render(){
   const gastos = todasDoMes.filter(t=>t.tipo==='gasto');
   const totalReceita = receitas.reduce((s,t)=>s+t.valor,0);
   const totalGasto = gastos.reduce((s,t)=>s+t.valor,0);
-  const saldo = totalReceita - totalGasto;
+  const saldo = (cent(totalReceita) - cent(totalGasto)) / 100;
   const taxaPoupanca = totalReceita > 0 ? Math.round((saldo/totalReceita)*100) : 0;
 
   // comparação com mês anterior
@@ -3190,7 +3198,7 @@ function render(){
   const doMesAnt = transacoes.filter(t=>chaveMes(t.data)===chaveAnt && (!conta || t.conta===conta));
   const receitaAnt = somarPorTipo(doMesAnt, 'receita');
   const gastoAnt = somarPorTipo(doMesAnt, 'gasto');
-  const saldoAnt = receitaAnt - gastoAnt;
+  const saldoAnt = (cent(receitaAnt) - cent(gastoAnt)) / 100;
 
   function deltaTxt(atual, anterior, invertido){
     if(anterior === 0) return '';
@@ -3593,7 +3601,7 @@ function renderOrcamentos(porCat){
     const limite = orcamentos[c];
     const cor = corCategoria(c);
     let pct = limite ? Math.min(100, (gasto/limite)*100) : 0;
-    let corBarra = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : cor;
+    let corBarra = (limite && cent(gasto) >= cent(limite)) ? 'var(--red)' : (limite && cent(gasto) * 5 >= cent(limite) * 4) ? 'var(--amber)' : cor;
     const media = mediaCategoriaUltimosMeses(c, 3);
     let comparativo = '';
     if(media && gasto > 0){
@@ -3815,9 +3823,9 @@ function renderAlertas(porCat, totalReceita, totalGasto, saldo, taxaPoupanca, do
   Object.entries(porCat).forEach(([cat,val])=>{
     const limite = orcamentos[cat];
     if(!limite) return;
-    if(val >= limite){
+    if(cent(val) >= cent(limite)){
       alertas.push({tipo:'danger', ico:'⚠', html:`Categoria <b>${escHtml(cat)}</b> estourou o orçamento: ${fmt(val)} de ${fmt(limite)} previstos.`});
-    }else if(val >= limite*0.8){
+    }else if(cent(val) * 5 >= cent(limite) * 4){
       alertas.push({tipo:'warning', ico:'!', html:`Categoria <b>${escHtml(cat)}</b> já usou ${Math.round(val/limite*100)}% do orçamento (${fmt(val)} de ${fmt(limite)}).`});
     }
   });
@@ -4061,7 +4069,7 @@ function renderLivreParaGastar(){
     .reduce((s,t)=>s+t.valor,0);
 
   const aindaFaltaPagar = contasAbertas + parcelasAbertas + recorrentesFalta;
-  const livre = saldoHoje + receitaAReceber - aindaFaltaPagar;
+  const livre = (cent(saldoHoje) + cent(receitaAReceber) - cent(aindaFaltaPagar)) / 100;
   const porDia = livre / diasRestantes;
 
   const sobra = livre >= 0;
@@ -4308,13 +4316,13 @@ function renderOrcamentoRisco(porCat){
   if(!card || !lista) return;
   const emRisco = Object.keys(orcamentos)
     .map(cat => ({ cat, gasto: porCat[cat] || 0, limite: orcamentos[cat] }))
-    .filter(o => o.limite > 0 && o.gasto >= o.limite * 0.8)
+    .filter(o => o.limite > 0 && cent(o.gasto) * 5 >= cent(o.limite) * 4)
     .sort((a,b) => (b.gasto/b.limite) - (a.gasto/a.limite));
   if(emRisco.length === 0){ card.style.display = 'none'; return; }
   card.style.display = 'block';
   lista.innerHTML = emRisco.map(o => {
     const pct = Math.round(o.gasto/o.limite*100);
-    const estourou = o.gasto >= o.limite;
+    const estourou = cent(o.gasto) >= cent(o.limite);
     const cor = estourou ? 'var(--red)' : 'var(--amber)';
     return `<div class="orc-row" role="button" tabindex="0"
               data-cat="${escHtml(o.cat)}" onclick="irParaCategoria(this.dataset.cat)"
@@ -4662,7 +4670,7 @@ function pdfRodape(doc, referencia){
 // linha do "sobrou/faltou do mês anterior" quando existe. Retorna o Y após o bloco.
 function pdfResumoMes(doc, y, refLabel, receitas, gastos, saldoAnt){
   const M = 14, W = doc.internal.pageSize.getWidth();
-  const saldo = receitas - gastos;
+  const saldo = (cent(receitas) - cent(gastos)) / 100;
   const positivo = saldo >= 0;
   const corSaldo = positivo ? PDF_COR.verde : PDF_COR.vermelho;
 

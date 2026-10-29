@@ -234,7 +234,7 @@ const setRelogio = async (page, iso) => { await page.clock.setFixedTime(new Date
   console.log('5. ponto flutuante — somas que fecham ao centavo');
   await poe(page, { tx: [T(1, { tipo: 'receita', categoria: 'Receita', valor: 0.3 }), T(2, { valor: 0.1 }), T(3, { valor: 0.2 })] });
   eq([await lerId(page, 'kpiReceita'), await lerId(page, 'kpiGasto')], [R(0.3), R(0.3)], 'Entrou 0,30 e Saiu 0,10 + 0,20 = 0,30');
-  eq(await lerId(page, 'kpiSaldo'), '-R$ 0,00', '[BUG-CONHECIDO] 0,30 − (0,10 + 0,20) = −5,5e-17 é mostrado como "-R$ 0,00" (esperado "R$ 0,00": a soma deveria fechar ao centavo)');
+  eq(await lerId(page, 'kpiSaldo'), 'R$ 0,00', '0,30 − (0,10 + 0,20) fecha ao centavo: "R$ 0,00" (antes: "-R$ 0,00" por resíduo de −5,5e-17)');
   eq(await page.evaluate(() => document.getElementById('kpiSaldoLabel').textContent), 'Sobrou', 'rótulo segue "Sobrou"');
   await poe(page, { tx: Array.from({ length: 10 }, (_, i) => T(i + 1, { valor: 0.1 })) });
   eq(await lerId(page, 'kpiGasto'), R(1), '10 × 0,10 exibe R$ 1,00 (soma 0,9999999999999999 arredondada na exibição)');
@@ -247,11 +247,11 @@ const setRelogio = async (page, iso) => { await page.clock.setFixedTime(new Date
   eq(await lerId(page, 'dsValor'), R(0.3), 'saldo 0,10 + receita 0,20 exibe R$ 0,30');
   // Fim do mês com resultado exatamente zero em decimais
   await poe(page, { tx: [T(1, { valor: 0.1, data: '2026-09-20', status: 'pendente' }), T(2, { valor: 0.2, data: '2026-09-21', status: 'pendente' })], contas: ['Nubank', 'Outros'], saldos: { Nubank: { valor: 0.3, em: '2026-09-01' } } });
-  eq(await txt(page, '#livreTitulo'), 'Para cobrir as contas de setembro, faltam', '[BUG-CONHECIDO] saldo 0,30 e contas a pagar 0,10 + 0,20 (sobra exatamente R$ 0,00) aparece como "faltam R$ 0,00" no vermelho (esperado: "você fica com R$ 0,00")');
+  eq(await txt(page, '#livreTitulo'), 'Depois de pagar as contas de setembro, você fica com', 'saldo 0,30 e contas a pagar 0,10 + 0,20 (sobra exatamente R$ 0,00): "você fica com R$ 0,00" (antes: "faltam R$ 0,00" no vermelho)');
   // orçamento no limite exato
   await poe(page, { tx: Array.from({ length: 10 }, (_, i) => T(i + 1, { valor: 0.1, categoria: 'Lazer' })) });
   await page.evaluate(async () => { orcamentos = { Lazer: 1 }; await salvarOrc(); render(); });
-  eq(await page.evaluate(() => [...document.querySelectorAll('#listaOrcamentoRisco .orc-val')].map(e => e.textContent.replace(/\s+/g, ' ').trim())), ['100% · R$ 1,00 / R$ 1,00'], '[BUG-CONHECIDO] 10 × R$ 0,10 contra limite de R$ 1,00 mostra "100%" mas NÃO "estourou" (soma 0,9999999999999999 < 1); esperado: "estourou"');
+  eq(await page.evaluate(() => [...document.querySelectorAll('#listaOrcamentoRisco .orc-val')].map(e => e.textContent.replace(/\s+/g, ' ').trim())), ['estourou · R$ 1,00 / R$ 1,00'], '10 × R$ 0,10 contra limite de R$ 1,00 (soma 0,9999999999999999): mostra "estourou" (antes: "100%" sem estourar)');
 
   // ================= 6. faturas de cartão =================
   console.log('6. faturas de cartão — ciclo, fechamento e vencimento');
