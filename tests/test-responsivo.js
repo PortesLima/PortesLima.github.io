@@ -9,7 +9,7 @@ const { HELPERS, CHEIO, preparar, MODAIS, fecharTodos: fecharTodosH } = require(
 const FIX = '2026-09-10T12:00:00-03:00';
 const eq = (a, b, n) => { const A = JSON.stringify(a), B = JSON.stringify(b); ok(A === B, A === B ? n : `${n}  [obtido ${A} | esperado ${B}]`); };
 
-const VPS = [[360, 740], [390, 844], [768, 1024], [1280, 800]];
+const VPS = [[320, 568], [360, 740], [390, 844], [768, 1024], [1280, 800]];
 const ABAS = ['geral', 'lancamentos', 'orcamento', 'metas'];
 const quieto = (page) => page.waitForFunction(() => window.__a11y.quieto());
 const irPara = async (page, aba, sub = 'resumo') => { await page.evaluate(([a, s]) => { mudarAbaPrincipal(a); if(a === 'geral') mudarSubAbaGeral(s); }, [aba, sub]); await quieto(page); };
@@ -86,9 +86,9 @@ const NOME_OVF = (o) => o.estoura ? `scrollW ${o.scrollW} > ${o.clientW}; culpad
       eq([m.posBar, m.abas], ['fixed', 4], `${w}px: a barra de abas é fixa e tem 4 abas`);
       ok(m.hAbas.every(x => x >= 52), `${w}px: cada aba tem ≥ 52px de altura (${m.hAbas.join('/')})`);
       const rente = await page.evaluate(() => { const e = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 1); return !!(e && e.closest('#navPrincipal')); });
-      eq([rente, m.folgaBar], [false, 18], `${w}px: [BUG-CONHECIDO] a barra de abas FLUTUA 18px acima da borda da tela: o style="margin-bottom:18px" inline do <nav id=navPrincipal> vence o margin:0 da media query; a faixa de 18px abaixo dela mostra (e deixa clicar) o conteúdo da página — o CLAUDE.md tratava isso como "quirk do headless", mas é real (hit-test na última linha de pixels não acha a barra). Esperado: folga 0`);
+      eq([rente, m.folgaBar], [true, 0], `${w}px: a barra de abas fica COLADA na borda da tela (hit-test na última linha de pixels acha a barra; folga 0; antes: flutuava 18px por causa do margin inline)`);
       ok(m.fabVisivel, `${w}px: o FAB está visível na Visão Geral`);
-      eq(m.fabFim - m.barTopo, 3, `${w}px: [BUG-CONHECIDO] o FAB invade a barra de abas em 3px (o FAB assume uma barra rente: bottom:76px; com a barra 18px acima, os dois se tocam); esperado: FAB ≥ 4px acima da barra`);
+      ok(m.barTopo - m.fabFim >= 4, `${w}px: o FAB fica ≥ 4px ACIMA da barra de abas (folga ${m.barTopo - m.fabFim}px; antes: invadia 3px)`);
       ok(m.fabH >= 44 && m.fabW >= 44, `${w}px: o FAB tem ≥ 44×44 (${m.fabW}×${m.fabH})`);
     }else{
       ok(m.posBar !== 'fixed', `${w}px (desktop): a barra de abas NÃO é fixa (position ${m.posBar})`);
@@ -99,7 +99,7 @@ const NOME_OVF = (o) => o.estoura ? `scrollW ${o.scrollW} > ${o.clientW}; culpad
   for(const alt of [844, 760, 664, 844]){
     await page.setViewportSize({ width: 390, height: alt });
     const m = await medir();
-    eq([m.vvH === alt, m.folgaBar, m.fabFim > m.barTopo - 4], [true, 18, true], `viewport 390×${alt}: [BUG-CONHECIDO] com a altura visível variando (barra de endereço do iOS), a barra continua 18px acima do rodapé e o FAB a toca — a folga é constante, então o problema é o margin inline, não a barra de endereço`);
+    eq([m.vvH === alt, m.folgaBar, m.barTopo - m.fabFim >= 4], [true, 0, true], `viewport 390×${alt}: com a altura visível variando (barra de endereço do iOS), a barra continua colada ao rodapé e o FAB, ≥ 4px acima dela`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
   // FAB some em Lançamentos (o formulário completo já está lá)
@@ -122,19 +122,22 @@ const NOME_OVF = (o) => o.estoura ? `scrollW ${o.scrollW} > ${o.clientW}; culpad
         }
         return out;
       });
-      if(aba === 'metas') eq(sobrepoe, ['button "Calcular"'], `${w}px · ${aba}: [BUG-CONHECIDO] rolando até o fim, o FAB cobre o botão "Calcular" do simulador (o .wrap reserva 76px embaixo, mas o FAB sobe até ~132px); esperado: nada coberto`);
-      else eq(sobrepoe, [], `${w}px · ${aba}: rolando até o fim, o FAB não cobre nenhum botão/campo`);
+      eq(sobrepoe, [], `${w}px · ${aba}: rolando até o fim, o FAB não cobre nenhum botão/campo${aba === 'metas' ? ' (antes: cobria o "Calcular" do simulador)' : ''}`);
+      const ultimo = await page.evaluate(() => { const A = window.__a11y, bar = document.getElementById('navPrincipal').getBoundingClientRect(); const els = [...document.querySelectorAll('main button, main a[href], main input, main select, main textarea, main [role=button], .wrap button, .wrap input, .wrap select')].filter(e => !e.closest('#navPrincipal') && e.id !== 'fab' && A.visivel(e) && !e.closest('.modal-bg')); const mais = els.reduce((a, e) => Math.max(a, e.getBoundingClientRect().bottom), 0); return { mais: Math.round(mais), barTopo: Math.round(bar.top) }; });
+      ok(ultimo.mais <= ultimo.barTopo, `${w}px · ${aba}: rolando até o fim, o último controle (base em ${ultimo.mais}) fica acima da barra (topo em ${ultimo.barTopo})`);
     }
   }
   // toast × FAB
   await page.setViewportSize({ width: 390, height: 844 });
   await irPara(page, 'geral');
+  await page.evaluate(() => mostrarToast('Teste de toast com texto razoável', { acao: 'Desfazer', onAcao: () => {} }));
+  await page.waitForFunction(() => { const t = document.getElementById('toast'); return t.classList.contains('show') && getComputedStyle(t).transform === 'matrix(1, 0, 0, 1, 0, 0)' && getComputedStyle(t).opacity === '1'; });   // espera a transição terminar antes de medir
   const toastFab = await page.evaluate(() => {
-    mostrarToast('Teste de toast com texto razoável', { acao: 'Desfazer', onAcao: () => {} });
     const t = document.getElementById('toast').getBoundingClientRect(), f = document.getElementById('fab').getBoundingClientRect();
-    return { t: [Math.round(t.top), Math.round(t.bottom)], f: [Math.round(f.top), Math.round(f.bottom)], cruza: t.bottom > f.top && t.top < f.bottom && t.right > f.left && t.left < f.right };
+    const b = document.getElementById('navPrincipal').getBoundingClientRect();
+    return { t: [Math.round(t.top), Math.round(t.bottom)], f: [Math.round(f.top), Math.round(f.bottom)], b: [Math.round(b.top), Math.round(b.bottom)], barra: t.bottom > b.top && t.top < b.bottom, cruza: t.bottom > f.top && t.top < f.bottom && t.right > f.left && t.left < f.right };
   });
-  eq(toastFab.cruza, true, `[BUG-CONHECIDO] o toast (com "Desfazer") se sobrepõe ao FAB na Visão Geral (toast ${toastFab.t} · FAB ${toastFab.f}): ele ficou posicionado para uma barra rente; esperado: acima do FAB`);
+  eq([toastFab.cruza, toastFab.barra], [false, false], `o toast (com "Desfazer") não se sobrepõe ao FAB nem à barra na Visão Geral (toast ${toastFab.t} · FAB ${toastFab.f} · barra ${toastFab.b}); antes: cobria o FAB`);
 
   // ================= 4. tabela → cartões =================
   console.log('4. tabela → cartões');
@@ -155,7 +158,7 @@ const NOME_OVF = (o) => o.estoura ? `scrollW ${o.scrollW} > ${o.clientW}; culpad
       const o = await overflow(page);
       const tabsVisiveis = await page.evaluate(() => [...document.querySelectorAll('#navPrincipal .tab')].filter(t => { const r = t.getBoundingClientRect(); return r.width > 0 && r.left >= -1 && r.right <= window.innerWidth + 1; }).length);
       if(w === 320 && aba === 'geral'){
-        eq([o.estoura, tabsVisiveis, o.culpados.every(c => /orc-val/.test(c))], [true, 4, true], `${rotulo} · ${aba}: [BUG-CONHECIDO] a Visão Geral ESTOURA a 320px (rolagem horizontal de ${o.scrollW - 320}px): as linhas .orc-val de "Maiores gastos"/orçamento (ex.: R$ 99.999,99) não quebram nessa largura (a 360px passa); esperado: reflow sem rolagem (WCAG 1.4.10)`);
+        ok(!o.estoura && tabsVisiveis === 4, `${rotulo} · ${aba}: a Visão Geral NÃO estoura mais a 320px e as 4 abas continuam visíveis (antes: rolagem horizontal por causa das linhas .orc-val)${o.estoura ? ' — ' + NOME_OVF(o) : ''}`);
       }else{
         ok(!o.estoura && tabsVisiveis === 4, `${rotulo} · ${aba}: sem rolagem horizontal e as 4 abas continuam visíveis${o.estoura ? ' — ' + NOME_OVF(o) : ''}${tabsVisiveis !== 4 ? ' (abas visíveis: ' + tabsVisiveis + ')' : ''}`);
       }

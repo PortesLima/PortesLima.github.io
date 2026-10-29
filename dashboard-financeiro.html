@@ -218,9 +218,9 @@
 
   .cols{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:14px;}
   @media(max-width:1023px){.cols{grid-template-columns:1fr 1fr;}}
-  @media(max-width:599px){.cols{grid-template-columns:1fr;}}
+  @media(max-width:599px){.cols{grid-template-columns:minmax(0,1fr);}}   /* minmax(0,…): um canvas/gráfico não alarga a coluna além da tela (320px) */
   .cols2{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;}
-  @media(max-width:599px){.cols2{grid-template-columns:1fr;}}
+  @media(max-width:599px){.cols2{grid-template-columns:minmax(0,1fr);}}
 
   @media(max-width:599px){
     body{ padding:10px; }
@@ -359,12 +359,12 @@
   .orc-item{margin-bottom:12px;}
   /* sem separador "·" literal: o gap dá a separação e nada fica pendurado ao quebrar */
   .orc-nota{font-size:10.5px; margin:3px 0 0 108px; display:flex; gap:2px 14px; flex-wrap:wrap;}
-  .orc-label{width:100px; flex-shrink:0; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .orc-track{flex:1; height:7px; background:var(--card2); border-radius:4px; overflow:hidden;}
+  .orc-label{width:100px; flex-shrink:1; min-width:0; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .orc-track{flex:1; min-width:24px; height:7px; background:var(--card2); border-radius:4px; overflow:hidden;}
   .orc-fill{height:100%; border-radius:4px;}
-  .orc-val{width:110px; text-align:right; flex-shrink:0; font-size:11.5px; color:var(--muted);}
+  .orc-val{width:110px; min-width:0; overflow-wrap:anywhere; text-align:right; flex-shrink:1; font-size:11.5px; color:var(--muted);}
 
-  .tabs{display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap;}
+  .tabs{display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap;}
   .tab{
     display:inline-flex; align-items:center; gap:6px;
     padding:8px 14px; border-radius:8px; font-size:12.5px; font-family:inherit; cursor:pointer;
@@ -431,6 +431,8 @@
 
   /* ===== md e abaixo (<=1023): cabeçalho enxuto + bottom bar ===== */
   @media(max-width:1023px){
+    /* alturas que a barra inferior, o FAB e o toast compartilham (uma fonte só, para nunca se sobreporem) */
+    :root{ --bar-h:62px; --safe-b:env(safe-area-inset-bottom, 0px); --fab-d:56px; }
     .so-desktop{ display:none !important; }
     .so-mobile{ display:block; }
     #ultimaSync{ display:none; }
@@ -438,7 +440,7 @@
     /* bottom bar: as abas viram navegação fixa no rodapé */
     .tabs#navPrincipal{
       position:fixed; left:0; right:0; bottom:0; z-index:700;
-      margin:0; gap:0; flex-wrap:nowrap;
+      margin:0; gap:0; flex-wrap:nowrap; box-sizing:border-box; height:calc(var(--bar-h) + var(--safe-b));
       background:var(--card); border-top:1px solid var(--border);
       padding:4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
       box-shadow:0 -2px 12px rgba(0,0,0,.16);
@@ -454,10 +456,21 @@
       background:var(--blue-bg); color:var(--blue); border:none; font-weight:600;
     }
     /* reserva o espaço da bottom bar para o conteúdo não ficar por baixo */
-    .wrap{ padding-bottom:76px; }
+    .wrap{ padding-bottom:calc(var(--bar-h) + var(--safe-b) + 16px + var(--fab-d) + 16px); }   /* barra + FAB + folga: o último botão nunca fica sob eles */
   }
 
-  canvas{max-height:200px;}
+  canvas{max-height:200px; max-width:100%;}
+  /* ===== celular (<=599): alvos de toque >= 44x44 (WCAG 2.5.5/2.5.8). Só min-height/min-width e centralização:
+     a área de toque cresce, o texto e o resto do visual ficam como estavam. Links dentro de frase (inline) ficam de fora. ===== */
+  @media(max-width:599px){
+    button, select, textarea,
+    input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=color]):not([type=range]){ min-height:44px; }
+    button{ min-width:44px; }
+    label.chk{ min-height:44px; display:flex; align-items:center; }
+    span.small[role=button], [role=tab]{ display:inline-flex; align-items:center; justify-content:center; min-height:44px; min-width:44px; }
+    .orc-row[role=button]{ min-height:44px; }
+  }
+
 
   .help-icon{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:var(--card2); border:1px solid var(--border); color:var(--muted); font-size:10.5px; font-weight:700; cursor:help; margin-left:5px; position:relative; vertical-align:middle; }
   /* estado oculto: extensão ZERO (não contribui para scrollWidth). Só ao focar/hover
@@ -648,7 +661,7 @@
   body[data-aba="lancamentos"] #fab{ display:none; }
   @media(max-width:480px){ #fab{ right:14px; } }
   /* no mobile/tablet o FAB sobe acima da bottom bar (fixa, ~62px de altura) */
-  @media(max-width:1023px){ #fab{ bottom:calc(76px + env(safe-area-inset-bottom, 0px)); } }
+  @media(max-width:1023px){ #fab{ bottom:calc(var(--bar-h) + var(--safe-b) + 16px); } }
 
   /* toast de confirmação (rodapé, sai do caminho do FAB) */
   #toast{
@@ -671,7 +684,7 @@
   #toast button:active{ opacity:.7; }
   /* no mobile o toast sobe acima da bottom bar (~62px) e do FAB (bottom 76 + altura 56 = topo em ~132) */
   @media(max-width:1023px){
-    #toast{ right:14px; left:14px; bottom:calc(144px + env(safe-area-inset-bottom, 0px)); transform:translateY(180%); width:auto; }
+    #toast{ right:14px; left:14px; bottom:calc(var(--bar-h) + var(--safe-b) + 16px + var(--fab-d) + 12px); transform:translateY(180%); width:auto; }
     #toast.show{ transform:translateY(0); }
   }
   @media(prefers-reduced-motion:reduce){ #toast{ transition:opacity .15s ease; } }
@@ -984,7 +997,7 @@
     <select id="contaFiltro" onchange="render()"></select>
   </div>
 
-  <nav class="tabs" id="navPrincipal" aria-label="Seções do app" style="margin-bottom:18px;">
+  <nav class="tabs" id="navPrincipal" aria-label="Seções do app">
     <button class="tab active" id="navGeral" onclick="mudarAbaPrincipal('geral')" aria-current="page"><span class="tab-ico" aria-hidden="true">📊</span><span class="tab-txt">Visão geral</span></button>
     <button class="tab" id="navLancamentos" onclick="mudarAbaPrincipal('lancamentos')"><span class="tab-ico" aria-hidden="true">📝</span><span class="tab-txt">Lançamentos</span></button>
     <button class="tab" id="navOrcamento" onclick="mudarAbaPrincipal('orcamento')"><span class="tab-ico" aria-hidden="true">🎯</span><span class="tab-txt">Orçamento</span></button>

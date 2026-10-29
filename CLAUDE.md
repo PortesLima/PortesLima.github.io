@@ -105,7 +105,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   simulado em memória (`context.route` em `googleapis.com`: last-write-wins, 2 aparelhos, erros 401/500/vazio/corrompido);
   PIN (ativar, inválidos, errado, trocar, fora do backup/Drive); `?readonly=1` (sem escrita, sem telemetria). Depois da
   leva 1 (G, H, G2) e o P3 da leva 2 restam 2 `[BUG-CONHECIDO]` aqui (conflito entre 2 aparelhos e PIN "Esqueci o PIN").
-- `test-responsivo` (227) — **reconstrução (Bloco 6)**: sem rolagem horizontal em 360/390/768/1280 × tema claro/escuro × vazio/cheio
+- `test-responsivo` (291) — **reconstrução (Bloco 6)**: sem rolagem horizontal em 360/390/768/1280 × tema claro/escuro × vazio/cheio
   (com as 3 barras do topo) × abas (+ Análise) e nos 11 modais (guard: a tabela de modais cobre todo `.modal-bg`); barra inferior
   e FAB medidos por `elementFromPoint`/`visualViewport`/`offsetTop` (não por `getBoundingClientRect().bottom`), com a altura do
   viewport variando (barra de endereço do iOS); tabela→cartões; reflow a 640×400 e 320 px; `prefers-reduced-motion`. 16
@@ -222,6 +222,17 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `[BUG-CONHECIDO] clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup troca os dados importados pelos antigos…` → `clicar no "Desfazer" do lançamento anterior DEPOIS de importar o backup NÃO troca os dados importados pelos antigos`
 - Efeito em outros scripts (sem tag; o comportamento "campo ausente zera" mudou de propósito): `test-avisos-vencimento` `blob antigo -> 3 true` → `blob antigo (sem o campo) -> MANTÉM as preferências locais`; `test-regressao-minima` `blob antigo (sem o campo): 3 true` / `…persistido no storage` → `…MANTÉM as preferências locais` / `…o storage continua com a preferência local`; `test-categorias` `blob antigo … → shape vazio`, `… volta às 12 padrão`, `blob {} → defaults`, `…com lixo → defaults` → mantêm o local / `{}` não muda nada / lixo é REJEITADO; `test-trial` `remoto com assinatura não-objeto é ignorada` → o blob inteiro é REJEITADO (`backup-invalido`).
 
+**Leva 3 · I (layout do celular)** — `tests/test-responsivo.js` (227 → 291 checks; 320 px entrou em `VPS`), `tests/test-a11y.js`
+- `<nav id=navPrincipal>` sem o `style="margin-bottom:18px"` (a margem de 18 px do desktop foi para a regra base `.tabs`). Variáveis do bloco ≤1023: `--bar-h:62px`, `--safe-b:env(safe-area-inset-bottom,0px)`, `--fab-d:56px`; barra com `height:calc(var(--bar-h) + var(--safe-b))`; FAB `bottom: bar + 16px`; toast `bottom: bar + 16px + FAB + 12px`; `.wrap` `padding-bottom: bar + 16 + FAB + 16`. O `<meta viewport>` **não** tem `viewport-fit=cover` (não alterado: `env()` vale 0 hoje; decisão pendente do dono).
+- `NN px: [BUG-CONHECIDO] a barra de abas FLUTUA 18px acima da borda da tela…` (×4: 360/390/768, +320 novo) → `NN px: a barra de abas fica COLADA na borda da tela (hit-test na última linha de pixels acha a barra; folga 0; antes: flutuava 18px por causa do margin inline)`
+- `NN px: [BUG-CONHECIDO] o FAB invade a barra de abas em 3px…` → `NN px: o FAB fica ≥ 4px ACIMA da barra de abas (folga Npx; antes: invadia 3px)`
+- `viewport 390×ALT: [BUG-CONHECIDO] com a altura visível variando… a barra continua 18px acima do rodapé e o FAB a toca…` (×4) → `viewport 390×ALT: com a altura visível variando (barra de endereço do iOS), a barra continua colada ao rodapé e o FAB, ≥ 4px acima dela`
+- `NN px · metas: [BUG-CONHECIDO] rolando até o fim, o FAB cobre o botão "Calcular" do simulador…` (×2) → `NN px · metas: rolando até o fim, o FAB não cobre nenhum botão/campo (antes: cobria o "Calcular" do simulador)` (o check "else" das outras abas foi absorvido por este, com o mesmo texto; novo: `o último controle … fica acima da barra` em geral/orçamento/metas × 360/390)
+- `[BUG-CONHECIDO] o toast (com "Desfazer") se sobrepõe ao FAB na Visão Geral…` → `o toast (com "Desfazer") não se sobrepõe ao FAB nem à barra na Visão Geral …; antes: cobria o FAB` (o teste agora espera a transição do toast terminar antes de medir)
+- `… · geral: [BUG-CONHECIDO] a Visão Geral ESTOURA a 320px (rolagem horizontal de Npx): as linhas .orc-val…` (×2) → `… · geral: a Visão Geral NÃO estoura mais a 320px e as 4 abas continuam visíveis (antes: rolagem horizontal por causa das linhas .orc-val)`. Causas corrigidas: `.orc-label`/`.orc-val` encolhem (`flex-shrink:1; min-width:0; overflow-wrap:anywhere`), `.cols`/`.cols2` ≤599 com `minmax(0,1fr)` e `canvas{max-width:100%}` (a Análise e, por tabela, os 11 modais estouravam a 320 px).
+- (`test-a11y`) `[BUG-CONHECIDO] alvos de toque MENORES que 44×44 no celular (37 tipos)…` → `alvos de toque ≥ 44×44 no celular: nenhum tipo abaixo do mínimo (antes: N tipos abaixo)`. Regra só em ≤599: `min-height:44px` em `button`/`select`/`textarea`/`input` (exceto checkbox/radio), `min-width:44px` em `button`, `label.chk`, `span.small[role=button]`, `[role=tab]` e `.orc-row[role=button]` (não é só "padding invisível": campos de formulário ficam ~6 px mais altos no celular).
+- Capturas de conferência: `tests/capturas/` (390 e 320 px × claro/escuro × Visão Geral/Metas, topo e fim) — **fora do git** (`.gitignore`).
+
 **Resumo da leva 2 (publicada como `2026-10-29.25`):** P1 `parseTrnAmt` (OFX), P1b contagem de ignoradas na importação, P2 backup visível com o teste vencido, P3 link só de leitura sem gravar, P4 escape de HTML (`test-escape`), P5 centavos/consistência (`cent()`), P6 exportação (CSV sem fórmula, PDF mensal com filtro de conta). Suíte: 22 scripts (`run-all`) "tudo verde". **Checks `[BUG-CONHECIDO]` restantes: 44** (principalmente a11y e responsivo = Leva 3, mais trial e estado; os 2 de estado são conflito entre 2 aparelhos e "Esqueci o PIN").
 
 A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
@@ -314,11 +325,7 @@ disables CORS features (Google sign-in, currency API) — those only work on the
 `https://` origin. Script-scoped `let`s are reachable from `page.evaluate()` as bare globals,
 so `montarEstado()` / `aplicarDadosImportados()` / `render()` can be called directly. Values
 that animate (`fmtValorAnimado`) need a ~300–600ms wait before reading `.textContent`, or read
-`el.dataset.valor` (the target) — ou emule `reducedMotion:'reduce'` e releia o texto direto. **Não existe "quirk de 18px" do
-headless na barra inferior** (nota antiga, errada): o `<nav id="navPrincipal">` tem `style="margin-bottom:18px"` INLINE, que vence o
-`margin:0` da media query, então a barra flutua 18px acima da borda em todos os navegadores (confirmado por `elementFromPoint` na
-última linha de pixels). Está registrado como `[BUG-CONHECIDO]` em `test-responsivo`; a barra, o FAB (`bottom:76px`) e o toast
-foram posicionados assumindo uma barra rente. See the browser-test-harness memory for a ready scaffold.
+`el.dataset.valor` (the target) — ou emule `reducedMotion:'reduce'` e releia o texto direto. **Não existe "quirk de 18px" do headless na barra inferior:** era o `margin-bottom:18px` inline do `<nav id="navPrincipal">`, corrigido na Leva 3 · I (a barra agora fica colada ao fundo; FAB, toast e o `padding-bottom` do `.wrap` derivam de `--bar-h`/`--safe-b`/`--fab-d`). See the browser-test-harness memory for a ready scaffold.
 
 **Currently in flux:** the app is being tested in daily use, so more UX changes are expected.
 Keep the antes/depois + "what doesn't change" + test-driven discipline that the UX rounds used.

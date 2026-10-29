@@ -233,7 +233,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
   eq(await page.evaluate(() => Math.min(...[...document.querySelectorAll('#navPrincipal .tab')].map(t => t.offsetHeight)) >= 52), true, 'abas da barra inferior ≥ 52px de altura');
   const uniq = (r) => unicos(r.falhas.map(f => f.el.replace(/ ".*"$/, '').replace(/#\w+/, m => m)));
   const todas = unicos(Object.values(alvosPorTela).flatMap(r => r.falhas.map(f => f.el.replace(/ ".*"$/, ''))));
-  eq(todas.length > 0, true, `[BUG-CONHECIDO] alvos de toque MENORES que 44×44 no celular (${todas.length} tipos): ${todas.join(' · ')}; esperado: ≥ 44px (o CLAUDE.md promete isso para os botões de lista, mas selects de mês/conta, sub-abas, "Ver planos", links "editar limites/+ nova meta" e o simulador ficam abaixo)`);
+  eq(todas, [], `alvos de toque ≥ 44×44 no celular: nenhum tipo abaixo do mínimo (antes: ${todas.length} tipos abaixo)`);
   const exemplos = Object.entries(alvosPorTela).map(([t, r]) => `${t}: ${r.falhas.length}/${r.medidos}`).join(' · ');
   ok(true, `caracterização — alvos abaixo de 44px por tela: ${exemplos}`);
   // modais no celular
