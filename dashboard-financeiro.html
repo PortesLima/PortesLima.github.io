@@ -2263,7 +2263,15 @@ async function alternarMoeda(){
   driveAgendarSync();
   render();
 }
-function uid(){ return Date.now() + Math.floor(Math.random()*1000); }
+// Id numérico (mesmo tipo/ordem de grandeza de sempre: Date.now() + 0..999). MONOTÔNICO na sessão: nunca devolve o mesmo valor
+// duas vezes, mesmo com o relógio parado ou o sorteio repetindo. Cada id vem de UMA chamada — nunca somar +i/+1 a um uid()
+// (a próxima chamada podia cair nesse número). Ids já gravados não são migrados.
+let _uidUltimo = 0;
+function uid(){
+  const candidato = Date.now() + Math.floor(Math.random()*1000);
+  _uidUltimo = candidato > _uidUltimo ? candidato : _uidUltimo + 1;
+  return _uidUltimo;
+}
 
 async function getJSON(key, fallback){
   try{
@@ -2589,7 +2597,7 @@ async function adicionar(){
     const rotulo = desc || 'Transferência';
     salvarSnapshot();
     transacoes.unshift({ id: uid(), tipo:'transferencia', subtipo:'saida', desc:`${rotulo} → ${contaDestino}`, valor:valorTotal, categoria:'Transferência', conta, data:dataISO, status:'pago', grupoTransferencia:grupo, tag: tag||null });
-    transacoes.unshift({ id: uid()+1, tipo:'transferencia', subtipo:'entrada', desc:`${rotulo} ← ${conta}`, valor:valorTotal, categoria:'Transferência', conta:contaDestino, data:dataISO, status:'pago', grupoTransferencia:grupo, tag: tag||null });
+    transacoes.unshift({ id: uid(), tipo:'transferencia', subtipo:'entrada', desc:`${rotulo} ← ${conta}`, valor:valorTotal, categoria:'Transferência', conta:contaDestino, data:dataISO, status:'pago', grupoTransferencia:grupo, tag: tag||null });
     document.getElementById('descricao').value = '';
     document.getElementById('valor').value = '';
     document.getElementById('tag').value = '';
@@ -2621,7 +2629,7 @@ async function adicionar(){
     const grupo = uid();
     for(let i=0;i<parcelas;i++){
       transacoes.unshift({
-        id: uid()+i, tipo, desc: `${desc} (${i+1}/${parcelas})`, valor: valorTotal, categoria, conta,
+        id: uid(), tipo, desc: `${desc} (${i+1}/${parcelas})`, valor: valorTotal, categoria, conta,
         data: addMeses(dataISO, i), fixo:false, grupoParcela: grupo, status: i===0 ? status : 'pendente',
         anexo: anexoBase64, tag: tag||null
       });
@@ -5567,7 +5575,7 @@ function confirmarImportacao(){
   marcados.forEach((it, i) => {
     const ehReceita = it.nova.valor >= 0;
     transacoes.unshift({
-      id: uid() + i,
+      id: uid(),
       tipo: ehReceita ? 'receita' : 'gasto',
       desc: it.nova.desc,
       valor: Math.abs(it.nova.valor),

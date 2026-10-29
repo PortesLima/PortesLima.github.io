@@ -125,6 +125,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   usuário em template de HTML passa por `escHtml`; para handler inline use `data-*` + `this.dataset.x`, nunca o texto entre aspas no `onclick`;
   cor só `#hex` (`corHexValida`)**.
 - `test-nomes` (9) — **Leva 3 · K**: guarda de código-fonte de nomes acessíveis (botões, campos, svg), `<main>`/`<header>` e `role="alert"`; sem navegador.
+- `test-ids` (13) — **Leva 3 · M**: `uid()` monotônico com colisão forçada (relógio e `Math.random` fixos) em extrato, parcelas, transferências, duplicar, contas fixas e metas.
 
 ### Checks `[BUG-CONHECIDO]` convertidos em checks do comportamento correto (nome antigo → nome novo)
 
@@ -233,6 +234,13 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `… · geral: [BUG-CONHECIDO] a Visão Geral ESTOURA a 320px (rolagem horizontal de Npx): as linhas .orc-val…` (×2) → `… · geral: a Visão Geral NÃO estoura mais a 320px e as 4 abas continuam visíveis (antes: rolagem horizontal por causa das linhas .orc-val)`. Causas corrigidas: `.orc-label`/`.orc-val` encolhem (`flex-shrink:1; min-width:0; overflow-wrap:anywhere`), `.cols`/`.cols2` ≤599 com `minmax(0,1fr)` e `canvas{max-width:100%}` (a Análise e, por tabela, os 11 modais estouravam a 320 px).
 - (`test-a11y`) `[BUG-CONHECIDO] alvos de toque MENORES que 44×44 no celular (37 tipos)…` → `alvos de toque ≥ 44×44 no celular: nenhum tipo abaixo do mínimo (antes: N tipos abaixo)`. Regra só em ≤599: `min-height:44px` em `button`/`select`/`textarea`/`input` (exceto checkbox/radio), `min-width:44px` em `button`, `label.chk`, `span.small[role=button]`, `[role=tab]` e `.orc-row[role=button]` (não é só "padding invisível": campos de formulário ficam ~6 px mais altos no celular).
 - Capturas de conferência: `tests/capturas/` (390 e 320 px × claro/escuro × Visão Geral/Metas, topo e fim) — **fora do git** (`.gitignore`).
+
+**Leva 3 · M (ids únicos em lote)** — `tests/test-ids.js` (novo, 13 checks)
+- **Bug:** `uid()` era `Date.now() + sorteio(0..999)` a **cada** chamada, e 3 lugares somavam `+i`/`+1` a ele — dois itens do MESMO lote (extrato, parcelas, transferência) podiam cair no mesmo id; editar/excluir um afetava o outro. Achado por uma falha intermitente de `test-importacao` ("ids únicos").
+- **Correção:** `uid()` é **monotônico** na sessão (`_uidUltimo`: o maior entre o candidato e o último+1). Tipo e formato **iguais** (número inteiro, `Date.now()` + até ~1000): ids já gravados continuam válidos e **não são migrados**. Os 3 `uid()+n` viraram `uid()` (importação `id: uid() + i`, parcelas `uid()+i`, entrada da transferência `uid()+1`).
+- **Todos os geradores de id** (grep `uid()`): transferência (`grupoTransferencia` + 2 pernas), compra parcelada (`grupoParcela` + N parcelas), lançamento simples, registro rápido, meta, aporte de meta (lançamento `metaId`), conta fixa, lançamento da conta fixa, duplicar, importação de extrato. Todos usam `uid()`; o guarda do teste falha se aparecer `uid() +` no código.
+- **Teste:** relógio e `Math.random` congelados (colisão forçada: o `uid()` antigo devolvia o mesmo número 500×) e uma variante ADVERSARIAL (sorteio decrescente, que fazia `uid()+i` colidir em todos os itens). 500 ids distintos em `uid()`, no extrato (nos 2 cenários) e 528 em 11 compras de 48 parcelas; 100 transferências (200 pernas, 100 grupos), 100 duplicações, 100 contas fixas, 100 metas. Nenhum check antigo mudou de nome.
+- **Duplicados já gravados:** não migrados, e o app **não tem nenhum caminho que os detecte** (nem aviso, nem validação no backup/Drive; `validarDadosBackup` não olha ids). Conferência manual no console: `new Set(transacoes.map(t=>t.id)).size === transacoes.length`. Fora de escopo: colisão ENTRE aparelhos (ids de sessões diferentes), que continua possível.
 
 **Leva 3 · K (rótulos e semântica)** — `tests/test-a11y.js`, `tests/test-responsivo.js`, `tests/test-nomes.js` (novo, 9 checks)
 - **Botões de ícone:** `aria-label` em × (6 modais, categorias, contas, contas fixas), ✓ ✎ ⧉ 📎 × da tabela, "+ add"/📈/✎/× das metas; nas linhas de lista o nome do item vai junto ("Marcar como pago: Aluguel"), sempre com `escHtml` (regra da Leva 2).
