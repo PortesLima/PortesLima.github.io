@@ -69,8 +69,14 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
 - `test-regressao-minima` (31) — consumidores de `hojeISO` às 23:30, ida-e-volta de estado com blob
   novo/antigo, 4 abas sem erro de console (vazio e com dados), marcar pago/desfazer vs. banner,
   erro no banner não derruba `render()`
+- `test-importacao` (128) — **reconstrução (Bloco 1)**: `parseOFX` (SGML/XML, NAME·MEMO, limite de 80 chars,
+  DTPOSTED com fuso, FITID ausente, blocos inválidos), `parseValorBR`, `parseCSVBolsoCerto`, `conciliarImportacao`
+  (FITID, ±1 dia, valor/tipo/conta, `descSimilar` a 60%, duplicata no arquivo), fluxo `iniciarImportacao`
+  (OFX/CSV/windows-1252, erros), `confirmarImportacao` (campos, toast, `desfazer`, substituir, mês de destino),
+  reimportação, trial bloqueado, ida-e-volta `exportarCSV` → `parseCSVBolsoCerto`. Check de comportamento
+  atual que parece bug leva o prefixo `[BUG-CONHECIDO]` (3 hoje: `parseValorBR` com ponto+3 dígitos).
 
-Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
+A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
 em `tests/` desde o início**.
 
 *(Histórico)* There **was** a test suite — a set of standalone Playwright scripts kept in the session
