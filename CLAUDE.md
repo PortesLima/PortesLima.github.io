@@ -105,6 +105,15 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   simulado em memória (`context.route` em `googleapis.com`: last-write-wins, 2 aparelhos, erros 401/500/vazio/corrompido);
   PIN (ativar, inválidos, errado, trocar, fora do backup/Drive); `?readonly=1` (sem escrita, sem telemetria). 16
   `[BUG-CONHECIDO]`.
+- `test-responsivo` (227) — **reconstrução (Bloco 6)**: sem rolagem horizontal em 360/390/768/1280 × tema claro/escuro × vazio/cheio
+  (com as 3 barras do topo) × abas (+ Análise) e nos 11 modais (guard: a tabela de modais cobre todo `.modal-bg`); barra inferior
+  e FAB medidos por `elementFromPoint`/`visualViewport`/`offsetTop` (não por `getBoundingClientRect().bottom`), com a altura do
+  viewport variando (barra de endereço do iOS); tabela→cartões; reflow a 640×400 e 320 px; `prefers-reduced-motion`. 16
+  checks `[BUG-CONHECIDO]`. Auxiliares em `tests/a11y-helpers.js` (contraste WCAG, alvos, nomes acessíveis, overflow).
+- `test-a11y` (108) — **reconstrução (Bloco 6)**: `lang`, landmarks, títulos, contraste de texto por cálculo WCAG sobre as cores
+  computadas (2 temas × 390/1280 × 5 telas + 11 modais + tela inicial/PIN + placeholders + borda dos campos), foco visível pelo
+  Tab, alcance por teclado, Esc/foco/trap/`role=dialog` nos modais, foco de volta ao gatilho, botões e campos sem nome, `svg`/
+  `canvas`/`img`, alvos de toque ≥ 44 px. 21 checks `[BUG-CONHECIDO]`.
 
 A suíte original foi perdida; esta é a reconstrução (em blocos, por área de risco). Reconstruir os demais é opcional e deve ser feito a partir da lista histórica abaixo, **versionando
 em `tests/` desde o início**.
@@ -196,9 +205,11 @@ disables CORS features (Google sign-in, currency API) — those only work on the
 `https://` origin. Script-scoped `let`s are reachable from `page.evaluate()` as bare globals,
 so `montarEstado()` / `aplicarDadosImportados()` / `render()` can be called directly. Values
 that animate (`fmtValorAnimado`) need a ~300–600ms wait before reading `.textContent`, or read
-`el.dataset.valor` (the target). The bottom bar's `getBoundingClientRect().bottom` has a ~18px
-quirk in msedge headless — the bar renders flush; measure via `offsetHeight` / distance-from-
-bottom instead. See the browser-test-harness memory for a ready scaffold.
+`el.dataset.valor` (the target) — ou emule `reducedMotion:'reduce'` e releia o texto direto. **Não existe "quirk de 18px" do
+headless na barra inferior** (nota antiga, errada): o `<nav id="navPrincipal">` tem `style="margin-bottom:18px"` INLINE, que vence o
+`margin:0` da media query, então a barra flutua 18px acima da borda em todos os navegadores (confirmado por `elementFromPoint` na
+última linha de pixels). Está registrado como `[BUG-CONHECIDO]` em `test-responsivo`; a barra, o FAB (`bottom:76px`) e o toast
+foram posicionados assumindo uma barra rente. See the browser-test-harness memory for a ready scaffold.
 
 **Currently in flux:** the app is being tested in daily use, so more UX changes are expected.
 Keep the antes/depois + "what doesn't change" + test-driven discipline that the UX rounds used.
