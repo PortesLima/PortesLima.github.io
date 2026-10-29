@@ -97,14 +97,14 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   cru, ida e volta) e os 3 PDFs (`exportarPDF`/`Anual`/`IR`) com o jsPDF real e o construtor espiado (texto desenhado por
   `doc.text`, páginas, tamanho; `save()` interceptado): totais e contagem de linhas batem com a tela, mês/ano vazio, 70
   linhas em várias páginas, texto hostil. 6 `[BUG-CONHECIDO]`.
-- `test-estado` (144) — **reconstrução (Bloco 5)**: guard das chaves de armazenamento (toda `STORAGE_*` está no funil ou é
+- `test-estado` (228) — **reconstrução (Bloco 5)**: guard das chaves de armazenamento (toda `STORAGE_*` está no funil ou é
   local de propósito: `pin`, `onboardingVisto`, `cambioCache`; chaves `bc_*` diretas: `bc_aviso_venc_dispensado`,
   `bc_tel_expirado2`) e dos 13 campos de `montarEstado()`; cada campo por `aplicarDadosImportados` → storage → recarregar →
   backup → 2º aparelho limpo; funções `salvar*` na chave certa; `importarBackupJSON` com entrada cancelada/inválida/vazia/
   antiga/com chaves extras/tipos errados/muito grande; desfazer de 1 nível (extrato, parcelada, backup); sync com o Drive
   simulado em memória (`context.route` em `googleapis.com`: last-write-wins, 2 aparelhos, erros 401/500/vazio/corrompido);
-  PIN (ativar, inválidos, errado, trocar, fora do backup/Drive); `?readonly=1` (sem escrita, sem telemetria). 16
-  `[BUG-CONHECIDO]`.
+  PIN (ativar, inválidos, errado, trocar, fora do backup/Drive); `?readonly=1` (sem escrita, sem telemetria). Depois da
+  leva 1 (G, H, G2) restam 4 `[BUG-CONHECIDO]` aqui (conflito entre 2 aparelhos, PIN "Esqueci", link só de leitura ×2).
 - `test-responsivo` (227) — **reconstrução (Bloco 6)**: sem rolagem horizontal em 360/390/768/1280 × tema claro/escuro × vazio/cheio
   (com as 3 barras do topo) × abas (+ Análise) e nos 11 modais (guard: a tabela de modais cobre todo `.modal-bg`); barra inferior
   e FAB medidos por `elementFromPoint`/`visualViewport`/`offsetTop` (não por `getBoundingClientRect().bottom`), com a altura do
@@ -273,6 +273,19 @@ DOM. `render()` is large and populates elements by id — moving an element betw
    "🔴 Não sincronizou" (nunca "Sincronizado" sem `res.ok`). Nova tentativa automática ao voltar ao primeiro plano
    (`visibilitychange`), no máx. 1 a cada 60 s (`performance.now`, porque `Date` é congelado nos testes). Nunca cria um 2º
    arquivo se a listagem falhou. Limitação mantida: ao recuperar a leitura, o Drive **substitui** o local (sem merge).
+
+   **Alterações que não subiram (pacote G2, leva 1):** duas chaves `localStorage` **locais de propósito** (fora do funil, como
+   `bc_aviso_venc_dispensado`): `bc_drive_usa` (gravada na 1ª leitura bem-sucedida: "este aparelho sincroniza com o Drive") e
+   `bc_drive_pendente` (marca persistente de "há alterações deste aparelho que não chegaram ao Drive"). `driveAgendarSync()`
+   grava a marca a cada mutação em aparelho que usa o Drive (com ou sem token); só um PATCH confirmado a limpa, e só se não há outro
+   envio agendado (`syncTimer`). **Sem a marca, conectar continua last-write-wins silencioso.** Com a marca, ao reconectar com a
+   leitura OK e o Drive com dados, `driveSincronizarInicial` **não substitui nem escreve nada** e abre `#modalDriveConflito`:
+   "Manter os dados deste aparelho" (`driveConflitoManter`: libera a escrita e sobe o local) ou "Usar os dados do Drive"
+   (`driveConflitoUsarDrive`: `salvarSnapshot()` antes, depois substitui; toast com **Desfazer** — o snapshot guarda só os
+   lançamentos). Drive com `{}` + marca: sem pergunta, o local inicializa o arquivo. **Arquivo do Drive ilegível** (JSON inválido ou
+   formato inesperado) **e aparelho com dados**: a faixa `#barraDrive` ganha "Substituir o Drive pelos dados deste aparelho"
+   (`driveSubstituirPeloLocal`, com `confirm()` que avisa que o arquivo será SOBRESCRITO; nunca escreve sozinho). Erro 500 e corpo
+   vazio **não** oferecem esse botão. Não resolve conflito entre dois aparelhos (sem merge — Fase 2).
 
    **Backup / importação (pacote H, leva 1):** `aplicarDadosImportados()` (usado pelo Drive **e** pelo backup por arquivo)
    chama `validarDadosBackup()` antes de tocar em qualquer coisa: precisa ser objeto; `transacoes` array (obrigatório só no

@@ -113,7 +113,7 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
   const esperadas = Object.entries({ ...MAPA, ...LOCAL_DE_PROPOSITO }).map(([k, v]) => k + '=' + (MAPA[k] || v)).sort();
   eq(consts.map(([k, v]) => k + '=' + v).sort(), esperadas, 'GUARD: toda constante STORAGE_* está no funil (13) ou documentada como local de propósito (pin, onboardingVisto, cambioCache). Chave nova → atualize este teste e o funil');
   const literais = [...new Set([...FONTE.matchAll(/['"`](bc_[A-Za-z0-9_]+)['"`]/g)].map(m => m[1]))].sort();
-  eq(literais, ['bc_aviso_venc_dispensado', 'bc_tel_expirado2'], 'GUARD: chaves bc_* escritas direto no localStorage, fora do funil, de propósito');
+  eq(literais, ['bc_aviso_venc_dispensado', 'bc_drive_pendente', 'bc_drive_usa', 'bc_tel_expirado2'], 'GUARD: chaves bc_* escritas direto no localStorage, fora do funil, de propósito (bc_drive_pendente = alterações que não subiram; bc_drive_usa = este aparelho já sincroniza com o Drive)');
   ok(!/sessionStorage\.setItem\('(?!bolsoCertoVersao)/.test(FONTE), 'sessionStorage só guarda "bolsoCertoVersao" (cache-busting), nada de dado do usuário');
   const { page: p0 } = await novoAparelho(browser);
   eq(await p0.evaluate(() => Object.keys(montarEstado()).sort()), [...CHAVES_FUNIL, ].sort(), 'GUARD: montarEstado() devolve exatamente os 13 campos esperados');
@@ -459,6 +459,125 @@ const T = (id, o) => ({ id, tipo: 'gasto', desc: 'T' + id, valor: 10, categoria:
   await X.page.evaluate(async () => { await salvarTx(); driveAgendarSync(); await driveSalvarAgora(); });
   eq([drive.listas, drive.gets, drive.patches.length, drive.posts], [0, 0, 0, 0], 'sem token do Google: nenhuma chamada ao Drive');
   await X.ctx.close();
+
+  // ================= 5c. G2: alterações que não subiram + escolha ao reconectar =================
+  console.log('5c. alterações não enviadas e escolha ao reconectar (pacote G2)');
+  const modalConf = (page) => page.evaluate(() => { const m = document.getElementById('modalDriveConflito'); return !!m && getComputedStyle(m).display === 'flex'; });
+  const marca = (page) => page.evaluate(() => localStorage.getItem('bc_drive_pendente'));
+  const DRIVE_A = JSON.stringify({ ...FULL, transacoes: [T(500)] });
+  // aparelho que JÁ usa o Drive: sincroniza, perde a conexão, lança, religa
+  const offlineELanca = async (drv) => {
+    const aparelho = await novoAparelho(browser, { drive: drv });
+    await conectar(aparelho.page);
+    await aparelho.page.evaluate(() => { accessToken = null; driveLeituraOk = false; }); // internet caiu / token perdido
+    await mutar(aparelho.page, 901);
+    return aparelho;
+  };
+  drive = criarDrive(DRIVE_A);
+  X = await novoAparelho(browser, { drive });
+  eq(await marca(X.page), null, 'aparelho novo: sem marca de alterações pendentes');
+  await conectar(X.page);
+  eq([await X.page.evaluate(() => localStorage.getItem('bc_drive_usa')), await marca(X.page), await modalConf(X.page)], ['1', null, false], 'depois da 1ª leitura OK o aparelho passa a "usar o Drive"; sem marca e sem pergunta (last-write-wins silencioso, como antes)');
+  await mutar(X.page, 900); await drive.aguardar(() => drive.patches.length >= 1);
+  await X.page.waitForFunction(() => localStorage.getItem('bc_drive_pendente') === null);
+  eq(await marca(X.page), null, 'alteração enviada com sucesso: a marca é limpa');
+  await X.ctx.close();
+
+  drive = criarDrive(DRIVE_A);
+  X = await offlineELanca(drive);
+  eq([await marca(X.page), drive.patches.length], ['1', 0], 'sem conexão: lançar grava a marca persistente "bc_drive_pendente" e não escreve no Drive');
+  eq(await X.page.evaluate(() => Object.keys(montarEstado()).includes('driveMarca') || JSON.stringify(montarEstado()).includes('bc_drive')), false, 'a marca não vai no estado (fora do funil, local de propósito)');
+  await recarregar(X.page);
+  eq(await marca(X.page), '1', 'a marca sobrevive a recarregar a página');
+  await conectar(X.page);
+  eq([await modalConf(X.page), drive.patches.length, drive.arquivo === DRIVE_A], [true, 0, true], 'ao reconectar com a marca: aparece a pergunta e NADA é escrito no Drive');
+  ok(/Este aparelho tem alterações que não foram para o Drive/.test(await X.page.textContent('#modalDriveConflito')) && await X.page.isVisible('#btnDriveManter') && await X.page.isVisible('#btnDriveUsar'), 'a pergunta tem as 2 opções: "Manter os dados deste aparelho" e "Usar os dados do Drive"');
+  eq(await X.page.evaluate(() => transacoes.some(t => t.id === 901)), true, 'enquanto não decide, o dado local continua intacto');
+  eq(await X.page.evaluate(async () => { await driveSalvarAgora(); return 0; }) , 0, '(chamada direta de escrita enquanto a pergunta está aberta)');
+  eq(drive.patches.length, 0, '… e a trava de escrita segura também a chamada direta');
+  await X.page.click('#btnDriveManter');
+  await drive.aguardar(() => drive.patches.length >= 1);
+  eq(JSON.parse(drive.arquivo).transacoes.some(t => t.id === 901), true, '"Manter os dados deste aparelho": sobe o local para o Drive');
+  await X.page.waitForFunction(() => localStorage.getItem('bc_drive_pendente') === null);
+  eq([await marca(X.page), await modalConf(X.page)], [null, false], '… a marca é limpa e a pergunta fecha');
+  await esperaBotao(X.page, 'Sincronizado');
+  await X.ctx.close();
+
+  drive = criarDrive(DRIVE_A);
+  X = await offlineELanca(drive);
+  await conectar(X.page);
+  eq(await modalConf(X.page), true, 'segundo cenário: a pergunta aparece de novo');
+  await X.page.click('#btnDriveUsar');
+  await X.page.waitForFunction(() => localStorage.getItem('bc_drive_pendente') === null);
+  eq([await X.page.evaluate(() => transacoes.map(t => t.id)), drive.patches.length, drive.arquivo === DRIVE_A], [[500], 0, true], '"Usar os dados do Drive": o local vira o do Drive e nada é escrito no Drive');
+  eq([await marca(X.page), await modalConf(X.page)], [null, false], '… a marca é limpa e a pergunta fecha');
+  eq(await X.page.evaluate(() => snapshotAnterior !== null && snapshotAnterior.some(t => t.id === 901)), true, 'antes de substituir o local o snapshot do "Desfazer" foi salvo (com o lançamento 901)');
+  ok(await X.page.evaluate(() => { const t = document.getElementById('toast'); return t.classList.contains('show') && !!t.querySelector('button') && /Desfazer/.test(t.textContent); }), 'e o toast oferece "Desfazer"');
+  await X.page.evaluate(() => desfazer());
+  eq(await X.page.evaluate(() => transacoes.some(t => t.id === 901)), true, 'desfazer() devolve o lançamento que só existia neste aparelho (a volta de um nível)');
+  await X.ctx.close();
+
+  // falha de PATCH também marca; "Tentar de novo" com sucesso limpa
+  drive = criarDrive(DRIVE_A);
+  X = await novoAparelho(browser, { drive });
+  await conectar(X.page);
+  drive.modo.patch = 500;
+  await mutar(X.page, 902);
+  await drive.aguardar(() => drive.tentativasPatch >= 1);
+  await esperaBotao(X.page, 'Não sincronizou');
+  eq(await marca(X.page), '1', 'PATCH com falha: a marca fica gravada');
+  drive.modo.patch = null;
+  await X.page.click('#btnDriveRetry');
+  await drive.aguardar(() => drive.patches.length >= 1);
+  await X.page.waitForFunction(() => localStorage.getItem('bc_drive_pendente') === null);
+  eq(await marca(X.page), null, '"Tentar de novo" com sucesso: a marca é limpa');
+  // mutação durante o envio: a marca não pode ser limpa se ainda há agendamento pendente
+  await X.page.evaluate(async () => { driveAgendarSync(); await driveSalvarAgora(); });
+  eq(await marca(X.page), '1', 'se há outra alteração agendada, um envio bem-sucedido NÃO limpa a marca');
+  await X.page.evaluate(() => { clearTimeout(syncTimer); syncTimer = null; });
+  await X.ctx.close();
+
+  // Drive "vazio" ({}): não há o que comparar, inicializa com o local mesmo com marca
+  drive = criarDrive('{}');
+  X = await novoAparelho(browser, { drive });
+  await X.page.evaluate(() => { localStorage.setItem('bc_drive_usa', '1'); localStorage.setItem('bc_drive_pendente', '1'); });
+  await X.page.evaluate(async l => { transacoes = [l]; await salvarTx(); }, LOCAL1);
+  await conectar(X.page);
+  await drive.aguardar(() => drive.patches.length >= 1);
+  eq([await modalConf(X.page), JSON.parse(drive.arquivo).transacoes.map(t => t.id)], [false, [1]], 'Drive sem dados + marca: sem pergunta, o local inicializa o arquivo');
+  await X.ctx.close();
+
+  // ---- Drive corrompido: caminho manual "Substituir o Drive pelos dados deste aparelho"
+  const botaoSubst = (page) => page.evaluate(() => !!document.getElementById('btnDriveSubstituir'));
+  drive = criarDrive('{"transacoes": [corrompido');
+  X = await novoAparelho(browser, { drive });
+  await X.page.evaluate(async l => { transacoes = [l]; await salvarTx(); }, LOCAL1);
+  await conectar(X.page);
+  eq(await botaoSubst(X.page), true, 'JSON inválido + aparelho com dados: a faixa ganha "Substituir o Drive pelos dados deste aparelho"');
+  eq(await X.page.textContent('#btnDriveSubstituir'), 'Substituir o Drive pelos dados deste aparelho', 'texto do botão');
+  X.page.__c.confirm = false; X.page.__c.msgs.length = 0;
+  await X.page.click('#btnDriveSubstituir');
+  eq([drive.patches.length, drive.arquivo, X.page.__c.msgs.some(m => /SOBRESCRITO/.test(m))], [0, '{"transacoes": [corrompido', true], 'pede confirmação dizendo que o arquivo do Drive será SOBRESCRITO; recusando, nada é escrito');
+  X.page.__c.confirm = true;
+  await X.page.click('#btnDriveSubstituir');
+  await drive.aguardar(() => drive.patches.length >= 1);
+  eq(JSON.parse(drive.arquivo).transacoes.map(t => t.id), [1], 'confirmando: o Drive passa a ter os dados deste aparelho');
+  await esperaBotao(X.page, 'Sincronizado');
+  eq([(await barra(X.page)).visivel, await botaoSubst(X.page)], [false, false], 'depois: faixa e botão somem; as escritas voltam a funcionar');
+  await X.ctx.close();
+  drive = criarDrive('{"transacoes": [corrompido');
+  X = await novoAparelho(browser, { drive });
+  await conectar(X.page);
+  eq([await botaoSubst(X.page), (await barra(X.page)).botao], [false, true], 'JSON inválido mas o aparelho NÃO tem dados: sem o botão de substituir (só "Tentar de novo")');
+  await X.ctx.close();
+  for(const [rotulo, ajustar] of [['erro 500', d => { d.modo.media = 500; }], ['corpo vazio', d => { d.modo.vazio = true; }]]){
+    drive = criarDrive(dadosNoDrive); ajustar(drive);
+    X = await novoAparelho(browser, { drive });
+    await X.page.evaluate(async l => { transacoes = [l]; await salvarTx(); }, LOCAL1);
+    await conectar(X.page);
+    eq(await botaoSubst(X.page), false, `leitura com ${rotulo} (não é arquivo corrompido): NUNCA oferece substituir o Drive`);
+    await X.ctx.close();
+  }
 
   // ================= 6. PIN =================
   console.log('6. PIN');

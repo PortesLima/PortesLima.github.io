@@ -215,6 +215,7 @@ const MODAIS = {
   modalRapido: () => abrirModalRapido(),
   modalPlanos: () => abrirPlanos(),
   modalAssinatura: () => abrirMinhaAssinatura(),
+  modalDriveConflito: () => { document.getElementById('modalDriveConflito').style.display = 'flex'; },
   modalTrialFim: () => { document.getElementById('modalTrialFim').style.display = 'flex'; },
   modalExcluirParcela: () => { document.getElementById('modalExcluirParcelaTexto').textContent = '"Parcela (1/3)" faz parte de um parcelamento com 3 parcela(s). O que deseja excluir?'; document.getElementById('modalExcluirParcela').style.display = 'flex'; },
   modalEvolucaoMeta: () => verEvolucaoMeta(1),

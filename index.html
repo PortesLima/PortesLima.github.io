@@ -915,6 +915,20 @@
     </div>
   </div>
 
+  <div id="modalDriveConflito" class="modal-bg" style="display:none;">
+    <div class="modal-box">
+      <h2>Este aparelho tem alterações que não foram para o Drive</h2>
+      <p style="font-size:13.5px; color:var(--muted); margin-top:-6px;">
+        Você lançou ou editou dados aqui enquanto o Drive não estava disponível, e o Drive tem uma versão diferente.
+        O que fazer?
+      </p>
+      <button id="btnDriveManter" onclick="driveConflitoManter()" style="width:100%; margin-top:6px;">Manter os dados deste aparelho</button>
+      <div style="font-size:11.5px; color:var(--muted); margin:4px 0 14px;">Envia os dados deste aparelho para o Drive e substitui o que está lá.</div>
+      <button id="btnDriveUsar" class="secondary" onclick="driveConflitoUsarDrive()" style="width:100%;">Usar os dados do Drive</button>
+      <div style="font-size:11.5px; color:var(--muted); margin-top:4px;">Troca os dados deste aparelho pelos do Drive. Logo depois dá para desfazer (só os lançamentos voltam).</div>
+    </div>
+  </div>
+
   <div id="modalAssinatura" class="modal-bg" style="display:none;">
     <div class="modal-box">
       <h2 style="display:flex; justify-content:space-between; align-items:center;">Minha assinatura
@@ -1642,6 +1656,22 @@ let driveLeituraOk = false;
 let drivePendente = false;
 let driveFalhaMotivo = null;
 let driveUltimaTentativa = -Infinity;
+// G2: marca PERSISTENTE (local, fora do funil de sync de propósito — como bc_aviso_venc_dispensado) de que há
+// alterações DESTE aparelho que ainda não chegaram ao Drive. Só existe em aparelho que já sincroniza
+// ('bc_drive_usa', gravada na 1ª leitura bem-sucedida). Sem a marca, conectar continua last-write-wins silencioso.
+const CHAVE_DRIVE_PENDENTE = 'bc_drive_pendente';
+const CHAVE_DRIVE_USA = 'bc_drive_usa';
+function driveMarcaGet(){ try{ return localStorage.getItem(CHAVE_DRIVE_PENDENTE) === '1'; }catch(e){ return false; } }
+function driveMarcaSet(){ try{ localStorage.setItem(CHAVE_DRIVE_PENDENTE, '1'); }catch(e){} }
+function driveMarcaLimpar(){ try{ localStorage.removeItem(CHAVE_DRIVE_PENDENTE); }catch(e){} }
+function driveUsaGet(){ try{ return localStorage.getItem(CHAVE_DRIVE_USA) === '1'; }catch(e){ return false; } }
+function driveUsaSet(){ try{ localStorage.setItem(CHAVE_DRIVE_USA, '1'); }catch(e){} }
+let driveFalhaCorrompido = false; // a leitura falhou por JSON inválido/formato inesperado (arquivo ilegível), não por rede
+let driveConflitoDados = null;    // blob do Drive guardado enquanto a pessoa escolhe (modal #modalDriveConflito)
+function aparelhoTemDados(){
+  return transacoes.length > 0 || metas.length > 0 || recorrentes.length > 0
+    || Object.keys(orcamentos).length > 0 || Object.keys(saldosIniciais).length > 0;
+}
 let tokenClient = null;
 let syncTimer = null;
 
@@ -1710,6 +1740,7 @@ function atualizarStatusGoogle(status){
   else if(status==='erro') txt = '⚠️ Erro ao sincronizar';
   else if(status==='falha-leitura') txt = '🔴 Drive indisponível';
   else if(status==='falha-escrita') txt = '🔴 Não sincronizou';
+  else if(status==='aguardando') txt = '🟡 Aguardando sua escolha';
   else if(status==='expirado') txt = '🔄 Sessão expirada, clique para reconectar';
   else txt = '🔗 Conectar Google Drive';
   btn.textContent = txt;
@@ -1734,6 +1765,16 @@ function renderBarraDrive(){
     b.appendChild(span); b.appendChild(btn);
   }
   if(span.textContent !== texto) span.textContent = texto;
+  // arquivo do Drive ilegível + este aparelho tem dados: caminho MANUAL para sobrescrever o Drive (nunca escreve sozinho)
+  const querSubst = driveFalhaMotivo === 'leitura' && driveFalhaCorrompido && aparelhoTemDados();
+  let bs = b.querySelector('#btnDriveSubstituir');
+  if(querSubst && !bs){
+    bs = document.createElement('button');
+    bs.className = 'small secondary'; bs.id = 'btnDriveSubstituir'; bs.type = 'button';
+    bs.textContent = 'Substituir o Drive pelos dados deste aparelho';
+    bs.onclick = () => driveSubstituirPeloLocal();
+    b.appendChild(bs);
+  }else if(!querSubst && bs){ bs.remove(); }
   b.style.display = 'flex';
 }
 function montarEstado(){
@@ -1895,6 +1936,7 @@ async function aplicarDadosImportados(dados, {preservarSnapshot}={}){
 async function driveSincronizarInicial(){
   driveUltimaTentativa = performance.now();
   driveLeituraOk = false; // trava de escrita até esta leitura ser confirmada
+  driveFalhaCorrompido = false;
   let lendo = true;
   try{
     await driveEncontrarOuCriarArquivo();
@@ -1906,8 +1948,17 @@ async function driveSincronizarInicial(){
     try{ dados = JSON.parse(texto); }catch(e){ throw new Error('drive: JSON inválido'); }
     try{ validarDadosBackup(dados); }catch(e){ throw new Error('drive: formato inesperado (' + e.message + ')'); }
     lendo = false;
-    driveLeituraOk = true; // leitura confirmada: a partir daqui o app pode escrever
     driveFalhaMotivo = null;
+    driveUsaSet(); // a partir da 1ª leitura OK este aparelho "usa o Drive" (habilita a marca de pendências)
+    if(dados.transacoes && driveMarcaGet()){
+      // G2: há alterações DESTE aparelho que não subiram e o Drive tem dados. Não substitui nada e não escreve
+      // nada (driveLeituraOk continua false) até a pessoa escolher.
+      driveConflitoDados = dados;
+      abrirModalDriveConflito();
+      atualizarStatusGoogle('aguardando');
+      return;
+    }
+    driveLeituraOk = true; // leitura confirmada: a partir daqui o app pode escrever
     if(dados.transacoes){
       await aplicarDadosImportados(dados, {manterContasSeVazio:true});
       drivePendente = false; // o aparelho agora espelha o Drive
@@ -1921,6 +1972,7 @@ async function driveSincronizarInicial(){
     console.error(e);
     if(lendo && e.message !== 'token expirado'){
       driveFalhaMotivo = 'leitura';
+      driveFalhaCorrompido = /^drive: (JSON inválido|formato inesperado)/.test(e.message);
       atualizarStatusGoogle('falha-leitura');
     }else{
       atualizarStatusGoogle('erro');
@@ -1928,13 +1980,16 @@ async function driveSincronizarInicial(){
   }
 }
 function driveAgendarSync(){
+  // G2: em aparelho que já usa o Drive, toda alteração fica "marcada" (persistente) até um envio confirmado —
+  // mesmo sem internet/sem token. Se o app fechar antes de subir, a próxima conexão pergunta em vez de substituir.
+  if(driveUsaGet()) driveMarcaSet();
   if(!accessToken) return;
   drivePendente = true;
   // sem leitura inicial bem-sucedida nada é escrito (evita sobrescrever o Drive com estado vazio)
   if(!driveLeituraOk) return;
   atualizarStatusGoogle('pendente');
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(driveSalvarAgora, 1200);
+  syncTimer = setTimeout(() => { syncTimer = null; driveSalvarAgora(); }, 1200);
 }
 async function driveSalvarAgora(){
   if(!accessToken || !driveFileId) return;
@@ -1948,15 +2003,55 @@ async function driveSalvarAgora(){
     });
     drivePendente = false;
     driveFalhaMotivo = null;
+    if(!syncTimer) driveMarcaLimpar(); // envio confirmado e nenhuma outra alteração agendada → sem pendência
     atualizarStatusGoogle('ok');
   }catch(e){
     console.error('Falha ao salvar no Drive', e);
     if(e.message !== 'token expirado'){
       driveFalhaMotivo = 'escrita';
+      driveMarcaSet();
       drivePendente = true; // continua pendente: o próximo debounce (ou "Tentar de novo") reenvia o estado inteiro
       atualizarStatusGoogle('falha-escrita');
     }
   }
+}
+// G2 — pergunta ao reconectar quando há alterações deste aparelho que não subiram
+function abrirModalDriveConflito(){ document.getElementById('modalDriveConflito').style.display = 'flex'; }
+function fecharModalDriveConflito(){ document.getElementById('modalDriveConflito').style.display = 'none'; }
+// "Manter os dados deste aparelho": libera a escrita e sobe o local (a marca só some quando o envio é confirmado)
+async function driveConflitoManter(){
+  fecharModalDriveConflito();
+  driveConflitoDados = null;
+  driveLeituraOk = true; driveFalhaMotivo = null;
+  await driveSalvarAgora();
+}
+// "Usar os dados do Drive": guarda o snapshot do Desfazer (só os lançamentos) e substitui o local
+async function driveConflitoUsarDrive(){
+  const dados = driveConflitoDados;
+  if(!dados) return;
+  fecharModalDriveConflito();
+  salvarSnapshot();
+  try{
+    await aplicarDadosImportados(dados, { preservarSnapshot: true });
+  }catch(e){
+    snapshotAnterior = null;
+    alert(e.codigo === 'armazenamento' ? 'Não coube no armazenamento do aparelho. Nada foi alterado.' : 'Não foi possível usar os dados do Drive. Nada foi alterado.');
+    abrirModalDriveConflito();
+    return;
+  }
+  driveConflitoDados = null;
+  driveLeituraOk = true; driveFalhaMotivo = null; drivePendente = false;
+  driveMarcaLimpar();
+  render();
+  mostrarToast('Dados do Drive carregados', { acao: 'Desfazer', onAcao: desfazer });
+  atualizarStatusGoogle('ok');
+}
+// arquivo do Drive ilegível + este aparelho tem dados: sobrescreve o Drive, SÓ depois de confirmar
+async function driveSubstituirPeloLocal(){
+  if(!confirm('O arquivo atual do Drive está ilegível e será SOBRESCRITO pelos dados deste aparelho. Isso não pode ser desfeito. Deseja continuar?')) return;
+  driveLeituraOk = true; driveFalhaMotivo = null; driveFalhaCorrompido = false;
+  driveUsaSet();
+  await driveSalvarAgora();
 }
 // botão "Tentar de novo" da faixa #barraDrive: ignora o intervalo mínimo
 async function driveTentarDeNovo(){
