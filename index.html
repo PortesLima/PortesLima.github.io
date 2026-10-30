@@ -3060,8 +3060,11 @@ function cancelarEdicaoMeta(){
   document.getElementById('formMeta').style.display = 'none';
 }
 function addValorMeta(id){
-  const v = parseFloat(prompt('Quanto deseja adicionar a essa meta? (R$)'));
-  if(isNaN(v) || v<=0) return;
+  const txt = prompt('Quanto deseja adicionar a essa meta? (R$)');
+  // mesmo parser dos outros campos de dinheiro (aceita 50,5 e 1.234,56); texto com letras é recusado em vez de lido pela metade
+  if(txt === null || !/^[\s\d.,R$]+$/i.test(txt)) return;
+  const v = parseValorBR(txt);
+  if(!isFinite(v) || v<=0) return;
   const m = metas.find(x=>x.id===id);
   m.valorAtual = Math.min(m.valorAlvo, m.valorAtual + v);
   transacoes.unshift({
