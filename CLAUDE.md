@@ -23,6 +23,15 @@ direction:
   no gateway) is done; Fase 2 (backend + gateway) and Fase 3 (Play Store via TWA) are open.
 Ask the user for the URLs if a future session needs them.
 
+## Estado em 29/10/2026 (fim do dia)
+
+- **Versão publicada: `2026-10-29.27`** (Leva 3: I em `.26`; J, K e M em `.27`). `main` e `origin/main` estão em `b2dd21c` ("chore: versão .27"), iguais. O **único** commit local à frente do `origin/main` é o do L (itens 1–5), abaixo — **não publicado**.
+- **L parou em: itens 1–5 COMMITADOS localmente (`c2fadd5`, "feat: contraste de etiquetas, botões e placeholders"), sem bump e sem push.** `run-all.js` completo "tudo verde" antes do commit. Falta, nesta ordem: (1) **item 6** — borda dos campos com contraste 3:1 (`#64676d` escuro / `#929394` claro, só `input`/`select`/`textarea`, cartões inalterados) em **commit separado e reversível**, convertendo os 2 `[BUG-CONHECIDO]` de `test-a11y` que restam (um por tema); (2) `chore: versão .28` (APP_VERSION e CACHE do `sw.js`, espelho idêntico, resumo da Leva 3 completa); (3) `run-all.js` e push. **O bump e o push ficam para amanhã, com autorização do dono.** Imagens da proposta (antes/depois): `tests/capturas/leva3-L/` (fora do git).
+- **Pendente do usuário (iPhone):** (a) conferir a `.27`: visual igual ao da `.26` (sem mudança de espaçamento por causa do `<main>`/`<header>`), abas e modais ao toque, um extrato com vários lançamentos entrando normalmente e excluir um deles sem afetar outro; (b) dar parecer sobre a **borda dos campos** (ver `rapido-botao-gasto-e-campos-dark.png` e `-light.png`) — se achar pesado, reverte-se só o commit do item 6. Opcional: no console do navegador, `new Set(transacoes.map(t=>t.id)).size === transacoes.length` (deve dar `true`; `false` = ids repetidos antigos, aí vale uma rotina de reparo).
+- **Contagem de checks `[BUG-CONHECIDO]` (última `run-all`, 10 no total):** `test-trial` 6, `test-estado` 2 (conflito entre 2 aparelhos e "Esqueci o PIN"), `test-a11y` 2 (borda dos campos, um por tema = item 6 do L); as demais suítes, 0. **`[PROVISORIO-FASE2]`: 9**, todos em `test-trial` (valem só sem backend/cobrança; vão falhar de propósito quando a Fase 2 entrar).
+- **Fila da Fase 2 (NÃO fazer antes):** reavaliar o trial ao voltar ao app, após o sync e com `trialInicio` inválido; conflito entre dois aparelhos (merge); "Desfazer" com o estado completo (hoje o snapshot guarda só os lançamentos); validação do PIN no servidor; colisão de ids **entre aparelhos** (o `uid()` monotônico só vale por sessão); cobrança real; backend Supabase + Mercado Pago; textos legais (política de privacidade, termos).
+- **Próximos passos:** (1) fechar o L (item 6) e publicar a `.28`; (2) manual e ajuda dentro do app; (3) ler a telemetria do PostHog **entre 28/11 e 13/12, filtrando a partir de 30/10** (a coleta confiável começa em 29/10; antes disso a chave estava errada); (4) Fase 2 **só se** a telemetria justificar.
+
 ## Commands
 
 There is no build or lint tooling — this is intentional (see Architecture). Workflow:
