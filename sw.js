@@ -7,7 +7,20 @@
 // ver na hora. Trocar este byte faz o browser detectar o SW novo, precachear o index.html
 // novo e apagar os caches antigos no 'activate'.
 const CACHE = 'bolso-certo-2026-10-30.28';
-const SHELL = ['./', './index.html'];
+// ajuda.html e as capturas da ajuda entram no precache: a ajuda abre offline (páginas estáticas, sem dado do usuário)
+const SHELL = ['./', './index.html', './ajuda.html',
+  './ajuda/img/avisos-de-vencimento.webp',
+  './ajuda/img/categorias.webp',
+  './ajuda/img/contas-e-cartoes.webp',
+  './ajuda/img/fim-do-mes.webp',
+  './ajuda/img/importar-extrato.webp',
+  './ajuda/img/lista-lancamentos.webp',
+  './ajuda/img/menu-configuracoes.webp',
+  './ajuda/img/metas-e-fixos.webp',
+  './ajuda/img/novo-lancamento.webp',
+  './ajuda/img/orcamento.webp',
+  './ajuda/img/registro-rapido.webp',
+  './ajuda/img/visao-geral.webp'];
 
 self.addEventListener('install', (e) => {
   // NÃO faz skipWaiting aqui de propósito: o SW novo espera em 'waiting' e a página mostra a
@@ -41,14 +54,16 @@ self.addEventListener('fetch', (e) => {
   // navegação (o HTML): network-first — online sempre pega o HTML fresco e reabastece o
   // cache; offline cai para o último HTML bom. Nunca "gruda" numa versão velha com rede.
   if (req.mode === 'navigate') {
+    // a página de ajuda tem a própria chave: sem isso, abrir a ajuda sobrescreveria o index.html do cache
+    const ehAjuda = /\/ajuda\.html$/.test(url.pathname);
+    const chave = ehAjuda ? './ajuda.html' : './index.html';
     e.respondWith((async () => {
       try {
         const r = await fetch(req);
-        const c = await caches.open(CACHE);
-        c.put('./index.html', r.clone());
+        if (r && r.ok) { const c = await caches.open(CACHE); c.put(chave, r.clone()); }
         return r;
       } catch (_) {
-        return (await caches.match('./index.html')) || (await caches.match('./')) || Response.error();
+        return (await caches.match(chave)) || (ehAjuda ? null : (await caches.match('./'))) || Response.error();
       }
     })());
     return;

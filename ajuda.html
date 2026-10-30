@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1115">
+<meta name="description" content="Manual e passo a passo do Bolso Certo, o app de finanças pessoais.">
+<title>Ajuda — Bolso Certo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 72'%3E%3Ccircle cx='36' cy='36' r='34' fill='%23e6f1fb' stroke='%234d9eff' stroke-width='3'/%3E%3Cpath d='M22 40c0-9 6-16 14-16s14 7 14 16' stroke='%234d9eff' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='36' cy='24' r='4.5' fill='%234d9eff'/%3E%3Crect x='19' y='40' width='34' height='15' rx='4' fill='%234d9eff'/%3E%3Ctext x='36' y='51' text-anchor='middle' font-size='12' font-weight='700' fill='white' font-family='Arial'%3ER%24%3C/text%3E%3C/svg%3E">
+<script>
+  /* só LÊ o tema que o app salvou (bc_tema); nunca grava nada */
+  (function(){
+    var t = null;
+    try{ t = JSON.parse(localStorage.getItem('bc_tema')); }catch(e){}
+    if(t !== 'light' && t !== 'dark'){
+      t = (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --card2:#1d212b; --border:#282d38;
+    --text:#eef0f3; --muted:#8b93a3;
+    --blue:#4d9eff; --amber:#ffb84d; --amber-bg:rgba(255,184,77,.12);
+    --btn-text:#0f1115;
+  }
+  [data-theme="light"]{
+    --bg:#f4f5f7; --card:#ffffff; --card2:#f0f1f4; --border:#e1e3e9;
+    --text:#1c1e21; --muted:#5e646f;
+    --blue:#1a60bd; --amber:#8a5808; --amber-bg:rgba(138,88,8,.1);
+    --btn-text:#ffffff;
+  }
+  *{ box-sizing:border-box; }
+  html{ scroll-padding-top:12px; }
+  @media (prefers-reduced-motion: no-preference){ html{ scroll-behavior:smooth; } }
+  body{ margin:0; padding:16px; background:var(--bg); color:var(--text); line-height:1.6; font-size:16px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; }
+  .wrap{ max-width:760px; margin:0 auto; }
+  header.top{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
+  h1{ font-size:24px; margin:0; font-weight:700; }
+  h2.parte{ font-size:21px; margin:6px 0 14px; }
+  h3{ font-size:18px; margin:0 0 8px; }
+  p, li, dd, summary{ overflow-wrap:anywhere; }
+  .sub{ color:var(--muted); margin:2px 0 0; font-size:14px; }
+  a{ color:var(--blue); text-decoration:underline; text-underline-offset:2px; }
+  a:focus-visible, button:focus-visible, summary:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; border-radius:6px; }
+  .voltar{ display:inline-flex; align-items:center; min-height:44px; padding:0 4px; font-weight:600; }
+  [role=tablist]{ display:flex; gap:6px; margin:0 0 16px; border-bottom:1px solid var(--border); }
+  [role=tablist][hidden]{ display:none; }
+  [role=tab]{ min-height:44px; padding:0 16px; background:none; border:0; border-bottom:3px solid transparent; color:var(--muted);
+    font:inherit; font-weight:600; cursor:pointer; }
+  [role=tab][aria-selected=true]{ color:var(--text); border-bottom-color:var(--blue); }
+  .painel[hidden]{ display:none; }
+  .sumario{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 16px; margin:0 0 18px; }
+  .sumario h3{ font-size:15px; color:var(--muted); margin:0 0 4px; }
+  .sumario ul, .sumario ol{ margin:0; padding-left:22px; }
+  .sumario a{ display:inline-block; padding:10px 0; min-height:44px; }
+  @media (min-width:1024px){ .sumario a{ padding:4px 0; min-height:0; } }
+  article{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin:0 0 16px; scroll-margin-top:12px; }
+  article ul, article ol{ padding-left:22px; margin:8px 0; }
+  article li{ margin:6px 0; }
+  b[data-ui]{ font-weight:600; background:var(--card2); border-radius:4px; padding:0 4px; }
+  figure{ margin:12px 0; }
+  figure img{ display:block; max-width:100%; height:auto; border:1px solid var(--border); border-radius:12px; }
+  figcaption{ color:var(--muted); font-size:13.5px; margin-top:6px; }
+  .aviso{ background:var(--amber-bg); border:1px solid var(--amber); border-radius:10px; padding:10px 12px; }
+  dt{ font-weight:700; margin-top:10px; }
+  dd{ margin:2px 0 0 0; }
+  details{ border-top:1px solid var(--border); }
+  details:first-of-type{ border-top:0; }
+  summary{ cursor:pointer; font-weight:600; min-height:44px; padding:10px 0; display:flex; align-items:center; }
+  details p{ margin:0 0 12px; }
+  .rodape-links{ text-align:center; margin:18px 0 60px; }
+  .topo-btn{ position:fixed; right:16px; bottom:16px; min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center;
+    padding:0 14px; background:var(--blue); color:var(--btn-text); border-radius:22px; font-weight:700; text-decoration:none; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+  .topo-btn:focus-visible{ outline:2px solid var(--text); }
+</style>
+</head>
+<body id="topo">
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Ajuda do Bolso Certo</h1>
+      <p class="sub">Manual de cada tela e passo a passo das tarefas do dia a dia.</p>
+    </div>
+    <a class="voltar" href="index.html">← Voltar ao app</a>
+  </header>
+  <main id="conteudo">
+    <div role="tablist" aria-label="Partes da ajuda" id="abas" hidden>
+      <button type="button" role="tab" id="aba-manual" aria-controls="manual" aria-selected="true">Manual</button>
+      <button type="button" role="tab" id="aba-passo" aria-controls="passo-a-passo" aria-selected="false" tabindex="-1">Passo a passo</button>
+    </div>
+<section id="manual" role="tabpanel" aria-labelledby="aba-manual" class="painel">
+<h2 class="parte">Manual: o que cada tela faz</h2>
+<nav aria-label="Sumário do manual" class="sumario">
+<h3>Neste manual</h3>
+<ul>
+<li><a href="#manual-estrutura">Como o app é organizado</a></li>
+<li><a href="#manual-visao-geral">Visão geral</a></li>
+<li><a href="#manual-lancamentos">Lançamentos</a></li>
+<li><a href="#manual-orcamento">Orçamento</a></li>
+<li><a href="#manual-metas">Metas e fixos</a></li>
+<li><a href="#manual-contas">Contas e cartões</a></li>
+<li><a href="#manual-categorias">Categorias</a></li>
+<li><a href="#manual-avisos">Avisos de vencimento</a></li>
+<li><a href="#manual-backup">Backup, Google Drive, PIN e moeda</a></li>
+<li><a href="#manual-assinatura">Teste grátis e assinatura</a></li>
+<li><a href="#manual-privacidade">Privacidade</a></li>
+<li><a href="#glossario">Glossário</a></li>
+<li><a href="#faq">Perguntas frequentes e problemas comuns</a></li>
+</ul>
+</nav>
+
+<article id="manual-estrutura">
+<h3>Como o app é organizado</h3>
+<p><b>Para que serve:</b> juntar tudo o que entra e sai do seu dinheiro num lugar só, e responder duas perguntas: <i>quanto eu tenho hoje?</i> e <i>como o mês vai fechar?</i></p>
+<p><b>O que você vê:</b></p>
+<ul>
+<li><b>No topo:</b> o nome do app, o seletor de mês, o filtro <b data-ui="Conta:">Conta:</b> (para olhar uma conta só ou <b data-ui="Todas as contas">Todas as contas</b>) e o botão ⚙️, que abre o menu de opções. No computador também aparecem <b data-ui="Conectar Google Drive">Conectar Google Drive</b>, <b data-ui="Contas">Contas</b>, <b data-ui="Backup">Backup</b> e o botão de tema claro/escuro. No celular esses quatro ficam dentro do menu ⚙️.</li>
+<li><b>Quatro abas</b> (na barra de baixo no celular): <b data-ui="Visão geral">Visão geral</b>, <b data-ui="Lançamentos">Lançamentos</b>, <b data-ui="Orçamento">Orçamento</b> e <b data-ui="Metas e fixos">Metas e fixos</b>.</li>
+<li><b>O botão +</b> (<b data-ui="Registro rápido">Registro rápido</b>): anota um gasto ou uma receita em poucos segundos, de qualquer aba, menos de <b data-ui="Lançamentos">Lançamentos</b> (lá o formulário já está na tela).</li>
+<li><b>Faixas coloridas</b> abaixo do topo: contagem do teste grátis, aviso de que o teste terminou, <b data-ui="Nova versão disponível">Nova versão disponível</b> (toque em <b data-ui="Atualizar">Atualizar</b>), aviso de contas que vencem e aviso de problema com o Google Drive. Só aparecem quando há algo a dizer.</li>
+</ul>
+<figure><img src="ajuda/img/menu-configuracoes.webp" width="390" height="844" loading="lazy" alt="Menu de opções aberto no celular, com Minha assinatura, Baixar backup, Gerenciar categorias, PIN de acesso, Moeda e Avisos de vencimento."><figcaption>O menu ⚙️ no celular.</figcaption></figure>
+<p><b>O menu ⚙️</b> reúne: <b data-ui="Minha assinatura">Minha assinatura</b>, <b data-ui="Baixar backup (.json)">Baixar backup (.json)</b>, <b data-ui="Gerenciar categorias">Gerenciar categorias</b>, <b data-ui="PIN de acesso">PIN de acesso</b>, <b data-ui="Moeda: BRL">Moeda: BRL</b> (toque para trocar de moeda), <b data-ui="Avisos de vencimento">Avisos de vencimento</b> e <b data-ui="Gerar link só de leitura">Gerar link só de leitura</b>. No celular, ainda traz <b data-ui="Conectar Google Drive">Conectar Google Drive</b>, <b data-ui="Contas e cartões">Contas e cartões</b>, <b data-ui="Backup dos dados">Backup dos dados</b> e o tema.</p>
+<p><b>Dicas:</b></p>
+<ul>
+<li>Toda ação que muda seus dados mostra um aviso rápido embaixo da tela. Quando ele traz o botão <b data-ui="Desfazer">Desfazer</b>, você tem alguns segundos para voltar atrás.</li>
+<li>Os dados ficam no seu aparelho. O app funciona sem internet depois de aberto uma vez.</li>
+</ul>
+</article>
+
+<article id="manual-visao-geral">
+<h3>Visão geral</h3>
+<p><b>Para que serve:</b> mostrar, sem você mexer em nada, como está o mês selecionado. Tem duas sub-abas: <b data-ui="Resumo">Resumo</b> (a resposta rápida) e <b data-ui="Análise">Análise</b> (para investigar).</p>
+<figure><img src="ajuda/img/visao-geral.webp" width="390" height="844" loading="lazy" alt="Visão geral no celular: faixa Você tem hoje, card Fim do mês e o início do card Este mês."><figcaption>A aba Visão geral, sub-aba Resumo.</figcaption></figure>
+<p><b>O que você vê em <b data-ui="Resumo">Resumo</b>:</b></p>
+<ul>
+<li><b data-ui="Você tem hoje">Você tem hoje</b>: o dinheiro que está nas suas contas agora, com uma frase dizendo se ele deve durar até o fim do mês. Se você ainda não informou o saldo das contas, o app mostra o resultado do mês até agora e avisa.</li>
+<li><b data-ui="Fim do mês">Fim do mês</b>: “Depois de pagar as contas de setembro, você fica com R$ X” (ou “faltam R$ X”). É o que sobra depois de pagar o que ainda está em aberto neste mês. Toque em <b data-ui="ver detalhe">ver detalhe</b> para ver a conta passo a passo. No fim do card, a linha “Próximo” mostra a próxima conta a vencer.</li>
+<li><b data-ui="Este mês">Este mês</b>: <b data-ui="Entrou">Entrou</b>, <b data-ui="Saiu">Saiu</b> e <b data-ui="Sobrou">Sobrou</b>. Se o mês anterior fechou com sobra ou falta, esse valor é somado ao “Sobrou”; toque em <b data-ui="ver como foi calculado">ver como foi calculado</b> para conferir.</li>
+<li><b data-ui="Orçamento em risco">Orçamento em risco</b>: categorias que já usaram 80% ou mais do limite. Toque numa linha para ver os lançamentos dela.</li>
+<li><b data-ui="Para onde foi o dinheiro">Para onde foi o dinheiro</b>: gráfico dos gastos do mês por categoria.</li>
+<li><b data-ui="Saldo por conta">Saldo por conta</b>: quanto há em cada conta (só aparece se você informou o saldo inicial de alguma). <b data-ui="Faturas de cartão em aberto">Faturas de cartão em aberto</b>: quanto já foi gasto no ciclo atual de cada cartão (só aparece se houver cartão cadastrado).</li>
+<li><b data-ui="Orçamento total do mês">Orçamento total do mês</b> e <b data-ui="Maiores gastos do mês">Maiores gastos do mês</b>.</li>
+</ul>
+<p><b>O que você vê em <b data-ui="Análise">Análise</b>:</b> <b data-ui="Projeção de saldo">Projeção de saldo</b> (estimativa até dezembro), <b data-ui="Últimos 6 meses">Últimos 6 meses</b>, <b data-ui="Evolução do saldo">Evolução do saldo</b>, <b data-ui="Contas fixas vs. gastos do dia a dia">Contas fixas vs. gastos do dia a dia</b> e <b data-ui="Comparação anual">Comparação anual</b>.</p>
+<figure><img src="ajuda/img/fim-do-mes.webp" width="370" height="203" loading="lazy" alt="Card Fim do mês: depois de pagar as contas de setembro, você fica com R$ 3.280,00."><figcaption>O card “Fim do mês”.</figcaption></figure>
+<p><b>Dicas:</b></p>
+<ul>
+<li>O “Fim do mês” só olha as contas do mês que você está vendo. Uma conta vencida de agosto não entra na conta de setembro, mas continua precisando ser paga com o dinheiro que você tem hoje. Ela aparece nos avisos de vencimento.</li>
+<li>Sem saldo inicial informado, o app conta só o que já entrou ou já foi pago. A receita que ainda vai chegar aparece uma vez só, em “Ainda vai receber”. Informar o saldo inicial das contas deixa a leitura mais fiel.</li>
+<li>Os valores são estimativas feitas com o que você lançou. Quanto mais completo o registro, mais fiel o resultado.</li>
+</ul>
+</article>
+
+<article id="manual-lancamentos">
+<h3>Lançamentos</h3>
+<p><b>Para que serve:</b> registrar e consultar cada entrada e saída de dinheiro.</p>
+<figure><img src="ajuda/img/novo-lancamento.webp" width="370" height="634" loading="lazy" alt="Formulário Novo lançamento com tipo, descrição, conta, valor, categoria, vencimento, situação, parcelas, etiqueta e comprovante."><figcaption>O formulário “Novo lançamento”.</figcaption></figure>
+<p><b>O formulário <b data-ui="Novo lançamento">Novo lançamento</b>:</b></p>
+<ul>
+<li><b>Tipo:</b> <b data-ui="Gasto">Gasto</b>, <b data-ui="Receita">Receita</b> ou <b data-ui="Transferência entre contas">Transferência entre contas</b> (move dinheiro de uma conta sua para outra, sem contar como gasto nem receita).</li>
+<li><b>Descrição</b>, <b>Conta</b>, <b>Valor (R$)</b> (aceita vírgula: 47,90) e <b>Categoria</b>.</li>
+<li><b data-ui="Vencimento">Vencimento</b>: a data do lançamento. Para um gasto que já aconteceu, é o dia em que você pagou.</li>
+<li>Situação: <b data-ui="Pago">Pago</b> (o dinheiro já saiu ou entrou) ou <b data-ui="Pendente">Pendente</b> (ainda vai acontecer). Pendente que passa da data vira <b data-ui="Vencido">Vencido</b> sozinho.</li>
+<li><b data-ui="conta que se repete todo mês">conta que se repete todo mês</b>: marca o gasto como fixo (aparece no gráfico de contas fixas). Não cria lançamentos automáticos.</li>
+<li><b data-ui="Parcelas:">Parcelas:</b> cada parcela entra num mês. O valor digitado é o de <b>cada</b> parcela. Só vale para gasto.</li>
+<li><b>Etiqueta</b> (para agrupar depois, opcional) e <b data-ui="Comprovante:">Comprovante:</b> (uma foto, opcional).</li>
+<li><b data-ui="Adicionar">Adicionar</b> salva. Ao editar um lançamento, o botão <b data-ui="Cancelar edição">Cancelar edição</b> aparece.</li>
+</ul>
+<figure><img src="ajuda/img/lista-lancamentos.webp" width="390" height="844" loading="lazy" alt="Lista de lançamentos do mês com filtros e botões de exportar."><figcaption>A lista de lançamentos, com busca e filtros.</figcaption></figure>
+<p><b>A lista:</b> duas abas, <b data-ui="Lançamentos">Lançamentos</b> e <b data-ui="Dicas">Dicas</b>. Em <b data-ui="Dicas">Dicas</b> há dois blocos: <b data-ui="Para você agora">Para você agora</b> (tirado dos seus dados) e <b data-ui="Boas práticas">Boas práticas</b> (conselhos gerais).</p>
+<ul>
+<li><b data-ui="Ver todas as pendentes">Ver todas as pendentes</b> e <b data-ui="Ver todas as pagas">Ver todas as pagas</b>: mostram a lista inteira, de todos os meses, em vez de só o mês selecionado.</li>
+<li>Busca por descrição (em todos os meses), filtros de categoria (<b data-ui="Todas categorias">Todas categorias</b>) e de situação (<b data-ui="Todos status">Todos status</b>), e o período <b data-ui="De:">De:</b> / <b data-ui="Até:">Até:</b> (use <b data-ui="Limpar período">Limpar período</b> para voltar).</li>
+<li>Em cada linha: <b data-ui="Marcar como pago">Marcar como pago</b> (✓), <b data-ui="Duplicar">Duplicar</b> (⧉), <b data-ui="Editar">Editar</b> (✎), <b data-ui="Ver comprovante">Ver comprovante</b> (📎, se houver) e <b data-ui="Excluir">Excluir</b> (×). Excluir um lançamento simples mostra o aviso com <b data-ui="Desfazer">Desfazer</b>. Excluir uma compra parcelada pergunta se é só aquela parcela ou todas, e <b>não</b> oferece <b data-ui="Desfazer">Desfazer</b>.</li>
+<li>Seleção em massa: marque várias linhas e use <b data-ui="Marcar selecionados como pago">Marcar selecionados como pago</b> ou <b data-ui="Limpar seleção">Limpar seleção</b>.</li>
+<li>Exportar: <b data-ui="Exportar CSV">Exportar CSV</b> (planilha), <b data-ui="Relatório PDF do mês">Relatório PDF do mês</b>, <b data-ui="Relatório PDF do ano">Relatório PDF do ano</b> e <b data-ui="Relatório para IR">Relatório para IR</b> (apoio para organizar a declaração; não substitui um contador).</li>
+</ul>
+<p><b>Dicas:</b></p>
+<ul>
+<li><b data-ui="Desfazer">Desfazer</b> volta só a última ação. Se você fizer duas ações seguidas, só a segunda pode ser desfeita.</li>
+<li>Lançamentos importados de um extrato, parcelas e transferências são lançamentos normais: dá para editar e excluir.</li>
+<li>Um lançamento antigo sem categoria aparece como “Outros”. Os dados gravados não são alterados.</li>
+</ul>
+</article>
+
+<article id="manual-orcamento">
+<h3>Orçamento</h3>
+<p><b>Para que serve:</b> definir quanto você quer gastar por mês em cada categoria e ver quanto já usou.</p>
+<figure><img src="ajuda/img/orcamento.webp" width="390" height="844" loading="lazy" alt="Aba Orçamento com barras de uso por categoria."><figcaption>A aba Orçamento.</figcaption></figure>
+<p><b>O que você vê:</b> o card <b data-ui="Orçamento por categoria">Orçamento por categoria</b>, com uma barra por categoria. Toque em <b data-ui="editar limites">editar limites</b> para digitar o limite mensal de cada uma (deixe vazio ou 0 para “sem limite”). A barra avisa quando você chega perto do limite (80%) e quando estoura.</p>
+<p><b>Dicas:</b> comece por 3 ou 4 categorias (mercado, lazer, transporte). O resumo do que passou de 80% aparece também na Visão geral, em <b data-ui="Orçamento em risco">Orçamento em risco</b>.</p>
+</article>
+
+<article id="manual-metas">
+<h3>Metas e fixos</h3>
+<p><b>Para que serve:</b> guardar dinheiro para um objetivo, lembrar das contas que se repetem todo mês e simular uma economia.</p>
+<figure><img src="ajuda/img/metas-e-fixos.webp" width="390" height="844" loading="lazy" alt="Aba Metas e fixos com a meta Viagem e as contas fixas Aluguel e Internet."><figcaption>A aba Metas e fixos.</figcaption></figure>
+<ul>
+<li><b data-ui="Metas de economia">Metas de economia</b>: <b data-ui="+ nova meta">+ nova meta</b> pede nome, valor alvo e prazo (<b data-ui="Criar meta">Criar meta</b>). Em cada meta, <b data-ui="+ add">+ add</b> soma um valor guardado (isso também lança um gasto “Meta: nome” na primeira conta da lista, sem <b data-ui="Desfazer">Desfazer</b>; digite os centavos com ponto, a vírgula ainda não é aceita nesse campo) e o gráfico 📈 mostra a evolução.</li>
+<li><b data-ui="Contas que se repetem todo mês">Contas que se repetem todo mês</b>: <b data-ui="+ nova conta fixa">+ nova conta fixa</b> guarda um modelo (aluguel, internet, salário). O app <b>não</b> lança sozinho: todo mês, toque em <b data-ui="Lançar este mês">Lançar este mês</b>. O lançamento entra no dia 5 do mês selecionado, na primeira conta da sua lista; ajuste depois com <b data-ui="Editar">Editar</b> se precisar.</li>
+<li><b data-ui="Simulador de economia">Simulador de economia</b>: uma calculadora (valor por mês × número de meses, sem juros). Não usa os seus dados.</li>
+</ul>
+</article>
+
+<article id="manual-contas">
+<h3>Contas e cartões</h3>
+<p><b>Para que serve:</b> cadastrar onde seu dinheiro fica (banco, carteira, cartão) e informar quanto há em cada uma.</p>
+<figure><img src="ajuda/img/contas-e-cartoes.webp" width="390" height="844" loading="lazy" alt="Janela Gerenciar contas e cartões com saldo inicial e data de cada conta."><figcaption>A janela de contas e cartões.</figcaption></figure>
+<p><b>O que você vê</b> em <b data-ui="Gerenciar contas e cartões">Gerenciar contas e cartões</b>:</p>
+<ul>
+<li>Por conta: <b data-ui="Saldo inicial">Saldo inicial</b> e <b data-ui="Data do saldo">Data do saldo</b>. O app soma os lançamentos pagos depois dessa data e calcula o saldo de hoje. É isso que alimenta <b data-ui="Você tem hoje">Você tem hoje</b> e <b data-ui="Fim do mês">Fim do mês</b>.</li>
+<li><b data-ui="É cartão de crédito">É cartão de crédito</b>: informe o dia em que a fatura fecha (<b data-ui="Fecha dia">Fecha dia</b>) e o dia em que vence (<b data-ui="Vence dia">Vence dia</b>). A Visão geral passa a mostrar a fatura em aberto.</li>
+<li><b data-ui="Importar extrato (OFX/CSV)">Importar extrato (OFX/CSV)</b>: dentro de cada conta, lê o arquivo do banco (veja a <a href="#tarefa-importar-extrato">tarefa de importação</a>).</li>
+<li>Para criar uma conta nova, digite o nome e toque em <b data-ui="Adicionar conta">Adicionar conta</b>. O × remove a conta.</li>
+</ul>
+<p><b>Dicas:</b> o nome da conta é o que liga os lançamentos a ela. Evite trocar o nome de uma conta que já tem lançamentos.</p>
+</article>
+
+<article id="manual-categorias">
+<h3>Categorias</h3>
+<p><b>Para que serve:</b> agrupar os gastos. O app já vem com categorias prontas; você pode criar, renomear e excluir.</p>
+<figure><img src="ajuda/img/categorias.webp" width="390" height="844" loading="lazy" alt="Janela Gerenciar categorias com a lista, o campo para nova categoria e a cor automática."><figcaption>A janela de categorias.</figcaption></figure>
+<p><b>O que você vê</b> em <b data-ui="Gerenciar categorias">Gerenciar categorias</b> (menu ⚙️): cada categoria com sua cor e quantos usos tem. Renomear mantém os lançamentos, orçamentos e contas fixas ligados a ela. Criar usa uma cor automática. Excluir uma categoria que tem uso pergunta para qual outra mover tudo (<b data-ui="Mover e excluir">Mover e excluir</b>). A categoria “Outros” não pode ser excluída.</p>
+</article>
+
+<article id="manual-avisos">
+<h3>Avisos de vencimento</h3>
+<p><b>Para que serve:</b> lembrar das contas pendentes antes que atrasem.</p>
+<figure><img src="ajuda/img/avisos-de-vencimento.webp" width="390" height="844" loading="lazy" alt="Janela Avisos de vencimento com três opções e o botão de avisos do navegador."><figcaption>A janela de avisos.</figcaption></figure>
+<ul>
+<li>Em <b data-ui="Avisos de vencimento">Avisos de vencimento</b> (menu ⚙️) você escolhe de quais quer ser avisado: <b data-ui="Vence hoje">Vence hoje</b>, <b data-ui="Vence nos próximos 3 dias">Vence nos próximos 3 dias</b> e <b data-ui="Atrasadas">Atrasadas</b>.</li>
+<li>O aviso aparece numa faixa no topo, em qualquer aba. <b data-ui="Ver">Ver</b> leva à lista das pendentes do mês; o ✕ esconde o aviso até amanhã (ou até surgir uma conta nova na janela).</li>
+<li><b data-ui="Ativar avisos do navegador">Ativar avisos do navegador</b> liga a notificação do aparelho. Ela só funciona <b>enquanto o app está aberto</b>. Com o app fechado, o aviso não chega.</li>
+<li>O app avisa, mas <b>não paga</b> nada e não faz débito automático no banco. Marcar como pago é sempre com você.</li>
+</ul>
+</article>
+
+<article id="manual-backup">
+<h3>Backup, Google Drive, PIN e moeda</h3>
+<p><b>Para que serve:</b> não perder seus dados, usar em mais de um aparelho e trancar a tela.</p>
+<ul>
+<li><b>Backup em arquivo:</b> <b data-ui="Baixar backup (.json)">Baixar backup (.json)</b> (menu ⚙️) gera um arquivo com todos os seus dados. Funciona mesmo depois que o teste grátis acaba. No painel <b data-ui="Backup dos dados">Backup dos dados</b> (botão <b data-ui="Backup">Backup</b>) há também <b data-ui="Baixar backup completo (.json)">Baixar backup completo (.json)</b>, <b data-ui="Baixar comprovantes anexados">Baixar comprovantes anexados</b> e <b data-ui="Importar backup:">Importar backup:</b>. Importar valida o arquivo antes de mexer em qualquer coisa e recusa o que não for um backup do Bolso Certo. Importar <b>substitui</b> o que o arquivo traz; o que não vem no arquivo (por exemplo, categorias, num backup antigo) é mantido. Importar não é permitido depois que o teste acaba. Depois de importar, o <b data-ui="Desfazer">Desfazer</b> anterior perde a validade.</li>
+<li><b>Google Drive:</b> <b data-ui="Conectar Google Drive">Conectar Google Drive</b> guarda uma cópia dos seus dados num arquivo do seu próprio Drive e a mantém atualizada sozinha. É assim que se usa o app em dois aparelhos. <b>O Drive não junta alterações feitas nos dois aparelhos: vale a última que for salva.</b> O app só enxerga o arquivo que ele mesmo criou. <i>O login com Google está em fase de testes: por enquanto só funciona para quem foi liberado. Disponível em breve para todos.</i></li>
+<li><b>Faixa vermelha do Drive:</b> <b data-ui="Não consegui falar com o Drive — seus dados locais estão preservados">Não consegui falar com o Drive — seus dados locais estão preservados</b> quer dizer que o app não conseguiu ler o Drive. Ele <b>não grava nada</b> no Drive nesse caso e mantém os dados do aparelho. Toque em <b data-ui="Tentar de novo">Tentar de novo</b>. Se for o arquivo do Drive que está ilegível, aparece também <b data-ui="Substituir o Drive pelos dados deste aparelho">Substituir o Drive pelos dados deste aparelho</b> (pede confirmação, porque troca o arquivo do Drive pelo deste aparelho). A faixa <b data-ui="Não sincronizou — suas alterações estão salvas neste aparelho e serão enviadas na próxima tentativa">Não sincronizou — suas alterações estão salvas neste aparelho e serão enviadas na próxima tentativa</b> quer dizer que a gravação no Drive falhou; nada se perdeu no aparelho. O botão do Drive só mostra <b data-ui="Sincronizado com Drive">Sincronizado com Drive</b> depois que os dados realmente chegaram.</li>
+<li><b>Pergunta “Manter ou usar o Drive”:</b> aparece quando este aparelho tem alterações que não chegaram ao Drive e o Drive tem uma versão diferente. <b data-ui="Manter os dados deste aparelho">Manter os dados deste aparelho</b> envia o aparelho para o Drive e substitui o que está lá. <b data-ui="Usar os dados do Drive">Usar os dados do Drive</b> troca os dados do aparelho pelos do Drive; logo depois dá para <b data-ui="Desfazer">Desfazer</b>, mas só os lançamentos voltam.</li>
+<li><b data-ui="PIN de acesso">PIN de acesso</b>: uma trava de tela de 4 a 6 números. Ele <b>não protege contra quem está com o aparelho desbloqueado</b> e não criptografa os dados. Fica só no aparelho (não vai para o backup nem para o Drive). Não existe “trocar PIN”: remova e crie outro. Se esquecer, a tela do PIN tem <b data-ui="Esqueci o PIN / remover proteção">Esqueci o PIN / remover proteção</b>.</li>
+<li><b>Moeda:</b> <b data-ui="Moeda: BRL">Moeda: BRL</b> alterna entre real, dólar e euro só para <b>exibir</b>. Seus valores continuam guardados em reais, e as exportações saem sempre em reais.</li>
+<li><b data-ui="Gerar link só de leitura">Gerar link só de leitura</b>: copia um endereço que abre o app sem poder editar. Quem abrir precisa entrar com a mesma conta Google. O link não inicia o teste grátis e não grava nada no aparelho nem no Drive.</li>
+</ul>
+</article>
+
+<article id="manual-assinatura">
+<h3>Teste grátis e assinatura</h3>
+<p><b>Para que serve:</b> o app é gratuito por 15 dias. Depois, para continuar lançando, é preciso assinar.</p>
+<ul>
+<li>Durante o teste, uma faixa mostra <b data-ui="Teste grátis · faltam">Teste grátis · faltam</b> quantos dias restam, com o botão <b data-ui="Ver planos">Ver planos</b>.</li>
+<li>Quando o teste termina, o app vira <b>somente leitura</b>: você consulta tudo, filtra, exporta CSV, PDF e backup, mas não lança nem edita. A janela <b data-ui="Seu teste de 15 dias terminou">Seu teste de 15 dias terminou</b> oferece <b data-ui="Assinar por R$ 20/mês">Assinar por R$ 20/mês</b>, <b data-ui="Continuar só consultando meus dados">Continuar só consultando meus dados</b> e <b data-ui="Baixar backup dos meus dados">Baixar backup dos meus dados</b>. Seus dados continuam salvos.</li>
+<li>Em <b data-ui="Minha assinatura">Minha assinatura</b> (menu ⚙️) você vê a situação.</li>
+</ul>
+<!-- ATUALIZAR quando a Fase 2 (cobrança real) entrar -->
+<p class="aviso"><b>Importante, nesta versão de teste:</b> a cobrança de R$ 20/mês <b>ainda não existe</b>. Tocar em <b data-ui="Assinar agora">Assinar agora</b> (ou em <b data-ui="Liberar acesso (teste)">Liberar acesso (teste)</b>, em Minha assinatura) apenas libera o acesso, sem cobrar. A cobrança de verdade entra numa próxima atualização, e você será avisado antes.</p>
+</article>
+
+<article id="manual-privacidade">
+<h3>Privacidade</h3>
+<p>Seus lançamentos, valores e dados pessoais ficam no seu aparelho e, se você conectar, no seu Google Drive. O app coleta apenas dados de uso anônimos e agregados para melhorar o app (por exemplo, quantas pessoas abrem o app). Seus lançamentos, valores e dados pessoais nunca saem do seu aparelho e do seu Google Drive.</p>
+</article>
+
+<article id="glossario">
+<h3>Glossário</h3>
+<dl>
+<dt>Pago</dt><dd>O dinheiro já saiu ou já entrou. Só lançamentos pagos mexem no saldo das contas.</dd>
+<dt>Pendente</dt><dd>Ainda vai acontecer (uma conta a pagar ou uma receita a receber).</dd>
+<dt>Vencido</dt><dd>Era pendente e a data já passou.</dd>
+<dt>Saldo inicial</dt><dd>Quanto havia na conta numa data que você informa. É o ponto de partida para o app calcular o saldo de hoje.</dd>
+<dt>Fim do mês</dt><dd>O que sobra (ou falta) no fim do mês depois de pagar as contas que ainda estão em aberto.</dd>
+<dt>Fixo</dt><dd>Gasto que se repete todo mês (aluguel, internet).</dd>
+<dt>Parcela</dt><dd>Uma das partes de uma compra dividida. Cada parcela vira um lançamento, um por mês.</dd>
+<dt>Duplicata (conciliação)</dt><dd>Ao importar um extrato, o app compara com o que você já lançou. Se parece o mesmo lançamento, ele marca como “possível duplicata” para você decidir.</dd>
+<dt>Somente leitura</dt><dd>Modo em que dá para ver e exportar, mas não lançar nem editar. Vale depois do teste grátis e no link só de leitura.</dd>
+</dl>
+</article>
+
+<article id="faq">
+<h3>Perguntas frequentes e problemas comuns</h3>
+<details><summary>Meu saldo não bate com o do banco</summary>
+<p>Confira, nesta ordem: (1) o <b data-ui="Saldo inicial">Saldo inicial</b> e a <b data-ui="Data do saldo">Data do saldo</b> da conta; (2) se há lançamentos <b>pendentes</b> que já foram pagos (só os pagos entram no saldo); (3) se falta lançar algo; (4) se um lançamento foi duplicado. Em <b data-ui="Importar extrato (OFX/CSV)">Importar extrato (OFX/CSV)</b>, o extrato do banco ajuda a achar o que falta.</p></details>
+<details><summary>Importei o mesmo extrato duas vezes</summary>
+<p>Não duplica por conta própria: o que já está no app é reconhecido e a janela avisa quantos “já estavam no app”. Linhas parecidas aparecem em âmbar como <b data-ui="possível duplicata">possível duplicata</b> e vêm desmarcadas. Se mesmo assim algo entrou repetido, use <b data-ui="Excluir">Excluir</b> na linha ou <b data-ui="Desfazer">Desfazer</b> logo após importar.</p></details>
+<details><summary>Troquei de celular e perdi tudo</summary>
+<p>Os dados ficam no aparelho. Se você tinha o Google Drive conectado, conecte de novo no aparelho novo: os dados do Drive passam a valer nele. Se tinha um arquivo de backup, use <b data-ui="Importar backup:">Importar backup:</b>. Sem nenhum dos dois, não há como recuperar. Por isso vale baixar um backup de vez em quando.</p></details>
+<details><summary>O app não atualiza</summary>
+<p>Quando há versão nova, aparece a faixa <b data-ui="Nova versão disponível">Nova versão disponível</b>: toque em <b data-ui="Atualizar">Atualizar</b>. Se não aparecer, feche o app por completo e abra de novo com internet.</p></details>
+<details><summary>O aviso de vencimento não chega com o app fechado</summary>
+<p>É assim mesmo: o app só avisa enquanto está aberto. Deixe o app aberto ao começar o dia ou olhe a faixa de avisos quando entrar. Notificações com o app fechado ainda não existem.</p></details>
+<details><summary>O campo de data no iPhone aparece diferente</summary>
+<p>No iPhone, o campo de data pode aparecer vazio até você tocar nele; ao tocar, abre o calendário do próprio aparelho. Por isso as datas têm uma legenda (como <b data-ui="Data do saldo">Data do saldo</b>) acima do campo.</p></details>
+<details><summary>O teste acabou e eu só consigo ver</summary>
+<p>É o modo somente leitura. Você ainda consulta e exporta seus dados. Para voltar a lançar, toque em <b data-ui="Assinar">Assinar</b> na faixa de aviso. Nesta versão, assinar apenas libera o acesso, sem cobrança.</p></details>
+<details><summary>Aparece uma faixa vermelha do Drive</summary>
+<p>Veja “Faixa vermelha do Drive” no <a href="#manual-backup">manual de backup e Drive</a>. Em resumo: seus dados do aparelho estão preservados; toque em <b data-ui="Tentar de novo">Tentar de novo</b>.</p></details>
+<details><summary>O app perguntou se mantenho os dados deste aparelho ou uso os do Drive</summary>
+<p>Escolha <b data-ui="Manter os dados deste aparelho">Manter os dados deste aparelho</b> se o que está aqui é o mais recente, ou <b data-ui="Usar os dados do Drive">Usar os dados do Drive</b> se o mais recente é o do Drive. Lembre: o Drive não junta os dois, vale uma versão só.</p></details>
+<details><summary>A parcela do dia 31 caiu no dia 28</summary>
+<p>Meses curtos não têm dia 31. A parcela cai no último dia do mês (31/01, depois 28/02, depois 31/03). Parcelas antigas, já gravadas antes dessa correção, não foram alteradas.</p></details>
+<details><summary>Um lançamento antigo aparece como “Outros”</summary>
+<p>Lançamentos muito antigos podem não ter categoria. O app mostra “Outros” no lugar, sem mudar o que está gravado. Para escolher outra, toque em <b data-ui="Editar">Editar</b> no lançamento.</p></details>
+<details><summary>O arquivo de backup foi recusado</summary>
+<p>O app confere o arquivo antes de importar e, se ele não parece um backup do Bolso Certo, avisa “Esse arquivo não parece um backup do Bolso Certo” e não altera nada. Use um arquivo gerado por <b data-ui="Baixar backup (.json)">Baixar backup (.json)</b> e que não tenha sido editado à mão. Se o seu backup é de uma versão mais nova do app, atualize o app primeiro.</p></details>
+<details><summary>O extrato trouxe menos lançamentos do que o arquivo tem</summary>
+<p>Linhas cuja data ou valor o app não consegue ler são ignoradas. A janela de importação diz quantas, com a frase “lançamento(s) do arquivo foi/foram ignorado(s) (data ou valor inválido)”. Confira essas linhas no arquivo do banco e lance à mão, se precisar.</p></details>
+</article>
+<p class="rodape-links"><a class="voltar" href="#topo">↑ Voltar ao topo</a> · <a class="voltar" href="index.html">← Voltar ao app</a></p>
+</section>
+
+<section id="passo-a-passo" role="tabpanel" aria-labelledby="aba-passo" class="painel">
+<h2 class="parte">Passo a passo: tarefas do dia a dia</h2>
+<nav aria-label="Sumário do passo a passo" class="sumario">
+<h3>Tarefas</h3>
+<ol>
+<li><a href="#tarefa-instalar">Instalar o app na tela inicial</a></li>
+<li><a href="#tarefa-primeiros-passos">Seus primeiros 5 minutos</a></li>
+<li><a href="#tarefa-gasto-rapido">Registrar um gasto rápido</a></li>
+<li><a href="#tarefa-conta-pagar">Registrar uma conta para pagar depois e marcá-la como paga</a></li>
+<li><a href="#tarefa-parcelar">Parcelar uma compra</a></li>
+<li><a href="#tarefa-conta-fixa">Cadastrar uma conta que se repete todo mês</a></li>
+<li><a href="#tarefa-cartao">Cadastrar um cartão de crédito e acompanhar a fatura</a></li>
+<li><a href="#tarefa-transferir">Transferir dinheiro entre contas</a></li>
+<li><a href="#tarefa-importar-extrato">Importar o extrato do banco</a></li>
+<li><a href="#tarefa-orcamento">Definir um orçamento por categoria</a></li>
+<li><a href="#tarefa-meta">Criar e acompanhar uma meta</a></li>
+<li><a href="#tarefa-categoria">Criar ou renomear uma categoria</a></li>
+<li><a href="#tarefa-avisos">Ligar e desligar os avisos de vencimento</a></li>
+<li><a href="#tarefa-drive">Conectar o Google Drive e usar em dois aparelhos</a></li>
+<li><a href="#tarefa-backup">Fazer e restaurar um backup</a></li>
+<li><a href="#tarefa-relatorios">Gerar o relatório do mês, do ano e para o IR</a></li>
+<li><a href="#tarefa-link-leitura">Compartilhar um link só de leitura</a></li>
+<li><a href="#tarefa-pin">Proteger o app com PIN</a></li>
+<li><a href="#tarefa-assinatura">O que acontece quando o teste acaba e como assinar</a></li>
+</ol>
+</nav>
+
+<article id="tarefa-instalar" class="tarefa">
+<h3>1. Instalar o app na tela inicial</h3>
+<p><b>Antes de começar:</b> abra o endereço do Bolso Certo no navegador do celular (Safari no iPhone, Chrome no Android).</p>
+<ol>
+<li>Abra o menu de compartilhar ou o menu do navegador (no iPhone, o botão com um quadrado e uma seta; no Android, os três pontinhos).</li>
+<li>Procure uma opção parecida com “Adicionar à Tela de Início” (iPhone) ou “Instalar app” / “Adicionar à tela inicial” (Android). O nome exato pode variar conforme o aparelho e a versão.</li>
+<li>Confirme o nome “Bolso Certo” e toque em adicionar.</li>
+<li>Abra o app pelo novo ícone na tela inicial.</li>
+</ol>
+<p><b>Resultado esperado:</b> o app abre em tela cheia, como um aplicativo, e funciona mesmo sem internet depois da primeira abertura.</p>
+<p><b>Se não funcionar:</b> confirme que está no navegador certo (no iPhone, só o Safari instala). Se a opção não aparecer, você pode usar o app normalmente pelo navegador.</p>
+</article>
+
+<article id="tarefa-primeiros-passos" class="tarefa">
+<h3>2. Seus primeiros 5 minutos</h3>
+<p><b>Antes de começar:</b> na primeira vez, o app mostra um guia de 3 passos. Você pode fazer por ele ou seguir estes.</p>
+<ol>
+<li>Toque em <b data-ui="Entrar nos registros">Entrar nos registros</b>.</li>
+<li>Em <b data-ui="Adicione sua primeira conta">Adicione sua primeira conta</b>, digite o nome da conta (por exemplo, Nubank).</li>
+<li>No campo <b data-ui="Quanto tem aí hoje? (opcional)">Quanto tem aí hoje? (opcional)</b>, digite o saldo (por exemplo, 1.200,00). Ele é opcional, mas ajuda o app a mostrar quanto você tem de verdade.</li>
+<li>Toque em <b data-ui="Adicionar e continuar">Adicionar e continuar</b>.</li>
+<li>No passo 2, anote um gasto de verdade (veja a <a href="#tarefa-gasto-rapido">tarefa 3</a>). Se preferir, toque em <b data-ui="pular este passo">pular este passo</b>.</li>
+<li>No passo 3, leia a explicação da Visão geral e toque em <b data-ui="Começar a usar">Começar a usar</b>.</li>
+<li>Na <b data-ui="Visão geral">Visão geral</b>, leia de cima para baixo: <b data-ui="Você tem hoje">Você tem hoje</b> (quanto você tem), <b data-ui="Fim do mês">Fim do mês</b> (como o mês vai fechar) e <b data-ui="Este mês">Este mês</b> (quanto entrou e saiu).</li>
+</ol>
+<p><b>Resultado esperado:</b> uma conta cadastrada, um gasto anotado e a Visão geral mostrando valores.</p>
+<p><b>Se não funcionar:</b> se você tocou em <b data-ui="pular tudo">pular tudo</b>, cadastre a conta por <b data-ui="Contas e cartões">Contas e cartões</b> no menu ⚙️ (no computador, o botão <b data-ui="Contas">Contas</b>).</p>
+</article>
+
+<article id="tarefa-gasto-rapido" class="tarefa">
+<h3>3. Registrar um gasto rápido</h3>
+<ol>
+<li>Toque no botão <b>+</b> (<b data-ui="Registro rápido">Registro rápido</b>).</li>
+<li>Deixe <b data-ui="Gasto">Gasto</b> marcado.</li>
+<li>Digite o valor em <b>Valor (R$)</b>, por exemplo 45,00.</li>
+<li>Digite a descrição, por exemplo “Uber”. O app sugere a categoria sozinho.</li>
+<li>Confira a conta e a categoria.</li>
+<li>Toque em <b data-ui="Adicionar">Adicionar</b>.</li>
+</ol>
+<figure><img src="ajuda/img/registro-rapido.webp" width="390" height="844" loading="lazy" alt="Janela Registro rápido com Gasto marcado, valor 45, descrição Uber, conta e categoria."><figcaption>O registro rápido preenchido.</figcaption></figure>
+<p><b>Resultado esperado:</b> um aviso confirma o lançamento. Ele entra como <b>pago</b>, com a data de hoje. Se errou, toque em <b data-ui="Desfazer">Desfazer</b> no aviso.</p>
+<p><b>Se não funcionar:</b> se o botão + não aparece, você está na aba <b data-ui="Lançamentos">Lançamentos</b> (use o formulário <b data-ui="Novo lançamento">Novo lançamento</b>) ou o teste grátis acabou.</p>
+</article>
+
+<article id="tarefa-conta-pagar" class="tarefa">
+<h3>4. Registrar uma conta para pagar depois e marcá-la como paga</h3>
+<ol>
+<li>Abra a aba <b data-ui="Lançamentos">Lançamentos</b>.</li>
+<li>Em <b data-ui="Novo lançamento">Novo lançamento</b>, deixe o tipo em <b data-ui="Gasto">Gasto</b> e escreva a descrição (por exemplo, Energia).</li>
+<li>Digite o valor e escolha a categoria.</li>
+<li>Em <b data-ui="Vencimento">Vencimento</b>, escolha a data em que a conta vence.</li>
+<li>Em situação, escolha <b data-ui="Pendente">Pendente</b>.</li>
+<li>Toque em <b data-ui="Adicionar">Adicionar</b>.</li>
+<li>Quando pagar a conta, ache a linha na lista e toque em <b data-ui="Marcar como pago">Marcar como pago</b> (✓).</li>
+</ol>
+<p><b>Resultado esperado:</b> a conta fica como pendente até você marcá-la. Se a data passar, ela vira <b data-ui="Vencido">Vencido</b> e entra nos avisos. Ao marcar como paga, o aviso traz <b data-ui="Desfazer">Desfazer</b>.</p>
+<p><b>Se não funcionar:</b> se não achar a linha, ela pode estar em outro mês: use <b data-ui="Ver todas as pendentes">Ver todas as pendentes</b>.</p>
+</article>
+
+<article id="tarefa-parcelar" class="tarefa">
+<h3>5. Parcelar uma compra</h3>
+<ol>
+<li>Na aba <b data-ui="Lançamentos">Lançamentos</b>, em <b data-ui="Novo lançamento">Novo lançamento</b>, escolha <b data-ui="Gasto">Gasto</b>.</li>
+<li>Escreva a descrição e escolha a conta (use a do cartão, se foi no cartão).</li>
+<li>Digite em <b>Valor (R$)</b> o valor de <b>cada parcela</b>, não o total.</li>
+<li>Em <b data-ui="Parcelas:">Parcelas:</b>, digite o número de parcelas.</li>
+<li>Escolha o <b data-ui="Vencimento">Vencimento</b> da primeira parcela.</li>
+<li>Toque em <b data-ui="Adicionar">Adicionar</b>.</li>
+</ol>
+<p><b>Resultado esperado:</b> o app cria uma parcela por mês, com nomes como “Celular (1/3)”. A primeira fica com a situação que você escolheu e as outras ficam <b data-ui="Pendente">Pendente</b>. O aviso diz quantas parcelas foram lançadas e <b>não</b> tem <b data-ui="Desfazer">Desfazer</b>.</p>
+<p><b>Se não funcionar:</b> para errar menos, confira o valor da parcela antes de tocar em <b data-ui="Adicionar">Adicionar</b>. Para apagar, use <b data-ui="Excluir">Excluir</b> numa parcela e escolha “só esta” ou “todas”. Compra no dia 29, 30 ou 31 cai no último dia dos meses mais curtos.</p>
+</article>
+
+<article id="tarefa-conta-fixa" class="tarefa">
+<h3>6. Cadastrar uma conta que se repete todo mês</h3>
+<ol>
+<li>Abra a aba <b data-ui="Metas e fixos">Metas e fixos</b>.</li>
+<li>No card <b data-ui="Contas que se repetem todo mês">Contas que se repetem todo mês</b>, toque em <b data-ui="+ nova conta fixa">+ nova conta fixa</b>.</li>
+<li>Escolha o tipo (Gasto ou Receita), escreva a descrição (por exemplo, Aluguel), o valor e a categoria.</li>
+<li>Toque em <b data-ui="Salvar">Salvar</b>.</li>
+<li>Todo mês, volte aqui e toque em <b data-ui="Lançar este mês">Lançar este mês</b> ao lado da conta.</li>
+</ol>
+<p><b>Resultado esperado:</b> o lançamento entra no dia 5 do mês selecionado, na primeira conta da sua lista. Ele não é lançado sozinho: é você quem toca.</p>
+<p><b>Se não funcionar:</b> se a data ou a conta não for a que você quer, toque em <b data-ui="Editar">Editar</b> no lançamento criado.</p>
+</article>
+
+<article id="tarefa-cartao" class="tarefa">
+<h3>7. Cadastrar um cartão de crédito e acompanhar a fatura</h3>
+<ol>
+<li>Abra <b data-ui="Contas e cartões">Contas e cartões</b> (menu ⚙️; no computador, o botão <b data-ui="Contas">Contas</b>).</li>
+<li>Em “Nome”, escreva o nome do cartão (por exemplo, Cartão Roxo).</li>
+<li>Marque <b data-ui="É cartão de crédito">É cartão de crédito</b>.</li>
+<li>Digite o dia do fechamento e o dia do vencimento da fatura (estão no app ou na fatura do cartão).</li>
+<li>Toque em <b data-ui="Adicionar conta">Adicionar conta</b>.</li>
+<li>Ao fazer uma compra no cartão, lance o gasto escolhendo essa conta.</li>
+<li>Veja a fatura na <b data-ui="Visão geral">Visão geral</b>, no card <b data-ui="Faturas de cartão em aberto">Faturas de cartão em aberto</b>.</li>
+</ol>
+<p><b>Resultado esperado:</b> o card mostra quando a fatura fecha, quando vence e quanto já foi gasto nela.</p>
+<p><b>Se não funcionar:</b> o card só aparece com o dia do fechamento preenchido. Você pode ajustar em <b data-ui="Fecha dia">Fecha dia</b> e <b data-ui="Vence dia">Vence dia</b> na própria conta.</p>
+</article>
+
+<article id="tarefa-transferir" class="tarefa">
+<h3>8. Transferir dinheiro entre contas</h3>
+<ol>
+<li>Na aba <b data-ui="Lançamentos">Lançamentos</b>, em <b data-ui="Novo lançamento">Novo lançamento</b>, escolha o tipo <b data-ui="Transferência entre contas">Transferência entre contas</b>.</li>
+<li>Escolha a conta de origem e a conta de destino.</li>
+<li>Digite o valor e a data.</li>
+<li>Toque em <b data-ui="Adicionar">Adicionar</b>.</li>
+</ol>
+<p><b>Resultado esperado:</b> o dinheiro sai de uma conta e entra na outra. A transferência não conta como gasto nem como receita.</p>
+<p><b>Se não funcionar:</b> para desfazer, use <b data-ui="Excluir">Excluir</b> em qualquer uma das duas linhas: as duas somem juntas.</p>
+</article>
+
+<article id="tarefa-importar-extrato" class="tarefa">
+<h3>9. Importar o extrato do banco</h3>
+<p><b>Antes de começar:</b> no app ou site do seu banco, procure Extrato → Exportar/Baixar → formato OFX. Salve o arquivo no aparelho. (O app também lê CSV.)</p>
+<ol>
+<li>Abra <b data-ui="Contas e cartões">Contas e cartões</b>.</li>
+<li>Na conta do banco, toque em <b data-ui="Importar extrato (OFX/CSV)">Importar extrato (OFX/CSV)</b> e escolha o arquivo.</li>
+<li>Na janela <b data-ui="Importar extrato">Importar extrato</b>, confira cada linha. As novas vêm marcadas.</li>
+<li>Ajuste a categoria de cada linha, se quiser.</li>
+<li>Linhas em âmbar são <b>possível duplicata</b>: já existe um lançamento parecido, mostrado ao lado. Elas vêm desmarcadas. Escolha <b data-ui="manter os dois">manter os dois</b>, <b data-ui="ignorar novo">ignorar novo</b> ou <b data-ui="substituir">substituir</b>.</li>
+<li>Toque no botão <b data-ui="Importar">Importar</b> seguido do número de linhas marcadas (por exemplo, “Importar 3 selecionados”).</li>
+</ol>
+<figure><img src="ajuda/img/importar-extrato.webp" width="390" height="844" loading="lazy" alt="Janela Importar extrato com quatro lançamentos; o primeiro, em âmbar, é uma possível duplicata de um lançamento existente."><figcaption>A pré-visualização do extrato, com uma possível duplicata em âmbar.</figcaption></figure>
+<p><b>Resultado esperado:</b> os lançamentos entram como normais, e o aviso permite <b data-ui="Desfazer">Desfazer</b>. Importar o mesmo arquivo de novo não repete o que já entrou.</p>
+<p><b>Se não funcionar:</b> a janela diz quantos lançamentos foram ignorados por data ou valor inválido, ou que “nenhum lançamento” foi encontrado (confira o intervalo exportado no banco).</p>
+</article>
+
+<article id="tarefa-orcamento" class="tarefa">
+<h3>10. Definir um orçamento por categoria</h3>
+<ol>
+<li>Abra a aba <b data-ui="Orçamento">Orçamento</b>.</li>
+<li>No card <b data-ui="Orçamento por categoria">Orçamento por categoria</b>, toque em <b data-ui="editar limites">editar limites</b>.</li>
+<li>Digite o limite mensal de cada categoria que quiser controlar (por exemplo, 600,00 em Alimentação).</li>
+<li>Cada limite é salvo ao sair do campo. Toque em <b data-ui="Concluir">Concluir</b> quando terminar.</li>
+</ol>
+<p><b>Resultado esperado:</b> cada categoria mostra uma barra de uso. Passando de 80%, ela entra em <b data-ui="Orçamento em risco">Orçamento em risco</b> na Visão geral.</p>
+<p><b>Se não funcionar:</b> deixe vazio ou 0 para “sem limite”. Um valor que não é número é tratado como “sem limite”.</p>
+</article>
+
+<article id="tarefa-meta" class="tarefa">
+<h3>11. Criar e acompanhar uma meta</h3>
+<ol>
+<li>Abra a aba <b data-ui="Metas e fixos">Metas e fixos</b>.</li>
+<li>Em <b data-ui="Metas de economia">Metas de economia</b>, toque em <b data-ui="+ nova meta">+ nova meta</b>.</li>
+<li>Escreva o nome (por exemplo, Viagem), o valor alvo e o prazo.</li>
+<li>Toque em <b data-ui="Criar meta">Criar meta</b>.</li>
+<li>Quando guardar dinheiro, toque em <b data-ui="+ add">+ add</b> na meta e digite o valor na janelinha que abre. Use só números e ponto para os centavos (por exemplo, 50.50): a vírgula ainda não é aceita aqui.</li>
+<li>Toque no gráfico 📈 para ver a evolução.</li>
+</ol>
+<p><b>Resultado esperado:</b> a meta mostra a porcentagem alcançada e quanto economizar por mês para chegar no prazo.</p>
+<p><b>Se não funcionar:</b> o valor adicionado também vira um gasto (“Meta: Viagem”, categoria Outros) na primeira conta da sua lista, para o dinheiro sair do saldo. Esse aviso não tem <b data-ui="Desfazer">Desfazer</b>; se errar, exclua o gasto em <b data-ui="Lançamentos">Lançamentos</b> e ajuste a meta.</p>
+</article>
+
+<article id="tarefa-categoria" class="tarefa">
+<h3>12. Criar ou renomear uma categoria</h3>
+<ol>
+<li>Abra o menu ⚙️ e toque em <b data-ui="Gerenciar categorias">Gerenciar categorias</b>.</li>
+<li>Para criar: digite o nome (até 30 letras) em “Nova categoria” e toque em <b data-ui="Adicionar">Adicionar</b>.</li>
+<li>Para renomear: edite o nome na linha da categoria.</li>
+<li>Para excluir: toque no × da linha; se a categoria tem uso, escolha para onde mover os lançamentos e toque em <b data-ui="Mover e excluir">Mover e excluir</b>.</li>
+</ol>
+<p><b>Resultado esperado:</b> a categoria aparece em todos os formulários. Renomear mantém os lançamentos ligados.</p>
+<p><b>Se não funcionar:</b> nomes repetidos, vazios ou reservados (como “Receita”) são recusados, com um aviso em vermelho.</p>
+</article>
+
+<article id="tarefa-avisos" class="tarefa">
+<h3>13. Ligar e desligar os avisos de vencimento</h3>
+<ol>
+<li>Abra o menu ⚙️ e toque em <b data-ui="Avisos de vencimento">Avisos de vencimento</b>.</li>
+<li>Marque ou desmarque <b data-ui="Vence hoje">Vence hoje</b>, <b data-ui="Vence nos próximos 3 dias">Vence nos próximos 3 dias</b> e <b data-ui="Atrasadas">Atrasadas</b>.</li>
+<li>Se quiser a notificação do aparelho, toque em <b data-ui="Ativar avisos do navegador">Ativar avisos do navegador</b> e permita quando o aparelho perguntar.</li>
+</ol>
+<p><b>Resultado esperado:</b> a faixa de avisos aparece no topo quando houver conta na janela escolhida. A notificação só aparece com o app aberto.</p>
+<p><b>Se não funcionar:</b> se você negou a permissão, é preciso liberar nas configurações do navegador. A faixa no topo funciona sem a permissão.</p>
+</article>
+
+<article id="tarefa-drive" class="tarefa">
+<h3>14. Conectar o Google Drive e usar em dois aparelhos</h3>
+<p class="aviso"><b>Aviso:</b> o login com Google está em fase de testes. Por enquanto só funciona para quem foi liberado. Disponível em breve para todos. Se aparecer uma tela de acesso negado ou de app não verificado, é por isso.</p>
+<ol>
+<li>No primeiro aparelho, abra o menu ⚙️ (ou use o botão no topo) e toque em <b data-ui="Conectar Google Drive">Conectar Google Drive</b>.</li>
+<li>Entre com sua conta Google e aceite o acesso.</li>
+<li>Espere o botão mostrar <b data-ui="Sincronizado com Drive">Sincronizado com Drive</b>.</li>
+<li>No segundo aparelho, repita os passos 1 e 2 com a <b>mesma</b> conta Google.</li>
+<li>Os dados do Drive passam a valer no segundo aparelho. Daí em diante, o que você mudar num aparelho sobe sozinho.</li>
+</ol>
+<p><b>Resultado esperado:</b> os dois aparelhos mostram os mesmos dados. <b>O Drive não junta alterações feitas nos dois aparelhos ao mesmo tempo: vale a última que for salva.</b> Use um aparelho de cada vez e espere o status ficar em <b data-ui="Sincronizado com Drive">Sincronizado com Drive</b> antes de trocar.</p>
+<p><b>Se não funcionar:</b></p>
+<ul>
+<li>Faixa vermelha <b data-ui="Não consegui falar com o Drive — seus dados locais estão preservados">Não consegui falar com o Drive — seus dados locais estão preservados</b>: seus dados do aparelho estão salvos. Toque em <b data-ui="Tentar de novo">Tentar de novo</b>. Se a faixa trouxer <b data-ui="Substituir o Drive pelos dados deste aparelho">Substituir o Drive pelos dados deste aparelho</b>, use só se o Drive não tiver nada importante, porque o arquivo dele será trocado.</li>
+<li>Faixa <b data-ui="Não sincronizou — suas alterações estão salvas neste aparelho e serão enviadas na próxima tentativa">Não sincronizou — suas alterações estão salvas neste aparelho e serão enviadas na próxima tentativa</b>: nada se perdeu; ele tenta de novo sozinho.</li>
+<li>Janela “Este aparelho tem alterações que não foram para o Drive”: se o que está aqui é o mais novo, escolha <b data-ui="Manter os dados deste aparelho">Manter os dados deste aparelho</b>; se o mais novo está no Drive, escolha <b data-ui="Usar os dados do Drive">Usar os dados do Drive</b> (e use <b data-ui="Desfazer">Desfazer</b> logo depois, se mudar de ideia; só os lançamentos voltam).</li>
+</ul>
+</article>
+
+<article id="tarefa-backup" class="tarefa">
+<h3>15. Fazer e restaurar um backup</h3>
+<p><b>Para fazer:</b></p>
+<ol>
+<li>Abra o menu ⚙️ e toque em <b data-ui="Baixar backup (.json)">Baixar backup (.json)</b>.</li>
+<li>Guarde o arquivo num lugar seguro (e-mail para você mesmo, nuvem, computador).</li>
+</ol>
+<p><b>Para restaurar:</b></p>
+<ol>
+<li>Toque em <b data-ui="Backup">Backup</b> (no celular, em <b data-ui="Backup dos dados">Backup dos dados</b> no menu ⚙️).</li>
+<li>Em <b data-ui="Importar backup:">Importar backup:</b>, escolha o arquivo.</li>
+<li>Leia o aviso: importar <b>substitui</b> o que o arquivo traz neste aparelho. Confirme.</li>
+</ol>
+<p><b>Resultado esperado:</b> seus lançamentos, contas, metas e orçamentos voltam como estavam no arquivo. O que não vem no arquivo (por exemplo, categorias num backup antigo) é mantido.</p>
+<p><b>Se não funcionar:</b> se aparecer “Esse arquivo não parece um backup do Bolso Certo”, nada foi alterado: use um arquivo gerado pelo app. Com o teste grátis encerrado, baixar backup funciona, mas importar não.</p>
+</article>
+
+<article id="tarefa-relatorios" class="tarefa">
+<h3>16. Gerar o relatório do mês, do ano e para o IR</h3>
+<ol>
+<li>Abra a aba <b data-ui="Lançamentos">Lançamentos</b>.</li>
+<li>Escolha o mês no topo da tela (e, se quiser, uma conta em <b data-ui="Conta:">Conta:</b>; o relatório do mês respeita essa conta).</li>
+<li>Toque em <b data-ui="Relatório PDF do mês">Relatório PDF do mês</b>.</li>
+<li>Para o ano, escolha o ano ao lado e toque em <b data-ui="Relatório PDF do ano">Relatório PDF do ano</b>.</li>
+<li>Para o IR, toque em <b data-ui="Relatório para IR">Relatório para IR</b>.</li>
+</ol>
+<p><b>Resultado esperado:</b> o PDF é baixado. Os relatórios do ano e do IR somam todas as contas. O relatório para IR é um apoio para organizar suas informações e não substitui um contador.</p>
+<p><b>Se não funcionar:</b> procure o arquivo na pasta de downloads do aparelho. Para uma planilha, use <b data-ui="Exportar CSV">Exportar CSV</b>.</p>
+</article>
+
+<article id="tarefa-link-leitura" class="tarefa">
+<h3>17. Compartilhar um link só de leitura</h3>
+<ol>
+<li>Abra o menu ⚙️ e toque em <b data-ui="Gerar link só de leitura">Gerar link só de leitura</b>.</li>
+<li>O app copia o endereço e mostra uma mensagem com ele.</li>
+<li>Envie o endereço para a pessoa.</li>
+</ol>
+<p><b>Resultado esperado:</b> quem abrir o link vê os dados sem poder editar. A pessoa precisa entrar com a mesma conta Google, pois os dados vêm do seu Drive. O link não inicia o teste grátis e não grava nada.</p>
+<p><b>Se não funcionar:</b> o link mostra o que está no seu Google Drive. Sem o Drive conectado, quem abrir o link num aparelho sem dados vê o app vazio.</p>
+</article>
+
+<article id="tarefa-pin" class="tarefa">
+<h3>18. Proteger o app com PIN</h3>
+<ol>
+<li>Abra o menu ⚙️ e toque em <b data-ui="PIN de acesso">PIN de acesso</b>.</li>
+<li>Digite um PIN de 4 a 6 números.</li>
+<li>Na próxima vez que abrir o app, ele pede o PIN.</li>
+</ol>
+<p><b>Resultado esperado:</b> o app abre numa tela de PIN. É uma trava de tela: ela esconde o app de quem pega seu aparelho já desbloqueado de relance, mas não é uma segurança forte nem criptografa os dados. O PIN fica só neste aparelho.</p>
+<p><b>Para trocar ou remover:</b> não existe “trocar PIN”. Toque em <b data-ui="PIN de acesso">PIN de acesso</b> de novo e confirme a remoção; depois crie outro. Se esquecer, toque em <b data-ui="Esqueci o PIN / remover proteção">Esqueci o PIN / remover proteção</b> na tela do PIN.</p>
+</article>
+
+<article id="tarefa-assinatura" class="tarefa">
+<h3>19. O que acontece quando o teste acaba e como assinar</h3>
+<ol>
+<li>Durante o teste, a faixa <b data-ui="Ver planos">Ver planos</b> mostra quantos dias faltam.</li>
+<li>Ao terminar, aparece <b data-ui="Seu teste de 15 dias terminou">Seu teste de 15 dias terminou</b>. Você pode tocar em <b data-ui="Continuar só consultando meus dados">Continuar só consultando meus dados</b> e usar o app para ver e exportar.</li>
+<li>Para voltar a lançar, toque em <b data-ui="Assinar por R$ 20/mês">Assinar por R$ 20/mês</b> (ou em <b data-ui="Assinar">Assinar</b> na faixa de aviso) e depois em <b data-ui="Assinar agora">Assinar agora</b>.</li>
+</ol>
+<p><b>Resultado esperado:</b> o app volta a aceitar lançamentos.</p>
+<!-- ATUALIZAR quando a Fase 2 (cobrança real) entrar -->
+<p class="aviso"><b>Importante:</b> nesta versão de teste, <b data-ui="Assinar agora">Assinar agora</b> apenas libera o acesso. A cobrança de R$ 20/mês ainda não existe e entra numa próxima atualização.</p>
+<p><b>Se não funcionar:</b> seus dados nunca são apagados pelo fim do teste. Se quiser sair, baixe o backup em <b data-ui="Baixar backup dos meus dados">Baixar backup dos meus dados</b>.</p>
+</article>
+<p class="rodape-links"><a class="voltar" href="#topo">↑ Voltar ao topo</a> · <a class="voltar" href="index.html">← Voltar ao app</a></p>
+</section>
+
+  </main>
+  <p class="rodape-links"><a class="voltar" href="index.html">← Voltar ao app</a></p>
+</div>
+<a class="topo-btn" href="#topo" aria-label="Voltar ao topo">↑ Topo</a>
+<script>
+  /* abas Manual / Passo a passo. Sem JavaScript as duas partes aparecem uma depois da outra. */
+  (function(){
+    var abas = document.getElementById('abas');
+    var tabs = [document.getElementById('aba-manual'), document.getElementById('aba-passo')];
+    var paineis = [document.getElementById('manual'), document.getElementById('passo-a-passo')];
+    abas.hidden = false;
+    function ativar(i, foco){
+      tabs.forEach(function(t, k){
+        t.setAttribute('aria-selected', k === i ? 'true' : 'false');
+        t.tabIndex = k === i ? 0 : -1;
+        paineis[k].hidden = k !== i;
+      });
+      if(foco) tabs[i].focus();
+    }
+    tabs.forEach(function(t, i){
+      t.addEventListener('click', function(){ ativar(i, false); window.scrollTo(0, 0); });
+      t.addEventListener('keydown', function(e){
+        var n = null;
+        if(e.key === 'ArrowRight' || e.key === 'ArrowLeft') n = (i + 1) % 2;
+        else if(e.key === 'Home') n = 0;
+        else if(e.key === 'End') n = 1;
+        if(n !== null){ e.preventDefault(); ativar(n, true); }
+      });
+    });
+    function doHash(){
+      var h = location.hash.slice(1);
+      if(!h) return;
+      var alvo = document.getElementById(h);
+      if(!alvo) return;
+      for(var k = 0; k < 2; k++){
+        if(paineis[k] === alvo || paineis[k].contains(alvo)){
+          if(paineis[k].hidden) ativar(k, false);
+          alvo.scrollIntoView();
+          return;
+        }
+      }
+    }
+    ativar(0, false);
+    window.addEventListener('hashchange', doHash);
+    doHash();
+  })();
+</script>
+</body>
+</html>

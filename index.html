@@ -529,6 +529,8 @@
   #onbConteudo .onb-campos{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
   #onbConteudo .onb-campos input{ width:100%; }
   #onbConteudo .onb-visao{ background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:14px; font-size:12.5px; color:var(--muted); margin-bottom:12px; }
+  .onb-ajuda{ text-align:center; font-size:12.5px; margin:10px 0 0; }
+  .onb-ajuda a{ color:var(--blue); display:inline-block; padding:8px 4px; }
   .onb-rodape{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:11px; color:var(--muted2); }
   .onb-rodape [role="button"]{ color:var(--muted); text-decoration:underline; cursor:pointer; }
   .onb-rodape [role="button"]:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
@@ -998,6 +1000,7 @@
           <button id="btnMoeda" onclick="alternarMoeda()">💱 Moeda: BRL</button>
           <button id="btnAvisos" onclick="abrirModalAvisos(); fecharMenuConfig()">🔔 Avisos de vencimento</button>
           <button class="editable-only" onclick="gerarLinkSomenteLeitura(); fecharMenuConfig()">🔗 Gerar link só de leitura</button>
+          <button id="btnAjuda" onclick="abrirAjuda()">❓ Ajuda</button>
         </div>
       </div>
     </div>
@@ -5641,6 +5644,8 @@ function toggleMenuConfig(){
   el.style.display = el.style.display === 'none' ? 'flex' : 'none';
 }
 function fecharMenuConfig(){ document.getElementById('menuConfig').style.display = 'none'; }
+// ajuda.html é uma página estática à parte (manual + passo a passo); funciona também com o teste vencido
+function abrirAjuda(){ fecharMenuConfig(); window.location.href = 'ajuda.html'; }
 // fecha o menu ⚙️ ao clicar fora dele
 document.addEventListener('click', (e)=>{
   const wrap = e.target.closest('.menu-wrap');
@@ -5964,7 +5969,8 @@ function renderOnboarding(){
       <h2>Pronto — você já está usando</h2>
       <p class="onb-sub">O que você acabou de cadastrar já aparece aqui.</p>
       <div class="onb-visao">Esta é a <b>Visão Geral</b>. Ela sempre responde <b>quanto você tem hoje</b> e <b>como o mês vai fechar</b> — sem você precisar mexer em nada.</div>
-      <button onclick="concluirOnboarding('completo')" style="width:100%;">Começar a usar</button>`;
+      <button onclick="concluirOnboarding('completo')" style="width:100%;">Começar a usar</button>
+      <p class="onb-ajuda"><a href="ajuda.html" target="_blank" rel="noopener">Precisa de ajuda?</a></p>`;
   }
 }
 function onbCriarConta(){
