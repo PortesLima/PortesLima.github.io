@@ -60,16 +60,36 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
       }
     }
   }
-  eq([...(chipsFalha['390-dark'] || [])].sort(), ['"Outros" 4.27:1'], '390px · dark: [BUG-CONHECIDO] a etiqueta de categoria "Outros" na tabela tem contraste 4,27:1 (texto cinza sobre o próprio tom a 13%); esperado ≥ 4,5:1');
-  eq([...(chipsFalha['390-light'] || [])].sort(), ['"Alimentação" 1.73:1', '"Moradia" 2.17:1', '"Outros" 2.44:1', '"Receita" 1.73:1', '"pago" 4.16:1', '"vencido" 4.49:1'], '390px · light: [BUG-CONHECIDO] no tema CLARO as etiquetas de categoria (Alimentação 1,73:1, Receita 1,73:1, Moradia 2,17:1, Outros 2,44:1) e de status (pago 4,16:1, vencido 4,49:1) ficam bem abaixo de 4,5:1 — texto na cor da categoria sobre o próprio tom a 13%; esperado: texto escuro derivado da cor');
-  eq((chipsFalha['1280-light'] || new Set()).size > 0, true, `1280px · light: [BUG-CONHECIDO] as etiquetas de categoria também falham no desktop do tema claro (${[...(chipsFalha['1280-light'] || [])].sort().join(', ')}); no escuro (1280px) falham ${(chipsFalha['1280-dark'] || new Set()).size}`);
-  eq([[...(phFalha['390-dark'] || [])], [...(phFalha['390-light'] || [])]], [[3.49], [4.08]], '[BUG-CONHECIDO] o texto dos placeholders tem contraste 3,49:1 (escuro) e 4,08:1 (claro), abaixo de 4,5:1; esperado ≥ 4,5:1');
+  eq([...(chipsFalha['390-dark'] || [])].sort(), [], '390px · dark: todas as etiquetas de categoria e de status da tabela ≥ 4,5:1 (antes: "Outros" 4,27:1)');
+  eq([...(chipsFalha['390-light'] || [])].sort(), [], '390px · light: todas as etiquetas de categoria e de status ≥ 4,5:1 — texto derivado da cor da categoria sobre o próprio tom a 13% (antes: Alimentação/Receita 1,73:1, Moradia 2,17:1, Outros 2,44:1, pago 4,16:1, vencido 4,49:1)');
+  eq([(chipsFalha['1280-light'] || new Set()).size, (chipsFalha['1280-dark'] || new Set()).size], [0, 0], '1280px: as etiquetas também passam de 4,5:1 no desktop, nos dois temas (antes: falhavam no claro)');
+  eq([[...(phFalha['390-dark'] || [])], [...(phFalha['390-light'] || [])]], [[], []], 'o texto dos placeholders passa de 4,5:1 nos dois temas (antes: 3,49:1 no escuro e 4,08:1 no claro)');
+  // a função da etiqueta vale para QUALQUER cor (padrão e paleta do usuário), nos dois temas, sobre o pior fundo (--card2) e sobre o cartão
+  for(const t of ['dark', 'light']){
+    await tema(page, t);
+    const fc = await page.evaluate(() => {
+      const css = getComputedStyle(document.documentElement), A = window.__a11y;
+      const rgb = h => { const v = _rgbDeHex(h); return { r: v[0], g: v[1], b: v[2] }; };
+      const cores = [...Object.values(CORES_PADRAO), ...PALETA_CATEGORIA];
+      const ruins = [];
+      for(const base of ['--card2', '--card']){
+        const b0 = rgb(css.getPropertyValue(base).trim());
+        for(const c of cores){
+          const fg = rgb(c), a = 0x22 / 255, bg = { r: fg.r * a + b0.r * (1 - a), g: fg.g * a + b0.g * (1 - a), b: fg.b * a + b0.b * (1 - a) };
+          const txt = corTextoEtiqueta(c), r = A.razao(rgb(txt), bg);
+          if(!(r >= 4.5) || !/^#[0-9a-f]{6}$/.test(txt)) ruins.push(c + ' sobre ' + base + ' -> ' + txt + ' ' + Math.round(r * 100) / 100);
+        }
+      }
+      return { n: cores.length, ruins, invalida: corTextoEtiqueta('red;" onmouseover="x') };
+    });
+    eq([fc.n, fc.ruins], [25, []], `${t}: corTextoEtiqueta() dá ≥ 4,5:1 para as 13 cores padrão e as 12 da paleta, sobre --card2 e sobre --card`);
+    eq(fc.invalida, 'red;" onmouseover="x', `${t}: cor que não é #hex passa sem mexer (nunca vira atributo novo; quem desenha já usa corHexValida)`);
+  }
   await page.setViewportSize({ width: 390, height: 844 });
   for(const t of ['dark', 'light']){
     await tema(page, t); await irPara(page, 'geral');
     const f = await page.evaluate(() => { const fab = document.getElementById('fab'), A = window.__a11y; const cs = getComputedStyle(fab); const fg = cs.color.match(/[\d.]+/g).map(Number), bg = cs.backgroundColor.match(/[\d.]+/g).map(Number); return { razao: Math.round(A.razao({ r: fg[0], g: fg[1], b: fg[2] }, { r: bg[0], g: bg[1], b: bg[2] }) * 100) / 100, px: parseFloat(cs.fontSize) }; });
-    if(f.razao < 3) eq(f.razao < 3, true, `${t}: [BUG-CONHECIDO] o "+" do FAB tem contraste ${f.razao}:1 (texto grande exige 3:1) — branco/escuro sobre o azul do botão; esperado ≥ 3:1`);
-    else ok(true, `${t}: o "+" do FAB tem contraste ${f.razao}:1 (≥ 3:1, texto grande)`);
+    ok(f.razao >= 4.5, `${t}: o "+" do FAB tem contraste ${f.razao}:1 (≥ 4,5:1; antes: 2,74:1 no escuro)`);
   }
   // modais e telas especiais, nos dois temas
   for(const t of ['dark', 'light']){
@@ -81,8 +101,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
       if(r.f.length) fal.push(`${id}: ${r.f.join(' | ')}`);
     }
     await fecharTodos(page);
-    if(t === 'dark') eq(fal, ['modalRapido: button#rapGasto "Gasto" 2.74:1', 'modalImportar: span.import-data "06/09" 4.36:1 | span.import-valor "− R$ 10,00" 4.5:1'], `${t}: [BUG-CONHECIDO] no tema escuro o botão "Gasto" do registro rápido tem 2,74:1 e a data/valor do extrato importado 4,36:1 / 4,49:1 (abaixo de 4,5:1); nos outros 9 modais o texto passa`);
-    else eq(fal, [], `${t}: contraste de texto em TODOS os 11 modais`);
+    eq(fal, [], `${t}: contraste de texto em TODOS os modais (antes, no escuro: botão "Gasto" 2,74:1 e data/valor do extrato 4,36:1 / 4,49:1)`);
     const esp = await page.evaluate(() => {
       const out = [];
       for(const id of ['telaInicial', 'telaPin']){

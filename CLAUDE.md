@@ -110,7 +110,7 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   e FAB medidos por `elementFromPoint`/`visualViewport`/`offsetTop` (não por `getBoundingClientRect().bottom`), com a altura do
   viewport variando (barra de endereço do iOS); tabela→cartões; reflow a 640×400 e 320 px; `prefers-reduced-motion`. 16
   checks `[BUG-CONHECIDO]`. Auxiliares em `tests/a11y-helpers.js` (contraste WCAG, alvos, nomes acessíveis, overflow).
-- `test-a11y` (116) — **reconstrução (Bloco 6)**: `lang`, landmarks, títulos, contraste de texto por cálculo WCAG sobre as cores
+- `test-a11y` (120) — **reconstrução (Bloco 6)**: `lang`, landmarks, títulos, contraste de texto por cálculo WCAG sobre as cores
   computadas (2 temas × 390/1280 × 5 telas + 11 modais + tela inicial/PIN + placeholders + borda dos campos), foco visível pelo
   Tab, alcance por teclado, Esc/foco/trap/`role=dialog` nos modais, foco de volta ao gatilho, botões e campos sem nome, `svg`/
   `canvas`/`img`, alvos de toque ≥ 44 px. 21 checks `[BUG-CONHECIDO]`. Nota: o app foca o 1º campo do registro rápido (`#rapValor`) e do assistente
@@ -234,6 +234,20 @@ texto novo (mais descritivo). Lista para auditoria — arquivo `tests/test-estad
 - `… · geral: [BUG-CONHECIDO] a Visão Geral ESTOURA a 320px (rolagem horizontal de Npx): as linhas .orc-val…` (×2) → `… · geral: a Visão Geral NÃO estoura mais a 320px e as 4 abas continuam visíveis (antes: rolagem horizontal por causa das linhas .orc-val)`. Causas corrigidas: `.orc-label`/`.orc-val` encolhem (`flex-shrink:1; min-width:0; overflow-wrap:anywhere`), `.cols`/`.cols2` ≤599 com `minmax(0,1fr)` e `canvas{max-width:100%}` (a Análise e, por tabela, os 11 modais estouravam a 320 px).
 - (`test-a11y`) `[BUG-CONHECIDO] alvos de toque MENORES que 44×44 no celular (37 tipos)…` → `alvos de toque ≥ 44×44 no celular: nenhum tipo abaixo do mínimo (antes: N tipos abaixo)`. Regra só em ≤599: `min-height:44px` em `button`/`select`/`textarea`/`input` (exceto checkbox/radio), `min-width:44px` em `button`, `label.chk`, `span.small[role=button]`, `[role=tab]` e `.orc-row[role=button]` (não é só "padding invisível": campos de formulário ficam ~6 px mais altos no celular).
 - Capturas de conferência: `tests/capturas/` (390 e 320 px × claro/escuro × Visão Geral/Metas, topo e fim) — **fora do git** (`.gitignore`).
+
+**Leva 3 · L, itens 1–5 (contraste de texto)** — `tests/test-a11y.js` (116 → 120 checks). Proposta aprovada item a item pelo dono; a borda dos campos (item 6) é um commit à parte.
+- **Etiqueta de categoria:** `corTextoEtiqueta(cor)` (junto de `proximaCorCategoria`): o fundo (cor a 13%) e o ponto continuam na cor da categoria; só o **texto** é misturado com `--text` em passos de 5 % até dar ≥ 4,5:1 sobre o próprio fundo, no pior caso (`--card2`, linha em cartão do celular). Vale para QUALQUER cor (padrão e paleta do usuário), nos dois temas; cacheada por tema+cor; cor que não é `#hex` volta como veio. Efeito: no claro as 13 padrão escurecem (ex.: Alimentação #22c98a → #1f7456); no escuro só Saúde, Financiamentos e Outros mudam.
+- **Status:** `--green-tag`/`--red-tag` (no escuro = `--green`/`--red`; no claro #0d714b e #bd2520): "pago" 4,16 → 4,69 e "vencido" 4,49 → 4,79. O fundo da etiqueta e os outros usos de `--green`/`--red` não mudaram.
+- **Botões azuis:** `#fab` e `.seg-btn.active` usam `color:var(--btn-text)` (escuro: 2,74 → 6,88; claro igual, 6,08).
+- **Placeholder:** `input::placeholder, textarea::placeholder{ color:var(--muted2); opacity:1 }` (escuro 3,49 → 5,15; claro 4,08 → 5,18).
+- **Linha suspeita do extrato:** `--amber-bg-linha` (10 %, no lugar de `--amber-bg` a 12 % no escuro): data 4,36 → 4,56 e valor 4,50 → 4,71.
+- `390px · dark: [BUG-CONHECIDO] a etiqueta de categoria "Outros" … 4,27:1…` → `390px · dark: todas as etiquetas de categoria e de status da tabela ≥ 4,5:1 (antes: "Outros" 4,27:1)`
+- `390px · light: [BUG-CONHECIDO] no tema CLARO as etiquetas de categoria (…) e de status (…) ficam bem abaixo de 4,5:1…` → `390px · light: todas as etiquetas de categoria e de status ≥ 4,5:1 — texto derivado da cor da categoria sobre o próprio tom a 13% (antes: Alimentação/Receita 1,73:1, …)`
+- `1280px · light: [BUG-CONHECIDO] as etiquetas de categoria também falham no desktop do tema claro…` → `1280px: as etiquetas também passam de 4,5:1 no desktop, nos dois temas (antes: falhavam no claro)`
+- `[BUG-CONHECIDO] o texto dos placeholders tem contraste 3,49:1 (escuro) e 4,08:1 (claro)…` → `o texto dos placeholders passa de 4,5:1 nos dois temas (antes: 3,49:1 no escuro e 4,08:1 no claro)`
+- `<tema>: [BUG-CONHECIDO] o "+" do FAB tem contraste …` → `<tema>: o "+" do FAB tem contraste N:1 (≥ 4,5:1; antes: 2,74:1 no escuro)` (agora medido nos dois temas, sem o `if`)
+- `dark: [BUG-CONHECIDO] no tema escuro o botão "Gasto" … e a data/valor do extrato importado 4,36:1 / 4,49:1…` → `<tema>: contraste de texto em TODOS os modais (antes, no escuro: botão "Gasto" 2,74:1 e data/valor do extrato 4,36:1 / 4,49:1)` (o ramo `else` antigo foi absorvido)
+- (novos) `<tema>: corTextoEtiqueta() dá ≥ 4,5:1 para as 13 cores padrão e as 12 da paleta, sobre --card2 e sobre --card` e `<tema>: cor que não é #hex passa sem mexer` (×2 temas) — travam regressão para cor nova.
 
 **Leva 3 · M (ids únicos em lote)** — `tests/test-ids.js` (novo, 13 checks)
 - **Bug:** `uid()` era `Date.now() + sorteio(0..999)` a **cada** chamada, e 3 lugares somavam `+i`/`+1` a ele — dois itens do MESMO lote (extrato, parcelas, transferência) podiam cair no mesmo id; editar/excluir um afetava o outro. Achado por uma falha intermitente de `test-importacao` ("ids únicos").

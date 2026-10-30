@@ -50,6 +50,8 @@
     --amber:#ffb84d; --amber-bg:rgba(255,184,77,.12);
     --purple:#a78bfa; --purple-bg:rgba(167,139,250,.12);
     --btn-text:#0f1115;
+    --green-tag:var(--green); --red-tag:var(--red);   /* texto das etiquetas de status (no tema claro, 1–2 tons mais escuros: >= 4,5:1 sobre o próprio fundo) */
+    --amber-bg-linha:rgba(255,184,77,.10);          /* linha suspeita do extrato: 10% (a 12% a data ficava em 4,36:1) */
   }
   [data-theme="light"]{
     --bg:#f4f5f7; --card:#ffffff; --card2:#f0f1f4; --border:#e1e3e9;
@@ -61,6 +63,8 @@
     --amber:#8a5808; --amber-bg:rgba(138,88,8,.1);
     --purple:#6b4fc4; --purple-bg:rgba(107,79,196,.08);
     --btn-text:#ffffff;
+    --green-tag:#0d714b; --red-tag:#bd2520;
+    --amber-bg-linha:rgba(138,88,8,.1);
   }
   *{box-sizing:border-box;}
   body{
@@ -73,6 +77,8 @@
   h1{font-size:19px; font-weight:600; margin:0;}
   .sub{font-size:12px; color:var(--muted); margin-top:2px;}
   select, input, button{font-family:inherit;}
+  /* o cinza padrão do navegador dava 3,49:1 (escuro) e 4,08:1 (claro) */
+  input::placeholder, textarea::placeholder{ color:var(--muted2); opacity:1; }
   #mesSel, #contaFiltro{
     padding:8px 10px; border-radius:8px; border:1px solid var(--border);
     background:var(--card2); color:var(--text); font-size:13px;
@@ -576,7 +582,7 @@
   #importTopo{ font-size:13px; color:var(--muted); margin-bottom:12px; }
   #importLista{ overflow-y:auto; flex:1; margin:0 -6px; padding:0 6px; }
   .import-item{ border-bottom:1px solid var(--border); padding:8px 0; }
-  .import-item.suspeita{ background:var(--amber-bg); border-radius:8px; padding:8px; margin:2px 0; }
+  .import-item.suspeita{ background:var(--amber-bg-linha); border-radius:8px; padding:8px; margin:2px 0; }
   .import-linha{ display:flex; align-items:center; gap:9px; cursor:pointer; }
   .import-linha input[type=checkbox]{ width:17px; height:17px; flex-shrink:0; }
   .import-data{ font-size:11.5px; color:var(--muted2); font-variant-numeric:tabular-nums; flex-shrink:0; width:38px; }
@@ -648,7 +654,7 @@
     position:fixed; right:20px; bottom:20px; z-index:800;
     width:56px; height:56px; border-radius:50%; padding:0;
     font-size:28px; font-weight:400; line-height:1;
-    background:var(--blue); color:#fff;
+    background:var(--blue); color:var(--btn-text);
     box-shadow:0 6px 20px rgba(77,158,255,.45);
     display:flex; align-items:center; justify-content:center;
     transition:transform .15s ease, box-shadow .15s ease;
@@ -692,7 +698,7 @@
 
   .seg{ display:flex; gap:0; border:1px solid var(--border); border-radius:9px; overflow:hidden; }
   .seg-btn{ flex:1; padding:9px 0; border:none; border-radius:0; background:var(--card2); color:var(--muted); font-weight:600; font-size:13px; }
-  .seg-btn.active{ background:var(--blue); color:#fff; }
+  .seg-btn.active{ background:var(--blue); color:var(--btn-text); }
 
   /* menu ⚙️ do topo */
   .menu-wrap{ position:relative; }
@@ -1442,6 +1448,30 @@ function corCategoria(nome){
   return '#8b93a3';
 }
 // próxima cor livre da paleta (não usada por nenhuma categoria adicionada)
+// Texto de etiqueta de categoria: a cor da categoria continua no fundo (13%) e no ponto; só o TEXTO é misturado com --text,
+// na menor proporção (passos de 5%) que dá >= 4,5:1 sobre o próprio fundo. Pior caso de fundo = --card2 (linha em cartão do
+// celular). Vale para qualquer cor, inclusive a das categorias do usuário. Devolve sempre #rrggbb.
+const _cacheCorTexto = {};
+function _rgbDeHex(c){ c = c.replace('#', ''); if(c.length === 3) c = c.split('').map(x => x + x).join(''); return [0, 2, 4].map(i => parseInt(c.slice(i, i + 2), 16)); }
+function _luminancia(c){ const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); }
+function _razaoContraste(a, b){ const x = _luminancia(a), y = _luminancia(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function corTextoEtiqueta(cor){
+  if(!corHexValida(cor)) return cor;
+  const tema = document.documentElement.getAttribute('data-theme') || 'dark';
+  const chave = tema + cor;
+  if(_cacheCorTexto[chave]) return _cacheCorTexto[chave];
+  const css = getComputedStyle(document.documentElement);
+  const ehHex = v => /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(v);
+  const texto = css.getPropertyValue('--text').trim(), base = css.getPropertyValue('--card2').trim();
+  if(!ehHex(texto) || !ehHex(base)) return cor;
+  const fg = _rgbDeHex(cor), t0 = _rgbDeHex(texto), b0 = _rgbDeHex(base);
+  const bg = fg.map((v, i) => v * (0x22 / 255) + b0[i] * (1 - 0x22 / 255));
+  let t = 0, c = fg;
+  while(_razaoContraste(c, bg) < 4.5 && t < 1){ t = Math.round((t + 0.05) * 100) / 100; c = fg.map((v, i) => v * (1 - t) + t0[i] * t); }
+  const out = '#' + c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+  _cacheCorTexto[chave] = out;
+  return out;
+}
 function proximaCorCategoria(){
   const usadas = new Set((categoriasUsuario.adicionadas || []).map(x => x.cor));
   return PALETA_CATEGORIA.find(c => !usadas.has(c)) || PALETA_CATEGORIA[(categoriasUsuario.adicionadas || []).length % PALETA_CATEGORIA.length];
@@ -3430,10 +3460,10 @@ function render(){
       const statusTag = ehTransf
         ? '<span class="tag" style="background:var(--blue-bg);color:var(--blue)">transferência</span>'
         : statusEf === 'vencido'
-        ? '<span class="tag" style="background:var(--red-bg);color:var(--red)">vencido</span>'
+        ? '<span class="tag" style="background:var(--red-bg);color:var(--red-tag)">vencido</span>'
         : statusEf === 'pendente'
           ? '<span class="tag" style="background:var(--amber-bg);color:var(--amber)">pendente</span>'
-          : '<span class="tag" style="background:var(--green-bg);color:var(--green)">pago</span>';
+          : '<span class="tag" style="background:var(--green-bg);color:var(--green-tag)">pago</span>';
       // na visão "pendentes", marca as que estão paradas há muito tempo (provável esquecimento)
       let tagAntiga = '';
       if(visaoContas === 'pendente'){
@@ -3443,7 +3473,7 @@ function render(){
       tr.innerHTML = `
         <td class="col-check editable-only"><label><input type="checkbox" class="checkLancamento" data-id="${t.id}" onchange="atualizarBarraSelecao()" aria-label="Selecionar lançamento" ${(statusEf==='pago'||ehTransf)?'disabled':''}></label></td>
         <td class="col-desc">${escHtml(t.desc)}${t.fixo?' <span class="tag" style="background:var(--purple-bg);color:var(--purple)">fixo</span>':''}${t.tag?` <span class="tag" style="background:var(--card2);color:var(--muted);border:1px solid var(--border)">${escHtml(t.tag)}</span>`:''}${tagAntiga}<div style="font-size:10.5px;color:var(--muted2)">${d}/${m}/${y}</div></td>
-        <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corCat}">${escHtml(categoriaExibida(t))}</span></td>
+        <td class="col-cat" data-label="Categoria"><span class="tag" style="background:${corCat}22;color:${corTextoEtiqueta(corCat)}">${escHtml(categoriaExibida(t))}</span></td>
         <td class="col-conta" data-label="Conta" style="color:var(--muted); font-size:11.5px;">${escHtml(t.conta||'-')}</td>
         <td class="col-status" data-label="Status">${statusTag}</td>
         <td class="col-valor ${cor}" data-label="Valor" style="font-weight:600;">${sinal} ${fmt(t.valor)}</td>
