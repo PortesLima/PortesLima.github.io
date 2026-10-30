@@ -11,6 +11,12 @@ file**, in Portuguese. No build step, no package manager, no framework.
 - `index.html` — the live app, served by GitHub Pages at `https://portesLima.github.io`.
 - `dashboard-financeiro.html` — an exact mirror of `index.html`, kept in sync on every change
   (`cp index.html dashboard-financeiro.html` before committing). Always update both together.
+- `ajuda.html` (+ `ajuda/img/*.webp`) — a ajuda oficial: Manual (por tela) e Passo a passo (19 tarefas), página estática à parte,
+  aberta pelo menu ⚙️ → "❓ Ajuda" (`#btnAjuda`, sem `editable-only`) e por "Precisa de ajuda?" no passo 3 do onboarding. Todo rótulo do
+  app citado nela leva `data-ui="Texto exato"`; `tests/test-ajuda.js` falha se o app renomear um desses rótulos (corrigir o trecho da
+  ajuda). As capturas (dados fictícios, 390 px, WebP ≤ 60 KB) vêm de `tools/gerar-capturas-ajuda.js` — rodar de novo quando a aparência
+  do app mudar (e atualizar `width`/`height` e a lista de imagens no `SHELL` do `sw.js`). `ajuda.html` só LÊ `bc_tema`; não grava nada
+  nem tem telemetria. Seções de assinatura/Drive levam comentário `ATUALIZAR quando a Fase 2` e o aviso "login Google em fase de testes".
 - `contexto-projeto-bolso-certo.md` — background notes from initial setup (Google Cloud project,
   OAuth client, GitHub Pages setup steps). Historical context, not authoritative for current
   app behavior — the code is the source of truth.
@@ -132,6 +138,10 @@ scratchpad temporário das sessões, nunca foi versionada, e a pasta foi limpa (
   comprovante e cor importada; nada injetado, `window.__x` indefinido, sem `ERR_FILE_NOT_FOUND`. Regra para código novo: **qualquer texto do
   usuário em template de HTML passa por `escHtml`; para handler inline use `data-*` + `this.dataset.x`, nunca o texto entre aspas no `onclick`;
   cor só `#hex` (`corHexValida`)**.
+- `test-ajuda` (86) — **ajuda**: guarda de rótulos (`data-ui` ⊂ `index.html`), estrutura (âncoras, 19 tarefas com 3–8 passos, imagens com alt/width/height ≤ 60 KB, sem
+  telemetria/gravação), sem rolagem horizontal em 360/390/768/1280 × 2 temas × 2 abas, contraste e alvos de toque, abas por teclado, menu ⚙️ → "❓ Ajuda"
+  (inclusive com o teste vencido), zero requisição ao PostHog, e **offline** num servidor `http://localhost` com service worker. O `sw.js` tem chave de
+  cache própria para `ajuda.html` (senão abrir a ajuda sobrescrevia o `index.html` do cache).
 - `test-nomes` (9) — **Leva 3 · K**: guarda de código-fonte de nomes acessíveis (botões, campos, svg), `<main>`/`<header>` e `role="alert"`; sem navegador.
 - `test-ids` (13) — **Leva 3 · M**: `uid()` monotônico com colisão forçada (relógio e `Math.random` fixos) em extrato, parcelas, transferências, duplicar, contas fixas e metas.
 
