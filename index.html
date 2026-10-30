@@ -51,6 +51,7 @@
     --purple:#a78bfa; --purple-bg:rgba(167,139,250,.12);
     --btn-text:#0f1115;
     --green-tag:var(--green); --red-tag:var(--red);   /* texto das etiquetas de status (no tema claro, 1–2 tons mais escuros: >= 4,5:1 sobre o próprio fundo) */
+    --border-campo:#64676d;                         /* borda dos campos: 3:1 */
     --amber-bg-linha:rgba(255,184,77,.10);          /* linha suspeita do extrato: 10% (a 12% a data ficava em 4,36:1) */
   }
   [data-theme="light"]{
@@ -64,6 +65,7 @@
     --purple:#6b4fc4; --purple-bg:rgba(107,79,196,.08);
     --btn-text:#ffffff;
     --green-tag:#0d714b; --red-tag:#bd2520;
+    --border-campo:#929394;
     --amber-bg-linha:rgba(138,88,8,.1);
   }
   *{box-sizing:border-box;}
@@ -278,6 +280,8 @@
      ser espremido abaixo do conteúdo do controle nativo. */
   input[type=date]{ min-width:132px; max-width:100%; flex:1 1 132px; }
   select{padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--card2); color:var(--text);}
+  /* borda dos campos >= 3:1 contra o cartão (WCAG 1.4.11); cartões e divisórias seguem em --border */
+  input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea{ border-color:var(--border-campo); }
   label.chk{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); padding:0 4px; min-width:0;}
   /* inputs de arquivo têm uma largura mínima intrínseca enorme no iOS/WebKit (o botão
      "Escolher arquivo" + "Nenhum arquivo selecionado") que ignora flex-shrink. A label

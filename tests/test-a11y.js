@@ -129,7 +129,7 @@ const tipo = (d) => d.replace(/ ".*"$/, '').replace(/^(\w+)(#\S+)?(\.\S+)?/, (m)
       }
       return { n: out.length, min: Math.round(Math.min(...out) * 100) / 100, abaixo: out.filter(x => x < 3).length };
     });
-    eq(r.abaixo === r.n, true, `${t}: [BUG-CONHECIDO] o limite visual dos campos de formulário (borda ou fundo contra o cartão) tem contraste ≤ ${r.min}:1 em ${r.abaixo} de ${r.n} campos — WCAG 1.4.11 pede 3:1 para identificar o campo; esperado: borda ≥ 3:1`);
+    eq(r.abaixo, 0, `${t}: o limite visual dos campos de formulário (borda ou fundo contra o cartão) tem contraste ≥ 3:1 em todos os ${r.n} campos (mínimo ${r.min}:1; WCAG 1.4.11; antes: abaixo de 3:1 em todos)`);
   }
 
   // ================= 3. teclado: foco visível e alcance =================
