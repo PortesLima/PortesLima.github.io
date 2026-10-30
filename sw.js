@@ -6,7 +6,7 @@
 // CACHE: bumpar JUNTO com APP_VERSION no index.html a cada deploy que os usuários precisem
 // ver na hora. Trocar este byte faz o browser detectar o SW novo, precachear o index.html
 // novo e apagar os caches antigos no 'activate'.
-const CACHE = 'bolso-certo-2026-10-30.28';
+const CACHE = 'bolso-certo-2026-10-30.29';
 // Precache em duas faixas. OBRIGATÓRIOS (o app e a ajuda): todos juntos via addAll; se falhar, a instalação falha e o
 // navegador tenta de novo. OPCIONAIS (capturas da ajuda): cada uma guardada à parte, falha tolerada — uma imagem
 // que dê 404/erro NUNCA derruba a instalação nem impede o app de funcionar offline (sem ela, só aquela figura falta).
