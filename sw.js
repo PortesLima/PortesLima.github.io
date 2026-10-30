@@ -7,8 +7,11 @@
 // ver na hora. Trocar este byte faz o browser detectar o SW novo, precachear o index.html
 // novo e apagar os caches antigos no 'activate'.
 const CACHE = 'bolso-certo-2026-10-30.28';
-// ajuda.html e as capturas da ajuda entram no precache: a ajuda abre offline (páginas estáticas, sem dado do usuário)
-const SHELL = ['./', './index.html', './ajuda.html',
+// Precache em duas faixas. OBRIGATÓRIOS (o app e a ajuda): todos juntos via addAll; se falhar, a instalação falha e o
+// navegador tenta de novo. OPCIONAIS (capturas da ajuda): cada uma guardada à parte, falha tolerada — uma imagem
+// que dê 404/erro NUNCA derruba a instalação nem impede o app de funcionar offline (sem ela, só aquela figura falta).
+const SHELL = ['./', './index.html', './ajuda.html'];
+const OPCIONAIS = [
   './ajuda/img/avisos-de-vencimento.webp',
   './ajuda/img/categorias.webp',
   './ajuda/img/contas-e-cartoes.webp',
@@ -26,7 +29,11 @@ self.addEventListener('install', (e) => {
   // NÃO faz skipWaiting aqui de propósito: o SW novo espera em 'waiting' e a página mostra a
   // faixa "Nova versão disponível". Só assume o controle quando o usuário manda ('skip-waiting')
   // ou quando fecha e reabre o app.
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    await c.addAll(SHELL);   // obrigatórios: se algum falhar a instalação falha (e o SW antigo, se houver, continua valendo)
+    await Promise.all(OPCIONAIS.map((u) => c.add(u).catch(() => {})));
+  })());
 });
 
 self.addEventListener('activate', (e) => {

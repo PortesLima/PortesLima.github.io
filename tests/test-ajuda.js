@@ -254,12 +254,16 @@ const dec = (s) => s.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt
 
   // ================= 5. offline =================
   console.log('5. offline com service worker');
-  {
+  const cenarios = [
+    { nome: 'normal', f404: [] },
+    { nome: 'UMA captura da ajuda com 404', f404: ['/ajuda/img/orcamento.webp'] },
+  ];
+  for(const cen of cenarios){
     const tipos = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.webp': 'image/webp', '.json': 'application/json' };
     const srv = http.createServer((req, resp) => {
       let p = decodeURIComponent(req.url.split('?')[0]); if(p === '/') p = '/index.html';
       const f = path.join(RAIZ, p);
-      if(!f.startsWith(RAIZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()){ resp.writeHead(404); return resp.end('nao'); }
+      if(cen.f404.includes(p) || !f.startsWith(RAIZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()){ resp.writeHead(404); return resp.end('nao'); }
       resp.writeHead(200, { 'Content-Type': tipos[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(resp);
     });
     await new Promise(r => srv.listen(0, '127.0.0.1', r));
@@ -271,10 +275,10 @@ const dec = (s) => s.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt
     const page = await ctx.newPage();
     await page.addInitScript(() => { try{ localStorage.setItem('bc_onboardingVisto', 'true'); }catch(e){} });
     await page.goto(base + '/?v=1');
-    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.evaluate(() => navigator.serviceWorker.ready);   // não trava: a instalação PRECISA concluir mesmo com a captura em 404
     await page.waitForFunction(async () => (await caches.keys()).length > 0 && await caches.match('./ajuda.html') !== undefined, null, { timeout: 10000 });
-    const pre = await page.evaluate(async () => ({ ajuda: !!(await caches.match('./ajuda.html')), img: !!(await caches.match('./ajuda/img/visao-geral.webp')), idx: !!(await caches.match('./index.html')) }));
-    eq(pre, { ajuda: true, img: true, idx: true }, 'precache: ajuda.html, as capturas e o index.html entram no cache');
+    const pre = await page.evaluate(async () => ({ ajuda: !!(await caches.match('./ajuda.html')), img: !!(await caches.match('./ajuda/img/visao-geral.webp')), idx: !!(await caches.match('./index.html')), orc: !!(await caches.match('./ajuda/img/orcamento.webp')) }));
+    eq(pre, { ajuda: true, img: true, idx: true, orc: cen.f404.length === 0 }, `[${cen.nome}] precache: o service worker INSTALA; index.html, ajuda.html e as capturas boas entram no cache${cen.f404.length ? ' (a captura em 404 só fica de fora)' : ''}`);
     // garante controle do SW (clients.claim) antes de cortar a rede
     await page.reload();
     await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 10000 });
@@ -282,16 +286,36 @@ const dec = (s) => s.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt
     await page.waitForSelector('h1');
     await ctx.setOffline(true);
     await page.goto(base + '/ajuda.html');
-    eq(await page.locator('h1').innerText(), 'Ajuda do Bolso Certo', 'OFFLINE: a ajuda abre');
+    eq(await page.locator('h1').innerText(), 'Ajuda do Bolso Certo', `[${cen.nome}] OFFLINE: a ajuda abre`);
     await page.evaluate(async () => { for(let y = 0; y < document.body.scrollHeight; y += 400){ window.scrollTo(0, y); await new Promise(r => setTimeout(r, 120)); } });
     await page.waitForFunction(() => [...document.images].filter(i => i.getClientRects().length).every(i => i.complete), null, { timeout: 5000 }).catch(() => {});
     const quebradas = await page.evaluate(() => [...document.images].filter(i => i.getClientRects().length && !(i.complete && i.naturalWidth > 0)).map(i => i.getAttribute('src')));
-    eq(quebradas, [], 'OFFLINE: as capturas da ajuda carregam');
+    eq(quebradas, cen.f404.map(p => p.slice(1)), `[${cen.nome}] OFFLINE: as capturas carregam${cen.f404.length ? ' (só a que deu 404 falta)' : ''}`);
     await page.goto(base + '/');
     await page.waitForSelector('#telaInicial, #conteudoApp', { state: 'attached' });
     const titulo = await page.evaluate(() => document.title + '|' + !!document.getElementById('btnConfig'));
-    eq(titulo, 'Bolso Certo|true', 'OFFLINE: abrir a ajuda NÃO sobrescreveu o app no cache (o index.html continua sendo o app)');
+    eq(titulo, 'Bolso Certo|true', `[${cen.nome}] OFFLINE: o app abre e abrir a ajuda NÃO sobrescreveu o index.html no cache`);
     await ctx.setOffline(false);
+    await ctx.close(); srv.close();
+  }
+  {
+    // arquivo OBRIGATÓRIO faltando (ajuda.html em 404): a instalação falha por inteiro (nada pela metade no cache)
+    const srv = http.createServer((req, resp) => {
+      let p = decodeURIComponent(req.url.split('?')[0]); if(p === '/') p = '/index.html';
+      const f = path.join(RAIZ, p);
+      if(p === '/ajuda.html' || !fs.existsSync(f) || fs.statSync(f).isDirectory()){ resp.writeHead(404); return resp.end('nao'); }
+      resp.writeHead(200, { 'Content-Type': p.endsWith('.js') ? 'application/javascript' : 'text/html; charset=utf-8' }); fs.createReadStream(f).pipe(resp);
+    });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await bloquearPosthog(ctx);
+    await ctx.route(/cdnjs\.cloudflare\.com|accounts\.google\.com/, r => r.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
+    const page = await ctx.newPage();
+    await page.addInitScript(() => { try{ localStorage.setItem('bc_onboardingVisto', 'true'); }catch(e){} });
+    await page.goto('http://localhost:' + srv.address().port + '/?v=1');
+    await page.waitForTimeout(2500);
+    const st = await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); const k = await caches.keys(); let n = 0; for(const c of k) n += (await (await caches.open(c)).keys()).length; return { ativo: !!(r && r.active), itens: n }; });
+    eq(st, { ativo: false, itens: 0 }, 'arquivo OBRIGATÓRIO em 404 (ajuda.html): o service worker não instala e o cache fica vazio (sem meia instalação)');
     await ctx.close(); srv.close();
   }
 
